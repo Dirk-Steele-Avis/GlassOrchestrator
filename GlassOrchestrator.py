@@ -46,7 +46,7 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 CSV_PATH = DATA_DIR / "GlassDataParser.csv"
 RESULTS_PATH = BASE_DIR / "GlassResults.txt"
-WORKER_SCRIPT = BASE_DIR / "src" / "GlassDataParser.py"
+WORKER_SCRIPT = BASE_DIR / "src" / "CompassGoParser.py"
 
 ORCHESTRATOR_CONFIG_PATH = BASE_DIR / "orchestrator_config.json"
 ORCHESTRATOR_PROJECT_CONFIG_PATH = BASE_DIR / "orchestrator_project.json"
@@ -864,19 +864,16 @@ def merge_manifest_with_results(manifest: dict) -> pd.DataFrame:
     # Build manifest DataFrame
     df_manifest = pd.DataFrame(list(manifest.values()))
 
-    # Read scraper results
+    # Read scraper results (headerless: MVA,VIN,Desc per writer contract)
     if RESULTS_PATH.exists():
         df_results = pd.read_csv(
             RESULTS_PATH,
             sep=",",
+            header=None,
+            names=["MVA", "VIN", "Desc"],
             dtype=str,
             encoding="utf-8",
         )
-        # Normalize column names
-        df_results.columns = [c.strip() for c in df_results.columns]
-        # Keep only MVA and VIN (and optionally Desc from scraper)
-        result_cols = [c for c in ["MVA", "VIN", "Desc"] if c in df_results.columns]
-        df_results = df_results[result_cols]
     else:
         log.warning("Merge: %s not found — all VINs will be N/A", RESULTS_PATH)
         df_results = pd.DataFrame(columns=["MVA", "VIN"])
