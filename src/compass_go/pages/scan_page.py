@@ -5,11 +5,20 @@ and is clicked conditionally if present.
 from __future__ import annotations
 
 import logging
+import os
+import time
 from typing import TYPE_CHECKING
+
+from ..outcomes import (
+    DEFAULT_DETECTORS,
+    MVANotFoundError,
+    Outcome,
+)
 
 if TYPE_CHECKING:
     from playwright.sync_api import Page
 
+    from ..outcomes import Detector
     from .vehicle_details_page import VehicleDetailsPage
 
 log = logging.getLogger(__name__)
@@ -18,6 +27,20 @@ CONTAINER = ".enter-mva-vin"
 INPUT_ARIA_LABEL = "Or enter MVA/VIN"
 BEGIN_SCANNING_NAME = "Begin Scanning"
 SCAN_TAB_SELECTOR = 'button[role="tab"][data-key="scan"]'
+
+OUTCOME_TIMEOUT_S_DEFAULT = 20
+OUTCOME_POLL_INTERVAL_S = 0.5
+
+
+def _resolve_outcome_timeout_s() -> int:
+    raw = os.getenv("COMPASS_GO_OUTCOME_TIMEOUT_S", "").strip()
+    if not raw:
+        return OUTCOME_TIMEOUT_S_DEFAULT
+    try:
+        val = int(raw)
+        return val if val > 0 else OUTCOME_TIMEOUT_S_DEFAULT
+    except ValueError:
+        return OUTCOME_TIMEOUT_S_DEFAULT
 
 
 class ScanPage:
@@ -93,7 +116,39 @@ class ScanPage:
         # Enter buttons exist, the one adjacent to the focused input wins.
         log.info("ScanPage.submit: clicking Enter")
         self._page.get_by_role("button", name="Enter", exact=True).first.click()
-        log.info("ScanPage.submit: waiting for Vehicle Details heading")
-        self._page.get_by_role("heading", name="Vehicle Details").wait_for(timeout=90_000)
+
+        outcome = self._await_submit_outcome()
+        if outcome is Outcome.MVA_NOT_FOUND:
+            log.warning("ScanPage.submit: MVA %s — Vehicle Not Found", mva)
+            raise MVANotFoundError(mva)
+        if outcome is not Outcome.DETAILS_READY:
+            # Defensive: a new detector was added to DEFAULT_DETECTORS but
+            # this method wasn't updated. Fail fast rather than silently
+            # returning a stale VehicleDetailsPage.
+            raise RuntimeError(
+                f"ScanPage.submit: unhandled outcome {outcome!r} for MVA {mva}"
+            )
         log.info("ScanPage.submit: Vehicle Details ready")
         return VehicleDetailsPage(self._page)
+
+    def _await_submit_outcome(
+        self,
+        detectors: "tuple[Detector, ...]" = DEFAULT_DETECTORS,
+        timeout_s: int | None = None,
+    ) -> Outcome:
+        """Poll the post-submit page for any known terminal outcome.
+
+        Raises TimeoutError if no detector fires within the timeout window.
+        """
+        timeout_s = timeout_s if timeout_s is not None else _resolve_outcome_timeout_s()
+        log.info("ScanPage.submit: waiting for outcome (timeout=%ds)", timeout_s)
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            for detector in detectors:
+                outcome = detector(self._page)
+                if outcome is not None:
+                    return outcome
+            time.sleep(OUTCOME_POLL_INTERVAL_S)
+        raise TimeoutError(
+            f"No known outcome detected within {timeout_s}s after MVA submit"
+        )

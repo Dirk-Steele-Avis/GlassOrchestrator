@@ -1,6 +1,7 @@
 """ScanPage tests using fixture HTML loaded into a real Page."""
 import pytest
 
+from src.compass_go.outcomes import MVANotFoundError
 from src.compass_go.pages.scan_page import ScanPage
 from tests.compass_go.fixtures import SCAN_VEHICLE_HTML
 
@@ -53,3 +54,29 @@ def test_submit_clicks_begin_then_fills_input_and_clicks_enter(page):
     ScanPage(page).submit("058883134")
 
     assert page.title() == "SUBMITTED:058883134"
+
+
+def test_submit_raises_mva_not_found_when_error_card_appears(page, monkeypatch):
+    # Tighten the outcome timeout so a test regression fails fast rather than
+    # blocking on the production 20s default.
+    monkeypatch.setenv("COMPASS_GO_OUTCOME_TIMEOUT_S", "3")
+    page.set_content(SCAN_VEHICLE_HTML)
+    page.evaluate(
+        """() => {
+            const begin = document.getElementById('begin-scanning');
+            begin.addEventListener('click', () => begin.remove());
+            const btn = [...document.querySelectorAll('button')]
+                .find(b => b.textContent.trim() === 'Enter');
+            btn.addEventListener('click', () => {
+                document.body.insertAdjacentHTML(
+                    'beforeend',
+                    '<div><span>Vehicle Not Found</span></div>'
+                );
+            });
+        }"""
+    )
+
+    with pytest.raises(MVANotFoundError) as exc_info:
+        ScanPage(page).submit("99999999")
+
+    assert "99999999" in str(exc_info.value)

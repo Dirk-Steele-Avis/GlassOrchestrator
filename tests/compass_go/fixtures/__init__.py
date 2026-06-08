@@ -57,3 +57,15 @@ SCAN_VEHICLE_HTML = """
 </div>
 </body></html>
 """
+
+# "Vehicle Not Found" card shown when an unknown MVA is submitted.
+# The visible string "Vehicle Not Found" is the stable detector hook.
+VEHICLE_NOT_FOUND_HTML = """
+<html><body>
+<h2>Vehicle Details</h2>
+<div class="error-card">
+  <span>Vehicle Not Found</span>
+  <p>Please try scanning again!</p>
+</div>
+</body></html>
+"""
