@@ -22,6 +22,7 @@ log = logging.getLogger(__name__)
 
 NOT_FOUND_DESC = "MVA Not Found"
 MISSING_VIN = "N/A"
+BACK_BUTTON_SELECTOR = "button.back-button"
 
 
 class ScrapeFlow:
@@ -70,10 +71,11 @@ class ScrapeFlow:
             return VehicleRecord(mva=mva, vin=vin, desc=desc)
         except MVANotFoundError:
             # Expected error path — Compass GO reported the MVA isn't known.
-            # No screenshot needed (it's data, not a bug). Recover by
-            # re-clicking the bottom-nav Scan tab so the next MVA can submit.
+            # No screenshot needed (it's data, not a bug). The "Vehicle Not
+            # Found" card renders inside the Vehicle Details view, so we
+            # recover the same way a human does: click the back arrow.
             log.warning("MVA %s — Vehicle Not Found in Compass GO", mva)
-            self._recover_to_scan()
+            self._recover_via_back_arrow()
             return VehicleRecord(mva=mva, vin=MISSING_VIN, desc=NOT_FOUND_DESC)
         except Exception as exc:  # noqa: BLE001 — per-row resilience
             log.exception("Scrape failed for MVA %s: %s", mva, exc)
@@ -83,6 +85,19 @@ class ScrapeFlow:
                 log.exception("capture_failure unavailable for MVA %s", mva)
             self._recover_to_scan()
             return VehicleRecord(mva=mva, vin="", desc="")
+
+    def _recover_via_back_arrow(self) -> None:
+        """Recover from the Vehicle Not Found card by clicking the back arrow.
+
+        Matches the manual recovery path: the same `button.back-button`
+        chevron used by VehicleDetailsPage.back() is rendered next to the
+        'Vehicle Details' heading even when the error card is showing.
+        """
+        try:
+            self._scan.page.locator(BACK_BUTTON_SELECTOR).first.click()
+        except Exception:
+            log.exception("Back-arrow recovery failed — falling back to Scan tab")
+            self._recover_to_scan()
 
     def _recover_to_scan(self) -> None:
         """Best-effort navigation back to the Scan view after a row failure."""

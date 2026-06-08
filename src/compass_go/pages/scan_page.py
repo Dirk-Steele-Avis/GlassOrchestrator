@@ -27,6 +27,8 @@ CONTAINER = ".enter-mva-vin"
 INPUT_ARIA_LABEL = "Or enter MVA/VIN"
 BEGIN_SCANNING_NAME = "Begin Scanning"
 SCAN_TAB_SELECTOR = 'button[role="tab"][data-key="scan"]'
+BACK_BUTTON_SELECTOR = "button.back-button"
+NOT_FOUND_TEXT = "Vehicle Not Found"
 
 OUTCOME_TIMEOUT_S_DEFAULT = 20
 OUTCOME_POLL_INTERVAL_S = 0.5
@@ -80,6 +82,13 @@ class ScanPage:
     def submit(self, mva: str) -> "VehicleDetailsPage":
         from .vehicle_details_page import VehicleDetailsPage
 
+        # A stale 'Vehicle Not Found' card from a prior session can be
+        # the entry state when the Edge profile preserves the previous
+        # page. The MVA input doesn't render until the card is dismissed,
+        # which requires the back arrow (clicking bottom-nav Scan does
+        # not reset it). Best-effort: try the back arrow first.
+        self._dismiss_stale_not_found_card()
+
         # If the app landed on a non-Scan tab (e.g. Off Lot), click the
         # bottom-nav Scan first so the MVA input can render.
         nav = self._scan_nav()
@@ -107,8 +116,9 @@ class ScanPage:
         if container.count():
             # Prefer the legacy scoped container when present (test fixture).
             input_locator = container.get_by_label(INPUT_ARIA_LABEL).first
-        log.info("ScanPage.submit: waiting for MVA/VIN input")
-        input_locator.wait_for(timeout=90_000)
+        input_wait_ms = _resolve_outcome_timeout_s() * 1000
+        log.info("ScanPage.submit: waiting for MVA/VIN input (timeout=%dms)", input_wait_ms)
+        input_locator.wait_for(timeout=input_wait_ms)
         log.info("ScanPage.submit: filling MVA=%s", mva)
         input_locator.fill(mva)
 
@@ -152,3 +162,23 @@ class ScanPage:
         raise TimeoutError(
             f"No known outcome detected within {timeout_s}s after MVA submit"
         )
+
+    def _dismiss_stale_not_found_card(self) -> None:
+        """Click the back arrow if a 'Vehicle Not Found' card is on screen.
+
+        Handles the case where the persistent Edge profile lands on the
+        previous session's error page. Best-effort: if no card is visible
+        or the click fails, log and continue — the normal nav flow then
+        runs and will surface any real problem via the input timeout.
+        """
+        try:
+            card = self._page.get_by_text(NOT_FOUND_TEXT, exact=True).first
+            if not card.is_visible():
+                return
+        except Exception:
+            return
+        log.info("ScanPage.submit: stale 'Vehicle Not Found' card present — clicking back arrow")
+        try:
+            self._page.locator(BACK_BUTTON_SELECTOR).first.click()
+        except Exception:
+            log.exception("ScanPage.submit: back-arrow click failed on stale card")

@@ -80,3 +80,43 @@ def test_submit_raises_mva_not_found_when_error_card_appears(page, monkeypatch):
         ScanPage(page).submit("99999999")
 
     assert "99999999" in str(exc_info.value)
+
+
+def test_submit_dismisses_stale_not_found_card_via_back_arrow(page, monkeypatch):
+    """Persistent Edge profile can land on a stale 'Vehicle Not Found' card.
+    submit() must click the back arrow to reveal the MVA input before filling.
+    """
+    monkeypatch.setenv("COMPASS_GO_OUTCOME_TIMEOUT_S", "3")
+    # Page starts on the stale not-found card with a back arrow. Clicking
+    # the back arrow swaps in the normal Scan view with the MVA input.
+    page.set_content(
+        """<html><body>
+        <button class="back-button" type="button">&lt;</button>
+        <h2>Vehicle Details</h2>
+        <div class="error-card"><span>Vehicle Not Found</span></div>
+        </body></html>"""
+    )
+    page.evaluate(
+        """() => {
+            const back = document.querySelector('button.back-button');
+            back.addEventListener('click', () => {
+                document.body.innerHTML = `
+                    <div class="enter-mva-vin">
+                      <input aria-label="Or enter MVA/VIN" type="text" />
+                      <button type="button">Enter</button>
+                    </div>`;
+                const btn = document.querySelector('button');
+                btn.addEventListener('click', () => {
+                    const i = document.querySelector('input[aria-label="Or enter MVA/VIN"]');
+                    document.title = 'SUBMITTED:' + i.value;
+                    document.body.insertAdjacentHTML(
+                        'beforeend', '<h1>Vehicle Details</h1>'
+                    );
+                });
+            });
+        }"""
+    )
+
+    ScanPage(page).submit("12345678")
+
+    assert page.title() == "SUBMITTED:12345678"

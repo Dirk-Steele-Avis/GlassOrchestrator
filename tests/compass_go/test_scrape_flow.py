@@ -8,6 +8,7 @@ import pytest
 from src.compass_go.outcomes import MVANotFoundError
 from src.compass_go import scrape_flow as scrape_flow_module
 from src.compass_go.scrape_flow import (
+    BACK_BUTTON_SELECTOR,
     MISSING_VIN,
     NOT_FOUND_DESC,
     ScrapeFlow,
@@ -24,8 +25,8 @@ def _make_scan_stub(submit_side_effect):
     scan = MagicMock()
     scan.submit.side_effect = submit_side_effect
     scan.page = MagicMock()
-    # _scan_nav is consulted by the recovery helper; return None so the
-    # recovery is a no-op in unit tests.
+    # _scan_nav is consulted by the generic-exception recovery helper;
+    # return None so the recovery is a no-op in unit tests.
     scan._scan_nav.return_value = None
     return scan
 
@@ -42,6 +43,29 @@ def test_scrape_not_found_writes_mva_not_found_row():
     assert record.mva == "12345678"
     assert record.vin == MISSING_VIN
     assert record.desc == NOT_FOUND_DESC
+
+
+def test_scrape_not_found_recovers_via_back_arrow():
+    scan = _make_scan_stub(MVANotFoundError("12345678"))
+    writer = MagicMock()
+
+    ScrapeFlow(scan, writer).run(["12345678"])
+
+    scan.page.locator.assert_called_with(BACK_BUTTON_SELECTOR)
+    scan.page.locator.return_value.first.click.assert_called_once()
+    # The back-arrow path must NOT fall back to the bottom-nav Scan tab
+    # when the click succeeds.
+    scan._scan_nav.assert_not_called()
+
+
+def test_scrape_not_found_falls_back_to_scan_tab_if_back_arrow_fails():
+    scan = _make_scan_stub(MVANotFoundError("12345678"))
+    scan.page.locator.return_value.first.click.side_effect = RuntimeError("no back arrow")
+    writer = MagicMock()
+
+    ScrapeFlow(scan, writer).run(["12345678"])
+
+    scan._scan_nav.assert_called_once()
 
 
 def test_scrape_generic_exception_writes_empty_row_and_continues():
