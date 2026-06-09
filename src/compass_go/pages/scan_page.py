@@ -196,6 +196,6 @@ class ScanPage:
         reason = "Vehicle Not Found" if not_found_visible else "Vehicle Details"
         log.info("ScanPage.submit: stale '%s' state present — clicking back arrow", reason)
         try:
-            self._page.locator(BACK_BUTTON_SELECTOR).first.click()
+            self._page.locator(BACK_BUTTON_SELECTOR).first.click(timeout=2_000)
         except Exception:
             log.exception("ScanPage.submit: back-arrow click failed on stale state")
