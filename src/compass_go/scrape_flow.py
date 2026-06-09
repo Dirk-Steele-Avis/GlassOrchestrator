@@ -67,7 +67,13 @@ class ScrapeFlow:
                     capture_failure(self._scan.page, f"empty_read_{mva}")
                 except Exception:
                     log.exception("capture_failure unavailable for MVA %s", mva)
-            details.back()
+            try:
+                details.back()
+            except Exception:
+                # Data was already captured successfully; recover navigation
+                # but preserve the scraped row.
+                log.exception("Back navigation failed for MVA %s — recovering to Scan", mva)
+                self._recover_to_scan()
             return VehicleRecord(mva=mva, vin=vin, desc=desc)
         except MVANotFoundError:
             # Expected error path — Compass GO reported the MVA isn't known.

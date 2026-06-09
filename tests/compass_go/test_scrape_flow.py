@@ -97,3 +97,25 @@ def test_scrape_loop_continues_past_not_found():
     assert second.args[0].mva == "22222222"
     assert second.args[0].vin == "VIN123456789ABCDE"
     assert second.args[0].desc == "MAKE_MODEL"
+
+
+def test_back_failure_after_successful_read_keeps_scraped_row_and_recovers():
+    details = MagicMock()
+    details.read.side_effect = ["VIN123456789ABCDE", "MAKE_MODEL"]
+    details.back.side_effect = RuntimeError("back click failed")
+    scan = _make_scan_stub(None)
+    scan.submit.side_effect = None
+    scan.submit.return_value = details
+    # Generic recovery path uses _scan_nav() fallback click.
+    nav = MagicMock()
+    scan._scan_nav.return_value = nav
+    writer = MagicMock()
+
+    count = ScrapeFlow(scan, writer).run(["12345678"])
+
+    assert count == 1
+    record = writer.append.call_args.args[0]
+    assert record.mva == "12345678"
+    assert record.vin == "VIN123456789ABCDE"
+    assert record.desc == "MAKE_MODEL"
+    nav.click.assert_called_once()

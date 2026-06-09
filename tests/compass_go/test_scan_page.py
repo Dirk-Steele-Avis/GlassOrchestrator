@@ -120,3 +120,41 @@ def test_submit_dismisses_stale_not_found_card_via_back_arrow(page, monkeypatch)
     ScanPage(page).submit("12345678")
 
     assert page.title() == "SUBMITTED:12345678"
+
+
+def test_submit_dismisses_stale_vehicle_details_via_back_arrow(page, monkeypatch):
+    """If the profile reopens on plain Vehicle Details, submit() must back out
+    to Scan before waiting for/filling the MVA input.
+    """
+    monkeypatch.setenv("COMPASS_GO_OUTCOME_TIMEOUT_S", "3")
+    page.set_content(
+        """<html><body>
+        <button class="back-button" type="button">&lt;</button>
+        <h2>Vehicle Details</h2>
+        <div><span>Some previous vehicle detail content</span></div>
+        </body></html>"""
+    )
+    page.evaluate(
+        """() => {
+            const back = document.querySelector('button.back-button');
+            back.addEventListener('click', () => {
+                document.body.innerHTML = `
+                    <div class="enter-mva-vin">
+                      <input aria-label="Or enter MVA/VIN" type="text" />
+                      <button type="button">Enter</button>
+                    </div>`;
+                const btn = document.querySelector('button');
+                btn.addEventListener('click', () => {
+                    const i = document.querySelector('input[aria-label="Or enter MVA/VIN"]');
+                    document.title = 'SUBMITTED:' + i.value;
+                    document.body.insertAdjacentHTML(
+                        'beforeend', '<h1>Vehicle Details</h1>'
+                    );
+                });
+            });
+        }"""
+    )
+
+    ScanPage(page).submit("87654321")
+
+    assert page.title() == "SUBMITTED:87654321"
