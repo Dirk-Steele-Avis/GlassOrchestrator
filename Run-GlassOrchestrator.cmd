@@ -4,10 +4,15 @@ setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
 set "VENV_PY=.venv\Scripts\python.exe"
-set "CGI_HEADLESS=1"
+set "CGI_HEADLESS=0"
 set "REQ_FILE=requirements.txt"
 set "REQ_STAMP=.venv\.requirements.sha256"
 set "CREATED_VENV=0"
+
+REM Compass GO wait tuning for slow sessions.
+REM These only apply when not already set by user/system env vars.
+if not defined COMPASS_GO_OUTCOME_TIMEOUT_S set "COMPASS_GO_OUTCOME_TIMEOUT_S=45"
+if not defined COMPASS_GO_INPUT_TIMEOUT_S set "COMPASS_GO_INPUT_TIMEOUT_S=60"
 
 if not exist "%VENV_PY%" (
   echo [BOOTSTRAP] Creating virtual environment in .venv ...

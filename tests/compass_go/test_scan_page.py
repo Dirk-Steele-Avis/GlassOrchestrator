@@ -58,7 +58,7 @@ def test_submit_clicks_begin_then_fills_input_and_clicks_enter(page):
 
 def test_submit_raises_mva_not_found_when_error_card_appears(page, monkeypatch):
     # Tighten the outcome timeout so a test regression fails fast rather than
-    # blocking on the production 20s default.
+    # blocking on the production default timeout.
     monkeypatch.setenv("COMPASS_GO_OUTCOME_TIMEOUT_S", "3")
     page.set_content(SCAN_VEHICLE_HTML)
     page.evaluate(
@@ -158,3 +158,58 @@ def test_submit_dismisses_stale_vehicle_details_via_back_arrow(page, monkeypatch
     ScanPage(page).submit("87654321")
 
     assert page.title() == "SUBMITTED:87654321"
+
+
+def test_submit_waits_for_slow_input_render_with_1s_poll(page, monkeypatch):
+    monkeypatch.setenv("COMPASS_GO_OUTCOME_TIMEOUT_S", "5")
+    page.set_content("<html><body><div id='root'></div></body></html>")
+    page.evaluate(
+        """() => {
+            setTimeout(() => {
+                document.getElementById('root').innerHTML = `
+                    <div class="enter-mva-vin">
+                      <input aria-label="Or enter MVA/VIN" type="text" />
+                      <button type="button">Enter</button>
+                    </div>`;
+                const btn = [...document.querySelectorAll('button')]
+                    .find(b => b.textContent.trim() === 'Enter');
+                btn.addEventListener('click', () => {
+                    const i = document.querySelector('input[aria-label="Or enter MVA/VIN"]');
+                    document.title = 'SUBMITTED:' + i.value;
+                    document.body.insertAdjacentHTML('beforeend', '<h1>Vehicle Details</h1>');
+                });
+            }, 2200);
+        }"""
+    )
+
+    ScanPage(page).submit("44444444")
+
+    assert page.title() == "SUBMITTED:44444444"
+
+
+def test_submit_uses_input_timeout_override(page, monkeypatch):
+    monkeypatch.setenv("COMPASS_GO_OUTCOME_TIMEOUT_S", "2")
+    monkeypatch.setenv("COMPASS_GO_INPUT_TIMEOUT_S", "5")
+    page.set_content("<html><body><div id='root'></div></body></html>")
+    page.evaluate(
+        """() => {
+            setTimeout(() => {
+                document.getElementById('root').innerHTML = `
+                    <div class="enter-mva-vin">
+                      <input aria-label="Or enter MVA/VIN" type="text" />
+                      <button type="button">Enter</button>
+                    </div>`;
+                const btn = [...document.querySelectorAll('button')]
+                    .find(b => b.textContent.trim() === 'Enter');
+                btn.addEventListener('click', () => {
+                    const i = document.querySelector('input[aria-label="Or enter MVA/VIN"]');
+                    document.title = 'SUBMITTED:' + i.value;
+                    document.body.insertAdjacentHTML('beforeend', '<h1>Vehicle Details</h1>');
+                });
+            }, 3200);
+        }"""
+    )
+
+    ScanPage(page).submit("55555555")
+
+    assert page.title() == "SUBMITTED:55555555"

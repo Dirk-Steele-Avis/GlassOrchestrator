@@ -31,8 +31,8 @@ BACK_BUTTON_SELECTOR = "button.back-button"
 NOT_FOUND_TEXT = "Vehicle Not Found"
 VEHICLE_DETAILS_HEADING = "Vehicle Details"
 
-OUTCOME_TIMEOUT_S_DEFAULT = 20
-OUTCOME_POLL_INTERVAL_S = 0.5
+OUTCOME_TIMEOUT_S_DEFAULT = 45
+OUTCOME_POLL_INTERVAL_S = 1.0
 
 
 def _resolve_outcome_timeout_s() -> int:
@@ -44,6 +44,17 @@ def _resolve_outcome_timeout_s() -> int:
         return val if val > 0 else OUTCOME_TIMEOUT_S_DEFAULT
     except ValueError:
         return OUTCOME_TIMEOUT_S_DEFAULT
+
+
+def _resolve_input_timeout_s() -> int:
+    raw = os.getenv("COMPASS_GO_INPUT_TIMEOUT_S", "").strip()
+    if not raw:
+        return _resolve_outcome_timeout_s()
+    try:
+        val = int(raw)
+        return val if val > 0 else _resolve_outcome_timeout_s()
+    except ValueError:
+        return _resolve_outcome_timeout_s()
 
 
 class ScanPage:
@@ -115,9 +126,12 @@ class ScanPage:
         if container.count():
             # Prefer the legacy scoped container when present (test fixture).
             input_locator = container.get_by_label(INPUT_ARIA_LABEL).first
-        input_wait_ms = _resolve_outcome_timeout_s() * 1000
-        log.info("ScanPage.submit: waiting for MVA/VIN input (timeout=%dms)", input_wait_ms)
-        input_locator.wait_for(timeout=input_wait_ms)
+        input_wait_s = _resolve_input_timeout_s()
+        log.info(
+            "ScanPage.submit: waiting for MVA/VIN input (timeout=%ds, poll=1.0s)",
+            input_wait_s,
+        )
+        self._wait_for_input_visible(input_locator, timeout_s=input_wait_s)
         log.info("ScanPage.submit: filling MVA=%s", mva)
         input_locator.fill(mva)
 
@@ -160,6 +174,28 @@ class ScanPage:
             time.sleep(OUTCOME_POLL_INTERVAL_S)
         raise TimeoutError(
             f"No known outcome detected within {timeout_s}s after MVA submit"
+        )
+
+    def _wait_for_input_visible(self, input_locator, timeout_s: int) -> None:
+        """Wait for the MVA/VIN input using explicit polling.
+
+        Compass GO can render this field slowly on some sessions. Polling
+        every second avoids a single fixed wait attempt while keeping log
+        timing predictable for diagnostics.
+        """
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            try:
+                if input_locator.is_visible():
+                    return
+            except Exception:
+                # Page can be in transient re-render; continue polling.
+                pass
+            time.sleep(OUTCOME_POLL_INTERVAL_S)
+
+        raise TimeoutError(
+            "ScanPage.submit: MVA/VIN input did not become visible "
+            f"within {timeout_s}s"
         )
 
     def _is_mva_input_visible(self) -> bool:
