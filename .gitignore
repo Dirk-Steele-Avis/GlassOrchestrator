@@ -10,6 +10,7 @@ venv/
 # Data artifacts (generated at runtime)
 data/GlassDataParser.csv
 data/mva_cycle_tracker.json
+data/vendor_tracking_decisions.jsonl
 GlassResults.txt
 MasterLog.xlsx
 GlassOrchestrator.log
