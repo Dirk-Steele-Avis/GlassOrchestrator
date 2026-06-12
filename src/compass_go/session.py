@@ -23,6 +23,9 @@ log = logging.getLogger(__name__)
 DEFAULT_ENTRY_URL = "https://go.avisbudget.palantirfoundry.com/"
 DEFAULT_EDGE_USER_DATA_DIR = Path(os.getenv("LOCALAPPDATA", "")) / "Microsoft" / "Edge" / "User Data"
 DEFAULT_EDGE_PROFILE_DIRECTORY = "Default"
+EDGE_KILL_MAX_ATTEMPTS = 3
+EDGE_KILL_WAIT_S = 2
+LAUNCH_RETRY_ATTEMPTS = 2
 
 
 def _is_edge_running() -> bool:
@@ -34,10 +37,13 @@ def _is_edge_running() -> bool:
     except OSError as exc:
         log.warning("tasklist failed: %s", exc)
         return False
-    return "msedge.exe" in result.stdout
+    return any(
+        line.strip().lower().startswith("msedge.exe")
+        for line in result.stdout.splitlines()
+    )
 
 
-def kill_running_edge() -> None:
+def kill_running_edge() -> bool:
     """Release the user-data-dir lock by terminating any running Edge.
 
     Mirrors the WorkItems pattern: kill -> short sleep -> verify gone.
@@ -45,23 +51,35 @@ def kill_running_edge() -> None:
     hitting an opaque 'profile in use' error from launch_persistent_context.
     """
     if not _is_edge_running():
-        return
-    log.info("Closing running Edge to release profile lock")
-    try:
-        subprocess.run(
-            ["taskkill", "/F", "/IM", "msedge.exe", "/T"],
-            capture_output=True, text=True, check=False,
+        return True
+
+    for attempt in range(1, EDGE_KILL_MAX_ATTEMPTS + 1):
+        log.info(
+            "Closing running Edge to release profile lock (attempt %d/%d)",
+            attempt,
+            EDGE_KILL_MAX_ATTEMPTS,
         )
-    except OSError as exc:
-        log.warning("Failed to terminate Edge processes: %s", exc)
-        return
-    time.sleep(2)
-    if _is_edge_running():
-        raise RuntimeError(
-            "Edge is still running after kill attempt. Close all Edge windows "
-            "manually and retry."
-        )
-    log.info("Edge processes cleared \u2014 proceeding with launch")
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/IM", "msedge.exe", "/T"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except OSError as exc:
+            log.warning("Failed to terminate Edge processes: %s", exc)
+            return False
+
+        time.sleep(EDGE_KILL_WAIT_S)
+        if not _is_edge_running():
+            log.info("Edge processes cleared — proceeding with launch")
+            return True
+
+    log.warning(
+        "Edge is still running after %d kill attempt(s); trying launch anyway",
+        EDGE_KILL_MAX_ATTEMPTS,
+    )
+    return False
 
 
 def _resolve_user_data_dir() -> str:
@@ -95,13 +113,36 @@ class CompassGoSession:
         log.info("Launching Edge profile: %s\\%s (headless=%s)", user_data_dir, profile_dir, headless)
 
         with sync_playwright() as pw:
-            context = pw.chromium.launch_persistent_context(
-                user_data_dir,
-                channel="msedge",
-                headless=headless,
-                args=[f"--profile-directory={profile_dir}"],
-                no_viewport=True,
-            )
+            context = None
+            last_exc: Exception | None = None
+            for attempt in range(1, LAUNCH_RETRY_ATTEMPTS + 1):
+                try:
+                    context = pw.chromium.launch_persistent_context(
+                        user_data_dir,
+                        channel="msedge",
+                        headless=headless,
+                        args=[f"--profile-directory={profile_dir}"],
+                        no_viewport=True,
+                    )
+                    break
+                except Exception as exc:  # noqa: BLE001 - launch can fail for many runtime reasons
+                    last_exc = exc
+                    if attempt >= LAUNCH_RETRY_ATTEMPTS:
+                        raise RuntimeError(
+                            "Unable to launch Edge persistent profile after retries. "
+                            "Close all Edge windows manually and retry."
+                        ) from exc
+                    log.warning(
+                        "Edge profile launch failed (attempt %d/%d): %s",
+                        attempt,
+                        LAUNCH_RETRY_ATTEMPTS,
+                        exc,
+                    )
+                    kill_running_edge()
+
+            if context is None:
+                # Defensive fallback (should never execute due raise above).
+                raise RuntimeError("Unable to create Edge persistent context") from last_exc
             try:
                 page = context.new_page()
                 page.goto(self._entry_url, wait_until="domcontentloaded")
