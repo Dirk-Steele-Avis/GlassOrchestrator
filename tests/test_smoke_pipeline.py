@@ -211,3 +211,57 @@ class TestSmoke2_AllDuplicateMVAs:
         """Pipeline must not propagate any exception on all-duplicate run."""
         self._monkeypatch_pipeline(monkeypatch)
         run_pipeline()  # must not raise
+
+
+class TestEmailSeenTiming:
+    """Source email read flag is updated only after successful completion."""
+
+    def test_marks_email_seen_on_success(self, monkeypatch):
+        source_uid = b"12345"
+
+        monkeypatch.setattr(
+            "GlassOrchestrator.fetch_input_descriptions",
+            lambda: ([("0425APO", "59340120WS")], datetime(2026, 4, 25), source_uid),
+        )
+        monkeypatch.setattr(
+            "GlassOrchestrator.parse_descriptions_to_manifest",
+            lambda *_args: ({"59340120": {}}, ["59340120"]),
+        )
+        monkeypatch.setattr("GlassOrchestrator.apply_cycle_day_tracking", lambda *_a, **_k: None)
+        monkeypatch.setattr("GlassOrchestrator.parse_glass_data_results", lambda *_a, **_k: None)
+        monkeypatch.setattr("GlassOrchestrator.validate_results_freshness", lambda *_a, **_k: None)
+        monkeypatch.setattr("GlassOrchestrator.merge_manifest_with_results", lambda *_a, **_k: _merged_df(["59340120"]))
+        monkeypatch.setattr("GlassOrchestrator.persist_new_rows", lambda df: df.iloc[0:0])
+        monkeypatch.setattr("GlassOrchestrator.notify_order_items", lambda *_a, **_k: None)
+
+        marked: list[bytes] = []
+        monkeypatch.setattr("GlassOrchestrator._mark_message_seen", lambda uid: marked.append(uid))
+
+        run_pipeline()
+
+        assert marked == [source_uid]
+
+    def test_does_not_mark_email_seen_on_failure(self, monkeypatch):
+        source_uid = b"12345"
+
+        monkeypatch.setattr(
+            "GlassOrchestrator.fetch_input_descriptions",
+            lambda: ([("0425APO", "59340120WS")], datetime(2026, 4, 25), source_uid),
+        )
+        monkeypatch.setattr(
+            "GlassOrchestrator.parse_descriptions_to_manifest",
+            lambda *_args: ({"59340120": {}}, ["59340120"]),
+        )
+        monkeypatch.setattr("GlassOrchestrator.apply_cycle_day_tracking", lambda *_a, **_k: None)
+
+        def fail_worker(*_args, **_kwargs):
+            raise RuntimeError("worker failed")
+
+        monkeypatch.setattr("GlassOrchestrator.parse_glass_data_results", fail_worker)
+
+        marked: list[bytes] = []
+        monkeypatch.setattr("GlassOrchestrator._mark_message_seen", lambda uid: marked.append(uid))
+
+        run_pipeline()
+
+        assert marked == []

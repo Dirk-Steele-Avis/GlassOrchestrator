@@ -308,12 +308,13 @@ class OutboundEmail:
 
 # ─── Input Acquisition ────────────────────────────────────────────────────────
 
-def fetch_input_descriptions() -> tuple[list[tuple[str, str]], datetime]:
+def fetch_input_descriptions() -> tuple[list[tuple[str, str]], datetime, bytes | None]:
     """
-    Connect to Gmail via IMAP, fetch the latest UNSEEN email from the
+        Connect to Gmail via IMAP, fetch the latest UNSEEN email from the
     target sender, and extract:
       - A list of (type_value, description) tuples from the email table
       - The Date header parsed as a datetime object
+            - The source IMAP UID to mark as read after successful pipeline completion
     """
     log.info("Input acquisition: Connecting to Gmail IMAP …")
 
@@ -322,11 +323,16 @@ def fetch_input_descriptions() -> tuple[list[tuple[str, str]], datetime]:
         unseen_ids = _find_unseen_message_ids(mail)
         if not unseen_ids:
             log.warning("Input: No unseen messages from %s", TARGET_SENDER)
-            return [], datetime.now()
+            return [], datetime.now(), None
 
         log.info("Input: Found %d unseen message(s)", len(unseen_ids))
-        latest_message, internal_sent_at = _fetch_message_by_id(mail, unseen_ids[-1])
-        return _extract_descriptions_from_message(latest_message, fallback_sent_at=internal_sent_at)
+        source_uid = unseen_ids[-1]
+        latest_message, internal_sent_at = _fetch_message_by_id(mail, source_uid)
+        descriptions, sent_at = _extract_descriptions_from_message(
+            latest_message,
+            fallback_sent_at=internal_sent_at,
+        )
+        return descriptions, sent_at, source_uid
 
     finally:
         try:
@@ -344,25 +350,54 @@ def _connect_to_inbox() -> imaplib.IMAP4_SSL:
 
 
 def _find_unseen_message_ids(mail: imaplib.IMAP4_SSL) -> list[bytes]:
-    """Return unseen message IDs for the configured target sender."""
+    """Return unseen message UIDs for the configured target sender."""
     search_criteria = f'(UNSEEN FROM "{TARGET_SENDER}")'
-    status, msg_ids = mail.search(None, search_criteria)
+    status, msg_ids = mail.uid("search", None, search_criteria)
     if status != "OK" or not msg_ids or not msg_ids[0]:
         return []
     return msg_ids[0].split()
 
 
 def _fetch_message_by_id(mail: imaplib.IMAP4_SSL, message_id: bytes) -> tuple[email.message.Message, datetime | None]:
-    """Fetch and decode a single message and best-effort IMAP INTERNALDATE."""
-    status, msg_data = mail.fetch(message_id, "(RFC822 INTERNALDATE)")
+    """Fetch and decode a single message by UID and best-effort INTERNALDATE.
+
+    Uses BODY.PEEK so a failed pipeline does not mark the source email as read.
+    """
+    status, msg_data = mail.uid("fetch", message_id, "(BODY.PEEK[] INTERNALDATE)")
     if status != "OK" or not msg_data or not msg_data[0]:
-        raise RuntimeError(f"Failed to fetch message id {message_id}")
+        raise RuntimeError(f"Failed to fetch message uid {message_id}")
 
     internal_sent_at = _extract_internaldate_from_fetch_response(msg_data)
     raw_email = msg_data[0][1]
     if not raw_email:
-        raise RuntimeError(f"Empty message payload for id {message_id}")
+        raise RuntimeError(f"Empty message payload for uid {message_id}")
     return email.message_from_bytes(raw_email), internal_sent_at
+
+
+def _mark_message_seen(message_uid: bytes) -> None:
+    """Mark one source email as read using IMAP UID STORE."""
+    mail = _connect_to_inbox()
+    try:
+        status, _ = mail.uid("store", message_uid, "+FLAGS", "(\\Seen)")
+        if status != "OK":
+            raise RuntimeError(f"UID STORE failed for message uid {message_uid}")
+    finally:
+        try:
+            mail.logout()
+        except (imaplib.IMAP4.error, OSError):
+            pass
+
+
+def _normalize_input_payload(
+    payload: tuple[list[tuple[str, str]], datetime] | tuple[list[tuple[str, str]], datetime, bytes | None],
+) -> tuple[list[tuple[str, str]], datetime, bytes | None]:
+    """Normalize input-acquisition return values for backward compatibility."""
+    if len(payload) == 2:
+        descriptions, email_date = payload
+        return descriptions, email_date, None
+
+    descriptions, email_date, source_uid = payload
+    return descriptions, email_date, source_uid
 
 
 def _extract_internaldate_from_fetch_response(msg_data: list[tuple[bytes, bytes] | bytes]) -> datetime | None:
@@ -1326,7 +1361,8 @@ def run_pipeline() -> None:
 
     # Step 1: Input acquisition
     try:
-        descriptions, email_date = fetch_input_descriptions()
+        input_payload = fetch_input_descriptions()
+        descriptions, email_date, source_uid = _normalize_input_payload(input_payload)
     except Exception as exc:
         log.error("Input acquisition failed — %s", exc, exc_info=True)
         return
@@ -1395,6 +1431,14 @@ def run_pipeline() -> None:
         log.error("Notification failed — %s", exc, exc_info=True)
         # Notification failure is non-fatal for data persistence; pipeline ends here
         return
+
+    # Step 8: Mark source email as read only after successful completion.
+    if source_uid is not None:
+        try:
+            _mark_message_seen(source_uid)
+            log.info("Input: Marked source email as read (uid=%s)", source_uid.decode(errors="ignore"))
+        except Exception as exc:
+            log.warning("Input: Failed to mark source email as read — %s", exc)
 
     log.info("=" * 60)
     log.info("GlassOrchestrator pipeline completed successfully")
