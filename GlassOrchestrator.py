@@ -341,8 +341,17 @@ def fetch_input_descriptions() -> tuple[list[tuple[str, str]], datetime, bytes |
             pass
 
 
+def _validate_email_credentials(email_account: str, email_password: str) -> None:
+    """Raise a clear error if Gmail credentials are missing or blank."""
+    if not email_account or not email_account.strip() or not email_password or not email_password.strip():
+        raise ValueError(
+            "Missing Gmail credentials: GLASS_EMAIL_ACCOUNT and GLASS_EMAIL_PASSWORD must both be set."
+        )
+
+
 def _connect_to_inbox() -> imaplib.IMAP4_SSL:
     """Open IMAP connection, authenticate, and select inbox."""
+    _validate_email_credentials(EMAIL_ACCOUNT, EMAIL_PASSWORD)
     mail = imaplib.IMAP4_SSL(IMAP_SERVER)
     mail.login(EMAIL_ACCOUNT, EMAIL_PASSWORD)
     mail.select("inbox")

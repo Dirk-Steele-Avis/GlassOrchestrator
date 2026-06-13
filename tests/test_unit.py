@@ -15,6 +15,7 @@ from datetime import datetime
 import pandas as pd
 import pytest
 
+import GlassOrchestrator
 from GlassOrchestrator import (
     MVA_PATTERN,
     _load_local_config_overrides,
@@ -24,6 +25,7 @@ from GlassOrchestrator import (
     _extract_location_from_type,
     _parse_email_datetime,
     _parse_html_descriptions,
+    _validate_email_credentials,
     notify_order_items,
     is_duplicate,
     parse_descriptions_to_manifest,
@@ -113,6 +115,54 @@ class TestUT1_SuffixRegex:
         assert manifest["59340120"]["Action"] == "Replacement"
         assert manifest["59340120"]["Area"] == "Windshield"
         assert manifest["59340120"]["Claim#"] == "Listed"
+
+class TestEmailCredentialValidation:
+    """Validate Gmail credential handling before IMAP login."""
+
+    def test_validate_email_credentials_raises_when_account_missing(self):
+        with pytest.raises(ValueError, match="GLASS_EMAIL_ACCOUNT"):
+            _validate_email_credentials("", "secret")
+
+    def test_validate_email_credentials_raises_when_password_missing(self):
+        with pytest.raises(ValueError, match="GLASS_EMAIL_PASSWORD"):
+            _validate_email_credentials("user@example.com", "")
+
+    def test_validate_email_credentials_accepts_nonempty_values(self):
+        _validate_email_credentials("user@example.com", "secret")
+
+    def test_production_failure_missing_account(self):
+        """Regression: detect production failure when account is empty."""
+        with pytest.raises(ValueError, match="Missing Gmail credentials"):
+            _validate_email_credentials("", "secret")
+
+    def test_production_failure_missing_password(self):
+        """Regression: detect production failure when password is empty."""
+        with pytest.raises(ValueError, match="Missing Gmail credentials"):
+            _validate_email_credentials("user@example.com", "")
+
+    def test_production_failure_missing_credentials(self):
+        """Regression: detect production failure when both credentials are empty."""
+        with pytest.raises(ValueError, match="Missing Gmail credentials"):
+            _validate_email_credentials("", "")
+
+    def test_production_env_account_must_be_set(self):
+        """Fail if actual loaded EMAIL_ACCOUNT is empty (production requirement)."""
+        assert GlassOrchestrator.EMAIL_ACCOUNT, "EMAIL_ACCOUNT environment variable or config value must be set"
+
+    def test_production_env_password_must_be_set(self):
+        """Fail if actual loaded EMAIL_PASSWORD is empty (production requirement)."""
+        assert GlassOrchestrator.EMAIL_PASSWORD, "EMAIL_PASSWORD environment variable or config value must be set"
+
+    def test_gmail_credentials_valid(self):
+        """Validate that Gmail IMAP credentials are correct by attempting login."""
+        import imaplib
+        
+        try:
+            mail = imaplib.IMAP4_SSL(GlassOrchestrator.IMAP_SERVER)
+            mail.login(GlassOrchestrator.EMAIL_ACCOUNT, GlassOrchestrator.EMAIL_PASSWORD)
+            mail.logout()
+        except imaplib.IMAP4.error as e:
+            pytest.fail(f"Gmail IMAP login failed: {e}")
 
     def test_phase2_mapping_both(self):
         """59340120WSrc → Repair, Windshield, Listed"""
