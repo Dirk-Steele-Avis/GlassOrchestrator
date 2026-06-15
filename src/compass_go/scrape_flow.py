@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Iterable
+import os
 
 from .diagnostics import capture_failure
 from .outcomes import MVANotFoundError
@@ -52,7 +53,22 @@ class ScrapeFlow:
     def _scrape_one(self, mva: str) -> VehicleRecord:
         log.info("Scraping MVA %s", mva)
         try:
-            details = self._scan.submit(mva)
+            # If an entry URL targeting the Vehicle Details endpoint is
+            # configured, navigate directly to it with the MVA appended.
+            # This avoids filling the input and waiting for the transition
+            # from the Scan view when the endpoint supports direct access.
+            entry = os.getenv("COMPASS_GO_ENTRY_URL", "").strip()
+            if entry and "vehicle-details" in entry:
+                url = entry.rstrip("/") + "/" + mva
+                log.info("Navigating directly to Vehicle Details URL: %s", url)
+                # Use DOM-ready navigation and treat the page as already
+                # being in the Vehicle Details view.
+                self._scan.page.goto(url, wait_until="domcontentloaded")
+                from .pages.vehicle_details_page import VehicleDetailsPage
+
+                details = VehicleDetailsPage(self._scan.page)
+            else:
+                details = self._scan.submit(mva)
             details.expand_show_more()
             # Read VIN first — it's hidden behind Show More and loads slower
             # than the always-visible Description / MVA cells.
