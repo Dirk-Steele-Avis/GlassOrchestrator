@@ -159,10 +159,7 @@ def _search_vendor_emails(
 
 def _fetch_message(mail: imaplib.IMAP4_SSL, imap_id: bytes) -> Optional[email_module.message.Message]:
     """Fetch and parse a single MIME message by IMAP sequence ID."""
-    # Use BODY.PEEK to avoid altering the message \"Seen\" state on the server
-    # when simply inspecting messages for the monitor. The monitor should not
-    # mark messages as read implicitly; idempotency is handled separately.
-    status, msg_data = mail.fetch(imap_id, "(BODY.PEEK[])")
+    status, msg_data = mail.fetch(imap_id, "(RFC822)")
     if status != "OK" or not msg_data or not msg_data[0]:
         return None
     raw = msg_data[0][1]
