@@ -79,6 +79,16 @@ class TestBrowserLaunchMode:
             f"--profile-directory not found in launch args: {args_list}"
         )
 
+    def test_chromium_sandbox_enabled_for_edge_profile(self, monkeypatch):
+        """Edge persistent profile launch should explicitly enable Chromium sandboxing."""
+        pw, async_pw_cm, context, page = _make_pw_mock()
+        self._run_async(monkeypatch, pw, async_pw_cm, context, page)
+
+        call_kwargs = pw.chromium.launch_persistent_context.call_args
+        assert call_kwargs.kwargs.get("chromium_sandbox") is True, (
+            f"chromium_sandbox was not enabled on launch: {call_kwargs.kwargs}"
+        )
+
     def test_ensure_profile_context_called(self, monkeypatch):
         """ensure_profile_context() is called to advance session after launch."""
         import create_workitem as cw

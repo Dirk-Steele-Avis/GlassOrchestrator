@@ -26,6 +26,7 @@ from src.compass_go.writer import ResultsWriter  # noqa: E402
 
 MVA_CSV = PROJECT_ROOT / "data" / "GlassDataParser.csv"
 RESULTS_FILE = PROJECT_ROOT / "GlassResults.txt"
+AUTH_SESSION_ATTEMPTS = 2
 
 logging.basicConfig(
     level=logging.INFO,
@@ -71,12 +72,28 @@ def main() -> int:
     writer.reset()
     log.info("Processing %d MVAs", len(mvas))
 
-    with CompassGoSession().page() as page:
-        scan = AuthFlow(page).ensure_signed_in()
-        count = ScrapeFlow(scan, writer).run(mvas)
+    for attempt in range(1, AUTH_SESSION_ATTEMPTS + 1):
+        try:
+            with CompassGoSession().page() as page:
+                scan = AuthFlow(page).ensure_signed_in()
+                count = ScrapeFlow(scan, writer).run(mvas)
+            log.info("Done: wrote %d rows to %s", count, RESULTS_FILE)
+            return 0
+        except RuntimeError as exc:
+            msg = str(exc)
+            if (
+                "browser page closed during sign-in before ScanPage was reachable" in msg
+                and attempt < AUTH_SESSION_ATTEMPTS
+            ):
+                log.warning(
+                    "Auth session failed due to closed page (attempt %d/%d); retrying with fresh browser session",
+                    attempt,
+                    AUTH_SESSION_ATTEMPTS,
+                )
+                continue
+            raise
 
-    log.info("Done: wrote %d rows to %s", count, RESULTS_FILE)
-    return 0
+    return 1
 
 
 if __name__ == "__main__":

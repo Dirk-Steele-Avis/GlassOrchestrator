@@ -1,0 +1,12 @@
+{
+  "account_name": "Dirk.Steele@avisbudget.com",
+  "processed_folder_name": "Processed",
+  "processed_category_name": "Green Category",
+  "move_to_processed_folder": false,
+  "max_items_per_run": 20,
+  "max_approvals_per_run": 20,
+  "age_approval_days": 14,
+  "allowed_created_by": [
+    "Steele, Dirk"
+  ]
+}

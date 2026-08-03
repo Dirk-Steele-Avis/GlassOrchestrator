@@ -1,0 +1,6 @@
+2026/08/03-08:04:15.923 3240 Reusing MANIFEST C:\Users\steeldir\Code\GlassOrchestrator\.edge-playwright-profile\Default\EdgeCoupons/coupons_data.db/MANIFEST-000001
+2026/08/03-08:04:17.883 3240 Recovering log #130
+2026/08/03-08:04:17.884 3240 Reusing old log C:\Users\steeldir\Code\GlassOrchestrator\.edge-playwright-profile\Default\EdgeCoupons/coupons_data.db/000130.log 
+2026/08/03-08:04:19.025 233c Level-0 table #134: started
+2026/08/03-08:04:19.037 233c Level-0 table #134: 683264 bytes OK
+2026/08/03-08:04:19.044 233c Delete type=0 #130

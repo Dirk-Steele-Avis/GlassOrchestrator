@@ -597,6 +597,17 @@ def _parse_html_descriptions_bs4(html: str) -> list[tuple[str, str]]:
             tokens = _split_non_empty_lines(cells[desc_idx].get_text(separator="\n", strip=False))
         if not tokens and name_idx is not None and len(cells) > name_idx:
             tokens = cells[name_idx].get_text(strip=True).split()
+        # Recovery path for malformed exports where scan data was written into Type.
+        if not tokens and type_idx is not None and len(cells) > type_idx:
+            tokens = _extract_scan_tokens(cells[type_idx].get_text(separator="\n", strip=False))
+            if tokens:
+                log.warning(
+                    "Input: Description/Name empty; recovered %d scan(s) from Type column",
+                    len(tokens),
+                )
+                for desc in tokens:
+                    results.append(("", desc))
+                continue
         for desc in tokens:
             results.append((type_val, desc))
     return results
@@ -639,6 +650,17 @@ def _parse_html_descriptions_regex(html: str) -> list[tuple[str, str]]:
             tokens = _split_non_empty_lines(normalized_cells[desc_idx])
         elif name_idx is not None and len(normalized_cells) > name_idx and normalized_cells[name_idx]:
             tokens = normalized_cells[name_idx].split()
+        elif type_idx is not None and len(cells) > type_idx:
+            type_cell_text = re.sub(r"<[^>]+>", "\n", cells[type_idx])
+            tokens = _extract_scan_tokens(type_cell_text)
+            if tokens:
+                log.warning(
+                    "Input: Description/Name empty; recovered %d scan(s) from Type column",
+                    len(tokens),
+                )
+                for desc in tokens:
+                    results.append(("", desc))
+                continue
         for desc in tokens:
             results.append((type_val, desc))
     return results
@@ -738,6 +760,12 @@ def _extract_arrival_date_from_type(type_value: str | None, fallback_date: datet
 def _split_non_empty_lines(raw_text: str) -> list[str]:
     """Split text by lines and return only non-empty trimmed lines."""
     return [line.strip() for line in raw_text.splitlines() if line.strip()]
+
+
+def _extract_scan_tokens(raw_text: str) -> list[str]:
+    """Return scan-like tokens from free text using the configured scan regex."""
+    parts = re.split(r"[\s,;]+", raw_text)
+    return [part.strip() for part in parts if part and MVA_PATTERN.match(part.strip())]
 
 
 # ─── Parsing & Normalization ─────────────────────────────────────────────────

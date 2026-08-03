@@ -1,0 +1,630 @@
+[2026-07-07T12:25:51.146Z] [INFO] ========================================================================================================================
+[2026-07-07T12:25:51.147Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.48
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-07T12:25:51.153Z] [INFO] Telemetry session 7b6e80d9-f91d-442b-b52e-6e4b71509af8.
+[2026-07-07T12:25:51.154Z] [INFO] Initializing cache (v1).
+[2026-07-07T12:28:38.563Z] [INFO] Shutting down.
+[2026-07-07T12:28:38.567Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-07T12:28:38.567Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-08T11:16:54.418Z] [INFO] ========================================================================================================================
+[2026-07-08T11:16:54.418Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.48
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-08T11:16:54.425Z] [INFO] Telemetry session 297d1583-c32e-4b02-a917-f32dcd2fffa6.
+[2026-07-08T11:16:54.427Z] [INFO] Reinitialized cache (v1).
+[2026-07-08T11:18:07.109Z] [INFO] Shutting down.
+[2026-07-08T11:18:07.109Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-08T11:18:07.109Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-08T11:19:06.030Z] [INFO] ========================================================================================================================
+[2026-07-08T11:19:06.031Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.48
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-08T11:19:06.037Z] [INFO] Telemetry session 8943103c-2e82-4238-80a4-bce444dcef0d.
+[2026-07-08T11:19:06.038Z] [INFO] Reinitialized cache (v1).
+[2026-07-08T11:19:59.190Z] [INFO] Shutting down.
+[2026-07-08T11:19:59.191Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-08T11:19:59.191Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-09T10:45:43.267Z] [INFO] ========================================================================================================================
+[2026-07-09T10:45:43.267Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.48
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-09T10:45:43.273Z] [INFO] Telemetry session 4f86b11f-4f51-4839-a549-63fe1444dbcf.
+[2026-07-09T10:45:43.274Z] [INFO] Reinitialized cache (v1).
+[2026-07-09T10:50:56.567Z] [INFO] Shutting down.
+[2026-07-09T10:50:56.567Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-09T10:50:56.567Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-09T10:51:12.493Z] [INFO] ========================================================================================================================
+[2026-07-09T10:51:12.494Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.48
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-09T10:51:12.500Z] [INFO] Telemetry session 7b2fc4e1-3934-4eec-94fe-557fdce222b0.
+[2026-07-09T10:51:12.501Z] [INFO] Reinitialized cache (v1).
+[2026-07-09T10:52:34.048Z] [INFO] Shutting down.
+[2026-07-09T10:52:34.048Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-09T10:52:34.048Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-09T10:52:57.316Z] [INFO] ========================================================================================================================
+[2026-07-09T10:52:57.316Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.48
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-09T10:52:57.322Z] [INFO] Telemetry session 87355a7d-10e6-432d-8cc5-75eb2be3d00a.
+[2026-07-09T10:52:57.323Z] [INFO] Reinitialized cache (v1).
+[2026-07-09T10:54:02.638Z] [INFO] Shutting down.
+[2026-07-09T10:54:02.638Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-09T10:54:02.638Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-09T17:56:56.417Z] [INFO] ========================================================================================================================
+[2026-07-09T17:56:56.418Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.48
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-09T17:56:56.520Z] [INFO] Telemetry session 0b156955-90f9-45cf-b977-6b9ad7acba66.
+[2026-07-09T17:56:56.522Z] [INFO] Reinitialized cache (v1).
+[2026-07-09T17:58:09.427Z] [INFO] Shutting down.
+[2026-07-09T17:58:09.428Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-09T17:58:09.428Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-10T11:50:11.535Z] [INFO] ========================================================================================================================
+[2026-07-10T11:50:11.536Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.48
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-10T11:50:11.542Z] [INFO] Telemetry session 3862f575-59a1-407a-b0b6-b2c78e9f4464.
+[2026-07-10T11:50:11.543Z] [INFO] Reinitialized cache (v1).
+[2026-07-10T11:51:41.668Z] [INFO] Shutting down.
+[2026-07-10T11:51:41.668Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-10T11:51:41.668Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-10T11:55:47.715Z] [INFO] ========================================================================================================================
+[2026-07-10T11:55:47.715Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.48
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-10T11:55:47.721Z] [INFO] Telemetry session 8b057989-8c6c-4ef8-9ec2-5def3f69247d.
+[2026-07-10T11:55:47.722Z] [INFO] Reinitialized cache (v1).
+[2026-07-10T11:56:50.676Z] [INFO] Shutting down.
+[2026-07-10T11:56:50.676Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-10T11:56:50.676Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-10T17:53:28.528Z] [INFO] ========================================================================================================================
+[2026-07-10T17:53:28.528Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.48
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-10T17:53:28.535Z] [INFO] Telemetry session dbe22622-e5a1-45d7-8615-41a00658acbe.
+[2026-07-10T17:53:28.537Z] [INFO] Reinitialized cache (v1).
+[2026-07-10T17:55:09.928Z] [INFO] Shutting down.
+[2026-07-10T17:55:09.932Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-10T17:55:09.932Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-13T11:03:28.126Z] [INFO] ========================================================================================================================
+[2026-07-13T11:03:28.126Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.48
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-13T11:03:28.132Z] [INFO] Telemetry session a78c132b-bb8a-4d7f-915b-935760a75a6f.
+[2026-07-13T11:03:28.134Z] [INFO] Reinitialized cache (v1).
+[2026-07-13T11:05:39.034Z] [INFO] Shutting down.
+[2026-07-13T11:05:39.034Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-13T11:05:39.034Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-13T11:06:49.727Z] [INFO] ========================================================================================================================
+[2026-07-13T11:06:49.727Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.48
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-13T11:06:49.733Z] [INFO] Telemetry session 18380a6f-ed9c-4616-a07f-8dd2d589f595.
+[2026-07-13T11:06:49.734Z] [INFO] Reinitialized cache (v1).
+[2026-07-13T11:08:16.192Z] [INFO] Shutting down.
+[2026-07-13T11:08:16.194Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-13T11:08:16.194Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-14T11:33:31.548Z] [INFO] ========================================================================================================================
+[2026-07-14T11:33:31.548Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.48
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-14T11:33:31.562Z] [INFO] Telemetry session 934b45c7-478f-4551-b152-5adea1396441.
+[2026-07-14T11:33:31.563Z] [INFO] Reinitialized cache (v1).
+[2026-07-14T11:34:47.360Z] [INFO] Shutting down.
+[2026-07-14T11:34:47.361Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-14T11:34:47.361Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-14T11:35:20.111Z] [INFO] ========================================================================================================================
+[2026-07-14T11:35:20.111Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.48
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-14T11:35:20.117Z] [INFO] Telemetry session 3cecf418-5703-4275-bde2-6ff196272abb.
+[2026-07-14T11:35:20.118Z] [INFO] Reinitialized cache (v1).
+[2026-07-14T11:36:59.211Z] [INFO] Shutting down.
+[2026-07-14T11:36:59.211Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-14T11:36:59.211Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-14T11:42:11.027Z] [INFO] ========================================================================================================================
+[2026-07-14T11:42:11.027Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.48
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-14T11:42:11.034Z] [INFO] Telemetry session 56c0d76e-2e12-41c1-8881-211823778e43.
+[2026-07-14T11:42:11.035Z] [INFO] Reinitialized cache (v1).
+[2026-07-14T11:43:45.481Z] [INFO] Shutting down.
+[2026-07-14T11:43:45.489Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-14T11:43:45.490Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-15T10:33:45.011Z] [INFO] ========================================================================================================================
+[2026-07-15T10:33:45.053Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.65
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-15T10:33:45.059Z] [INFO] Telemetry session 7584d68e-f6c9-46c4-97d2-41bd0a6b31f0.
+[2026-07-15T10:33:45.060Z] [INFO] Reinitialized cache (v1).
+[2026-07-15T10:36:30.370Z] [INFO] Shutting down.
+[2026-07-15T10:36:30.370Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-15T10:36:30.370Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-16T11:13:38.874Z] [INFO] ========================================================================================================================
+[2026-07-16T11:13:38.875Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.65
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-16T11:13:38.881Z] [INFO] Telemetry session e1157725-b8de-4bc6-90ce-bcc1323f5b5e.
+[2026-07-16T11:13:38.882Z] [INFO] Reinitialized cache (v1).
+[2026-07-16T11:15:19.109Z] [INFO] Shutting down.
+[2026-07-16T11:15:19.109Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-16T11:15:19.109Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-16T11:15:52.207Z] [INFO] ========================================================================================================================
+[2026-07-16T11:15:52.207Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.65
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-16T11:15:52.213Z] [INFO] Telemetry session 16845927-f42b-4f96-8631-3de2674996f8.
+[2026-07-16T11:15:52.214Z] [INFO] Reinitialized cache (v1).
+[2026-07-16T11:17:16.937Z] [INFO] Shutting down.
+[2026-07-16T11:17:16.937Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-16T11:17:16.937Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-17T11:14:21.904Z] [INFO] ========================================================================================================================
+[2026-07-17T11:14:21.905Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.65
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-17T11:14:21.911Z] [INFO] Telemetry session bcf03d66-368f-4f82-adc3-a530358e6042.
+[2026-07-17T11:14:21.912Z] [INFO] Reinitialized cache (v1).
+[2026-07-17T11:16:28.372Z] [INFO] Shutting down.
+[2026-07-17T11:16:28.372Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-17T11:16:28.372Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-17T11:17:41.654Z] [INFO] ========================================================================================================================
+[2026-07-17T11:17:41.654Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.65
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-17T11:17:41.662Z] [INFO] Telemetry session c904f1ba-ced2-4220-9bb7-fa653a42b026.
+[2026-07-17T11:17:41.663Z] [INFO] Reinitialized cache (v1).
+[2026-07-17T11:21:10.260Z] [INFO] Shutting down.
+[2026-07-17T11:21:10.260Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-17T11:21:10.260Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-17T11:22:55.220Z] [INFO] ========================================================================================================================
+[2026-07-17T11:22:55.220Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.65
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-17T11:22:55.226Z] [INFO] Telemetry session ee4cd8d5-b659-4587-9cb2-43955f3aea28.
+[2026-07-17T11:22:55.227Z] [INFO] Reinitialized cache (v1).
+[2026-07-17T11:24:29.881Z] [INFO] Shutting down.
+[2026-07-17T11:24:29.881Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-17T11:24:29.881Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-19T13:30:12.978Z] [INFO] ========================================================================================================================
+[2026-07-19T13:30:12.978Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.65
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-19T13:30:12.984Z] [INFO] Telemetry session da427766-a543-45bc-853c-af95145b7ee3.
+[2026-07-19T13:30:12.986Z] [INFO] Reinitialized cache (v1).
+[2026-07-19T13:32:01.582Z] [INFO] Shutting down.
+[2026-07-19T13:32:01.582Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-19T13:32:01.582Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-19T13:33:44.415Z] [INFO] ========================================================================================================================
+[2026-07-19T13:33:44.415Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.65
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-19T13:33:44.421Z] [INFO] Telemetry session a68fa15b-a372-4136-b1ba-5e6ec0bec40b.
+[2026-07-19T13:33:44.422Z] [INFO] Reinitialized cache (v1).
+[2026-07-19T13:37:12.764Z] [INFO] Shutting down.
+[2026-07-19T13:37:12.764Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-19T13:37:12.764Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-20T11:15:32.942Z] [INFO] ========================================================================================================================
+[2026-07-20T11:15:32.964Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.65
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-20T11:15:32.971Z] [INFO] Telemetry session 27d4a1c4-f9a0-45de-9f4e-d6e6eb00aac9.
+[2026-07-20T11:15:32.974Z] [INFO] Reinitialized cache (v1).
+[2026-07-20T11:17:58.725Z] [INFO] Shutting down.
+[2026-07-20T11:17:58.725Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-20T11:17:58.725Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-21T11:21:43.567Z] [INFO] ========================================================================================================================
+[2026-07-21T11:21:43.567Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.65
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-21T11:21:43.573Z] [INFO] Telemetry session 4fc97d94-30f1-4938-af6a-008c2fc8b429.
+[2026-07-21T11:21:43.575Z] [INFO] Reinitialized cache (v1).
+[2026-07-21T11:24:07.628Z] [INFO] Shutting down.
+[2026-07-21T11:24:07.628Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-21T11:24:07.628Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-21T11:28:04.620Z] [INFO] ========================================================================================================================
+[2026-07-21T11:28:04.620Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.65
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-21T11:28:04.626Z] [INFO] Telemetry session d7ab87bb-37f7-4451-b537-b067c83a4708.
+[2026-07-21T11:28:04.627Z] [INFO] Reinitialized cache (v1).
+[2026-07-21T11:29:17.887Z] [INFO] Shutting down.
+[2026-07-21T11:29:17.887Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-21T11:29:17.887Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-22T11:04:55.539Z] [INFO] ========================================================================================================================
+[2026-07-22T11:04:55.539Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.65
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-22T11:04:55.546Z] [INFO] Telemetry session 87fc5a84-c34f-4b66-be56-542da10980b4.
+[2026-07-22T11:04:55.548Z] [INFO] Reinitialized cache (v1).
+[2026-07-22T11:07:43.986Z] [INFO] Shutting down.
+[2026-07-22T11:07:43.986Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-22T11:07:43.986Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-22T12:18:37.627Z] [INFO] ========================================================================================================================
+[2026-07-22T12:18:37.628Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.65
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-22T12:18:37.633Z] [INFO] Telemetry session 4e25b9ba-7c8d-4c17-b8bf-8acb3ec01bdd.
+[2026-07-22T12:18:37.635Z] [INFO] Reinitialized cache (v1).
+[2026-07-22T12:20:51.305Z] [INFO] Shutting down.
+[2026-07-22T12:20:51.305Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-22T12:20:51.305Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-23T11:47:48.517Z] [INFO] ========================================================================================================================
+[2026-07-23T11:47:48.517Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.83
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-23T11:47:48.523Z] [INFO] Telemetry session 6d5bf0be-f435-41d3-b1d9-504b30baa491.
+[2026-07-23T11:47:48.524Z] [INFO] Reinitialized cache (v1).
+[2026-07-23T11:49:45.791Z] [INFO] Shutting down.
+[2026-07-23T11:49:45.791Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-23T11:49:45.791Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-23T11:50:45.075Z] [INFO] ========================================================================================================================
+[2026-07-23T11:50:45.075Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.83
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-23T11:50:45.107Z] [INFO] Telemetry session 20fe3d72-52c8-40ed-bfcc-3033ce61f7f2.
+[2026-07-23T11:50:45.109Z] [INFO] Reinitialized cache (v1).
+[2026-07-23T11:52:16.399Z] [INFO] Shutting down.
+[2026-07-23T11:52:16.399Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-23T11:52:16.399Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-24T12:06:54.369Z] [INFO] ========================================================================================================================
+[2026-07-24T12:06:54.370Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.83
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-24T12:06:54.376Z] [INFO] Telemetry session db737556-867c-462a-83a8-d83086cc8217.
+[2026-07-24T12:06:54.381Z] [INFO] Reinitialized cache (v1).
+[2026-07-24T12:10:25.624Z] [INFO] Shutting down.
+[2026-07-24T12:10:25.625Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-24T12:10:25.625Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-24T12:11:08.518Z] [INFO] ========================================================================================================================
+[2026-07-24T12:11:08.518Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.83
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-24T12:11:08.524Z] [INFO] Telemetry session 5f37de3e-3489-4d58-9d0b-22f075aee694.
+[2026-07-24T12:11:08.525Z] [INFO] Reinitialized cache (v1).
+[2026-07-24T12:12:23.446Z] [INFO] Shutting down.
+[2026-07-24T12:12:23.446Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-24T12:12:23.446Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-27T13:11:10.953Z] [INFO] ========================================================================================================================
+[2026-07-27T13:11:10.957Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.83
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-27T13:11:11.083Z] [INFO] Telemetry session b37dd421-82c8-4ee6-bebb-9bb499e4313d.
+[2026-07-27T13:11:11.112Z] [INFO] Reinitialized cache (v1).
+[2026-07-27T13:13:37.971Z] [INFO] Shutting down.
+[2026-07-27T13:13:37.976Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-27T13:13:37.976Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-27T13:57:05.351Z] [INFO] ========================================================================================================================
+[2026-07-27T13:57:05.356Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.83
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-27T13:57:05.362Z] [INFO] Telemetry session 2247a1e3-8a68-45a6-9b19-98316839956a.
+[2026-07-27T13:57:05.363Z] [INFO] Reinitialized cache (v1).
+[2026-07-27T13:58:41.389Z] [INFO] Shutting down.
+[2026-07-27T13:58:41.389Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-27T13:58:41.389Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-28T12:46:15.173Z] [INFO] ========================================================================================================================
+[2026-07-28T12:46:15.173Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.83
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-28T12:46:15.180Z] [INFO] Telemetry session 905017c8-8d7f-4491-9acd-f5515c9d9b0c.
+[2026-07-28T12:46:15.181Z] [INFO] Reinitialized cache (v1).
+[2026-07-28T12:48:38.094Z] [INFO] Shutting down.
+[2026-07-28T12:48:38.094Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-28T12:48:38.094Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-28T12:49:13.034Z] [INFO] ========================================================================================================================
+[2026-07-28T12:49:13.034Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.83
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-28T12:49:13.041Z] [INFO] Telemetry session 502a95f5-6c5f-4ebd-9e59-692dada4445e.
+[2026-07-28T12:49:13.042Z] [INFO] Reinitialized cache (v1).
+[2026-07-28T12:50:45.365Z] [INFO] Shutting down.
+[2026-07-28T12:50:45.365Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-28T12:50:45.365Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-29T12:27:20.307Z] [INFO] ========================================================================================================================
+[2026-07-29T12:27:20.307Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.83
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-29T12:27:20.314Z] [INFO] Telemetry session 6adcfc8a-bbac-4617-8595-33c578019f02.
+[2026-07-29T12:27:20.316Z] [INFO] Reinitialized cache (v1).
+[2026-07-29T12:29:32.168Z] [INFO] Shutting down.
+[2026-07-29T12:29:32.169Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-29T12:29:32.169Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-29T12:32:08.247Z] [INFO] ========================================================================================================================
+[2026-07-29T12:32:08.248Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.83
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-29T12:32:08.356Z] [INFO] Telemetry session c020653e-241a-4323-bb76-5fd21c8a8de1.
+[2026-07-29T12:32:08.357Z] [INFO] Reinitialized cache (v1).
+[2026-07-29T12:33:46.611Z] [INFO] Shutting down.
+[2026-07-29T12:33:46.611Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-29T12:33:46.611Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-30T12:20:20.652Z] [INFO] ========================================================================================================================
+[2026-07-30T12:20:20.652Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.83
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-30T12:20:20.664Z] [INFO] Telemetry session 9dcfdcdc-1db4-4eae-9ad8-f1f7d2b8577f.
+[2026-07-30T12:20:20.666Z] [INFO] Reinitialized cache (v1).
+[2026-07-30T12:22:53.878Z] [INFO] Shutting down.
+[2026-07-30T12:22:53.879Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-30T12:22:53.879Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-07-30T12:23:25.651Z] [INFO] ========================================================================================================================
+[2026-07-30T12:23:25.651Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.83
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-07-30T12:23:25.660Z] [INFO] Telemetry session 336e87a7-77b4-4d52-b42b-587bad737407.
+[2026-07-30T12:23:25.661Z] [INFO] Reinitialized cache (v1).
+[2026-07-30T12:26:52.580Z] [INFO] Shutting down.
+[2026-07-30T12:26:52.580Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-07-30T12:26:52.580Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-08-03T12:04:01.056Z] [INFO] ========================================================================================================================
+[2026-08-03T12:04:01.056Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.105
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-08-03T12:04:01.062Z] [INFO] Telemetry session a948f37a-3453-42ba-9dc9-841a6e5d2351.
+[2026-08-03T12:04:01.064Z] [INFO] Reinitialized cache (v1).
+[2026-08-03T12:06:08.110Z] [INFO] Shutting down.
+[2026-08-03T12:06:08.111Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-08-03T12:06:08.111Z] [INFO] Task scheduler has stopped, and all work has been canceled.
+[2026-08-03T12:08:36.298Z] [INFO] ========================================================================================================================
+[2026-08-03T12:08:36.298Z] [INFO] Initializing MAM Client.
+App: com.microsoft.edge 150.0.4078.105
+SDK: 2.1.367.0
+OS: windows 10.0.19045.7417
+DeviceType: Desktop
+Manufacturer: HP
+Model: HP ProDesk 600 G3 DM
+Telemetry: yes
+Managed device support: enabled
+[2026-08-03T12:08:36.305Z] [INFO] Telemetry session 3ab0c893-0cbf-45fa-9103-fda038f5088d.
+[2026-08-03T12:08:36.306Z] [INFO] Reinitialized cache (v1).
+[2026-08-03T12:09:46.362Z] [INFO] Shutting down.
+[2026-08-03T12:09:46.362Z] [INFO] Stopping the task scheduler and canceling any outstanding work items...
+[2026-08-03T12:09:46.362Z] [INFO] Task scheduler has stopped, and all work has been canceled.

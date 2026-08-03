@@ -1,0 +1,159 @@
+<?xml version="1.0"?>
+<site-list version="41">
+ <site url="161.178.14.27/abg_reports/pages">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="161.178.14.27/abg_security_call_form">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="161.178.14.27/customernumberupdates">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="161.178.14.27/disabilityservices">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="161.178.14.27/netjetscrossroads">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="161.178.14.27/srstools/prestigeform.aspx">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="161.178.14.27/srstools/queues.aspx">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="161.178.14.27/srstools/tours.aspx">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="161.178.57.2/bin/start/wsstart.application">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">MSEdge</open-in>
+ </site>
+ <site url="172.18.129.173/forms/assets.aspx">
+  <compat-mode>Default</compat-mode>
+  <open-in>IE11</open-in>
+ </site>
+ <site url="172.18.129.173/forms/assetswithattributes.aspx">
+  <compat-mode>Default</compat-mode>
+  <open-in>IE11</open-in>
+ </site>
+ <site url="172.18.132.176/forms/assets.aspx">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="172.18.150.166/forms/assets.aspx">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="172.18.164.171/forms/assets.aspx">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="avis-wfm-pr1.jdadelivers.com">
+  <compat-mode>IE7Enterprise</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="avis-wfm-ts1.jdadelivers.com">
+  <compat-mode>IE7Enterprise</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="avis.vehicle.connectcdk.com">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="b2psavcedwhyp11.avisbudget.com:28443/raframework/browse/cendant/management_reports">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="b2psavcedwhyp11.avisbudget.com:28443/raframework/browse/cendant/reservation_reports">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="b3vpwbtlapp01.corp.avisbudget.com">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="btpos.budgettruck.com">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">MSEdge</open-in>
+ </site>
+ <site url="budgettruck.com">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="caproxy.budgettruck.com">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="dev-ics/pages">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="enterpriseagus.adp.com">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="ics/pages">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="portal.adp.com">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="pos.budgettruck.com">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="signin.online.adp.com">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="tomcat.budgettruck.com">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="tulsabusinesssupport.corp.avisbudget.com/abg_security_call_form">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="tulsabusinesssupport.corp.avisbudget.com/customernumberupdates">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="tulsabusinesssupport.corp.avisbudget.com/disabilityservices">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="tulsabusinesssupport.corp.avisbudget.com/employeevacationrental/processrequests">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="tulsabusinesssupport.corp.avisbudget.com/netjetscrossroads">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="tulsabusinesssupport.corp.avisbudget.com/srstools/prestigeform.aspx">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="tulsabusinesssupport.corp.avisbudget.com/srstools/queues.aspx">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="tulsabusinesssupport.corp.avisbudget.com/srstools/tours.aspx">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+ <site url="uat-ics/pages">
+  <compat-mode>Default</compat-mode>
+  <open-in allow-redirect="true">IE11</open-in>
+ </site>
+</site-list>

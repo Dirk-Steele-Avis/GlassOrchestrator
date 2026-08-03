@@ -195,6 +195,7 @@ async def _run_playwright_creation_async(targets: list[dict]) -> None:
             user_data_dir=str(edge_user_data_dir),
             channel="msedge",
             headless=headless,
+            chromium_sandbox=True,
             args=[
                 "--disable-blink-features=AutomationControlled",
                 f"--profile-directory={edge_profile_directory}",

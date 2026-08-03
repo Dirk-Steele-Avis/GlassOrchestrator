@@ -376,6 +376,33 @@ class TestUT2_HTMLExtraction:
         result = _parse_html_descriptions(html)
         assert result == [("0305APO", "59340120WSc")]
 
+        def test_type_column_recovery_when_name_and_description_empty(self):
+                """Recover scans when malformed export places all data in Type column."""
+                html = """
+                <table>
+                    <tr>
+                        <th>Type</th><th>Name</th><th>Description</th><th>Quantity</th><th>Date</th>
+                    </tr>
+                    <tr>
+                        <td>60565595SR 57780052WSr 61368742WS 60148373WS 60382092WS 58861235WS 61744550RLD 55863205WS 59754505WS 54036953r</td>
+                        <td></td><td></td><td>1</td><td>07/27/2026</td>
+                    </tr>
+                </table>
+                """
+                result = _parse_html_descriptions(html)
+                assert result == [
+                        ("", "60565595SR"),
+                        ("", "57780052WSr"),
+                        ("", "61368742WS"),
+                        ("", "60148373WS"),
+                        ("", "60382092WS"),
+                        ("", "58861235WS"),
+                        ("", "61744550RLD"),
+                        ("", "55863205WS"),
+                        ("", "59754505WS"),
+                        ("", "54036953r"),
+                ]
+
 
 # ─── UT-3: Idempotency Check ─────────────────────────────────────────────────
 

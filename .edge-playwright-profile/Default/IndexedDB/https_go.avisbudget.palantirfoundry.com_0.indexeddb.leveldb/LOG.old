@@ -1,0 +1,36 @@
+2026/08/03-08:08:43.709 2364 Reusing MANIFEST C:\Users\steeldir\Code\GlassOrchestrator\.edge-playwright-profile\Default\IndexedDB\https_go.avisbudget.palantirfoundry.com_0.indexeddb.leveldb/MANIFEST-016522
+2026/08/03-08:08:43.719 2364 Recovering log #18810
+2026/08/03-08:08:43.839 2364 Reusing old log C:\Users\steeldir\Code\GlassOrchestrator\.edge-playwright-profile\Default\IndexedDB\https_go.avisbudget.palantirfoundry.com_0.indexeddb.leveldb/018810.log 
+2026/08/03-08:08:45.722 3614 Level-0 table #18849: started
+2026/08/03-08:08:45.886 3614 Level-0 table #18849: 2435118 bytes OK
+2026/08/03-08:08:45.897 3614 Delete type=0 #18810
+2026/08/03-08:08:46.787 3d30 Compacting 1@0 + 2@1 files
+2026/08/03-08:08:46.842 3d30 Generated table #18850@0: 19241 keys, 294399 bytes
+2026/08/03-08:08:47.354 3d30 Generated table #18851@0: 2195 keys, 2173920 bytes
+2026/08/03-08:08:47.450 3d30 Generated table #18852@0: 2195 keys, 2174017 bytes
+2026/08/03-08:08:47.521 3d30 Generated table #18853@0: 3941 keys, 1463181 bytes
+2026/08/03-08:08:47.521 3d30 Compacted 1@0 + 2@1 files => 6105517 bytes
+2026/08/03-08:08:47.524 3d30 compacted to: files[ 0 4 19 0 0 0 0 ]
+2026/08/03-08:08:47.528 3d30 Delete type=2 #18825
+2026/08/03-08:08:47.528 3d30 Delete type=2 #18826
+2026/08/03-08:08:47.528 3d30 Delete type=2 #18849
+2026/08/03-08:08:50.675 2364 Compacting 1@1 + 8@2 files
+2026/08/03-08:08:50.841 2364 Generated table #18854@1: 1384 keys, 2176404 bytes
+2026/08/03-08:08:50.894 2364 Generated table #18855@1: 864 keys, 2174896 bytes
+2026/08/03-08:08:50.947 2364 Generated table #18856@1: 860 keys, 2174086 bytes
+2026/08/03-08:08:50.997 2364 Generated table #18857@1: 859 keys, 2171203 bytes
+2026/08/03-08:08:51.074 2364 Generated table #18858@1: 866 keys, 2171816 bytes
+2026/08/03-08:08:51.144 2364 Generated table #18859@1: 3066 keys, 2186729 bytes
+2026/08/03-08:08:51.248 2364 Generated table #18860@1: 4888 keys, 2194287 bytes
+2026/08/03-08:08:51.261 2364 Generated table #18861@1: 289 keys, 304192 bytes
+2026/08/03-08:08:51.261 2364 Compacted 1@1 + 8@2 files => 15553613 bytes
+2026/08/03-08:08:51.262 2364 compacted to: files[ 0 3 19 0 0 0 0 ]
+2026/08/03-08:08:51.266 2364 Delete type=2 #18829
+2026/08/03-08:08:51.267 2364 Delete type=2 #18830
+2026/08/03-08:08:51.267 2364 Delete type=2 #18831
+2026/08/03-08:08:51.267 2364 Delete type=2 #18832
+2026/08/03-08:08:51.267 2364 Delete type=2 #18833
+2026/08/03-08:08:51.267 2364 Delete type=2 #18834
+2026/08/03-08:08:51.267 2364 Delete type=2 #18835
+2026/08/03-08:08:51.267 2364 Delete type=2 #18836
+2026/08/03-08:08:51.268 2364 Delete type=2 #18850

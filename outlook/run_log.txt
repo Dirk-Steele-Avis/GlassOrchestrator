@@ -1,0 +1,2766 @@
+
+======================================================================
+RUN STARTED: 2026-07-22 17:33:14
+======================================================================
+
+============================================================
+STEP 2: CHECK - looking up each queued VIN in FieldPO
+============================================================
+No rows with status 'new' to check.
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-22 17:34:33
+======================================================================
+
+============================================================
+STEP 2: CHECK - looking up each queued VIN in FieldPO
+============================================================
+No rows with status 'new' to check.
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-22 17:35:02
+======================================================================
+
+============================================================
+STEP 2: CHECK - looking up each queued VIN in FieldPO
+============================================================
+No rows with status 'new' to check.
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-22 17:37:19
+======================================================================
+
+============================================================
+STEP 1: EXTRACT - reading Outlook AGN\Invoice folder
+============================================================
+Processed: [External] Invoice #5090859 -> VIN 1C4SJSBP0SS534781, $340.00
+Processed: [External] Invoice #5090850 -> VIN 1GKENKKSXTJ197778, $340.00
+Processed: [External] Invoice #5090842 -> VIN KL79MPSPXTB193651, $340.00
+Reached MAX_ITEMS_PER_RUN limit (3). Stopping for this run.
+
+3 invoice(s) added to queue: C:\Users\steeldir\Code\GlassOrchestrator\Outlook\invoices_queue.csv
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-22 17:37:48
+======================================================================
+
+============================================================
+STEP 2: CHECK - looking up each queued VIN in FieldPO
+============================================================
+Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN 1C4SJSBP0SS534781 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 1GKENKKSXTJ197778 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN KL79MPSPXTB193651 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Queue updated: C:\Users\steeldir\Code\GlassOrchestrator\Outlook\invoices_queue.csv
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-22 17:57:29
+======================================================================
+
+============================================================
+STEP 3: APPROVE - review and confirm
+============================================================
+NOTE: 3 matched invoices found, but MAX_APPROVALS_PER_RUN is 1. Only the first 1 will be shown/approved this run. Re-run to process the rest.
+Already paid, skipped automatically (6):
+  VIN 4T1DAACK2SU006245  |  [External] Invoice #4907720
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916334
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916354
+  VIN 1GTPHBEK0TZ324966  |  [External] Invoice #4916358
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916351
+  VIN 5NMP24GL3TH190378  |  [External] Invoice #4916362
+
+READY TO APPROVE (1) -- amounts matched:
+  VIN 1C4SJSBP0SS534781  |  $340.00  |  [External] Invoice #5090859
+
+Type 'yes' to approve all 1 matched invoice(s) above: Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Approving VIN 1C4SJSBP0SS534781 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Done. Queue updated.
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-22 18:01:54
+======================================================================
+
+============================================================
+STEP 3: APPROVE - review and confirm
+============================================================
+NOTE: 2 matched invoices found, but MAX_APPROVALS_PER_RUN is 1. Only the first 1 will be shown/approved this run. Re-run to process the rest.
+Already paid, skipped automatically (6):
+  VIN 4T1DAACK2SU006245  |  [External] Invoice #4907720
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916334
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916354
+  VIN 1GTPHBEK0TZ324966  |  [External] Invoice #4916358
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916351
+  VIN 5NMP24GL3TH190378  |  [External] Invoice #4916362
+
+READY TO APPROVE (1) -- amounts matched:
+  VIN 1GKENKKSXTJ197778  |  $340.00  |  [External] Invoice #5090850
+
+Type 'yes' to approve all 1 matched invoice(s) above: Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Approving VIN 1GKENKKSXTJ197778 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Done. Queue updated.
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-29 13:15:56
+======================================================================
+
+============================================================
+STEP 1: EXTRACT - reading Outlook AGN\Invoice folder
+============================================================
+Processed: [External] Invoice #4916333 -> VIN 4S4WMABD2T3416294, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4916329 -> VIN 4T1DAACKXSU598042, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4924232 -> VIN 1FMDE7BH9TLA47847, $504.84 (categorized: Green Category)
+Reached MAX_ITEMS_PER_RUN limit (3). Stopping for this run.
+
+3 invoice(s) added to queue: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-29 13:19:12
+======================================================================
+
+============================================================
+STEP 2: CHECK - looking up each queued VIN in FieldPO
+============================================================
+Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN 4S4WMABD2T3416294 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 4T1DAACKXSU598042 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1FMDE7BH9TLA47847 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Queue updated: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-29 13:21:52
+======================================================================
+
+============================================================
+STEP 3: APPROVE - review and confirm
+============================================================
+Already paid, skipped automatically (9):
+  VIN 4T1DAACK2SU006245  |  [External] Invoice #4907720
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916334
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916354
+  VIN 1GTPHBEK0TZ324966  |  [External] Invoice #4916358
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916351
+  VIN 5NMP24GL3TH190378  |  [External] Invoice #4916362
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916333
+  VIN 4T1DAACKXSU598042  |  [External] Invoice #4916329
+  VIN 1FMDE7BH9TLA47847  |  [External] Invoice #4924232
+
+READY TO APPROVE (1) -- amounts matched:
+  VIN KL79MPSPXTB193651  |  $340.00  |  [External] Invoice #5090842
+
+Type 'yes' to approve all 1 matched invoice(s) above: 
+======================================================================
+RUN STARTED: 2026-07-29 13:50:32
+======================================================================
+
+============================================================
+STEP 3: APPROVE - review and confirm
+============================================================
+Already paid, skipped automatically (9):
+  VIN 4T1DAACK2SU006245  |  [External] Invoice #4907720
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916334
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916354
+  VIN 1GTPHBEK0TZ324966  |  [External] Invoice #4916358
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916351
+  VIN 5NMP24GL3TH190378  |  [External] Invoice #4916362
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916333
+  VIN 4T1DAACKXSU598042  |  [External] Invoice #4916329
+  VIN 1FMDE7BH9TLA47847  |  [External] Invoice #4924232
+
+READY TO APPROVE (3) -- amounts matched:
+  VIN KL79MPSPXTB193651  |  $340.00  |  [External] Invoice #5090842
+  VIN 1GKENKKSXTJ197778  |  $340.00  |  [External] Invoice #5090850
+  VIN 1C4SJSBP0SS534781  |  $340.00  |  [External] Invoice #5090859
+
+Auto-confirm enabled. Proceeding to approve 3 invoice(s).
+Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Approving VIN 1C4SJSBP0SS534781 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 1GKENKKSXTJ197778 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Failed to approve: Locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for get_by_role("button", name="Approve")
+
+
+Approving VIN KL79MPSPXTB193651 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Done. Queue updated.
+
+All done.
+
+======================================================================
+RUN STARTED: 2026-07-29 13:57:23
+======================================================================
+
+============================================================
+STEP 1: EXTRACT - reading Outlook AGN\Invoice folder
+============================================================
+Processed: [External] Invoice #4924244 -> VIN 1HGCY1F23TA025625, $175.00 (categorized: Green Category)
+Processed: [External] Invoice #4924241 -> VIN 1HGCY1F23TA025625, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4924233 -> VIN 5YFB4MDE7SP301836, $306.00 (categorized: Green Category)
+Reached MAX_ITEMS_PER_RUN limit (3). Stopping for this run.
+
+3 invoice(s) added to queue: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 2: CHECK - looking up each queued VIN in FieldPO
+============================================================
+Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN 1HGCY1F23TA025625 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1HGCY1F23TA025625 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 5YFB4MDE7SP301836 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Queue updated: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 3: APPROVE - review and confirm
+============================================================
+Already paid, skipped automatically (12):
+  VIN 4T1DAACK2SU006245  |  [External] Invoice #4907720
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916334
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916354
+  VIN 1GTPHBEK0TZ324966  |  [External] Invoice #4916358
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916351
+  VIN 5NMP24GL3TH190378  |  [External] Invoice #4916362
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916333
+  VIN 4T1DAACKXSU598042  |  [External] Invoice #4916329
+  VIN 1FMDE7BH9TLA47847  |  [External] Invoice #4924232
+  VIN 1HGCY1F23TA025625  |  [External] Invoice #4924244
+  VIN 1HGCY1F23TA025625  |  [External] Invoice #4924241
+  VIN 5YFB4MDE7SP301836  |  [External] Invoice #4924233
+Nothing pending review.
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-29 14:03:38
+======================================================================
+
+============================================================
+STEP 1: EXTRACT - reading Outlook AGN\Invoice folder
+============================================================
+Processed: [External] Receipt for Job #4946751 -> VIN 1C4SJSBP2SS516587, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4946760 -> VIN 4T1DAACK8TU711861, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4946737 -> VIN 1V2HC2CA5TC222111, $431.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4946744 -> VIN 1V2HC2CA5TC222111, $125.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4901821 -> VIN KM8RL5S28TU115691, $1359.49 (categorized: Green Category)
+Processed: [External] Receipt for Job #4949692 -> VIN 1FBAX2YG5TKA46322, $547.15 (categorized: Green Category)
+Processed: [External] Receipt for Job #4949662 -> VIN 1FMUK8HH7SGB81060, $403.40 (categorized: Green Category)
+Processed: [External] Receipt for Job #4949660 -> VIN 1FMUK8HH4SGB81498, $403.40 (categorized: Green Category)
+Processed: [External] Receipt for Job #4949692 -> VIN 1FBAX2YG5TKA46322, $547.15 (categorized: Green Category)
+Processed: [External] Invoice #4930713 -> VIN 5YJ3E1EAXPF436940, $515.92 (categorized: Green Category)
+Reached MAX_ITEMS_PER_RUN limit (10). Stopping for this run.
+
+10 invoice(s) added to queue: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 2: CHECK - looking up each queued VIN in FieldPO
+============================================================
+Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN 1C4SJSBP2SS516587 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 4T1DAACK8TU711861 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1V2HC2CA5TC222111 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1V2HC2CA5TC222111 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN KM8RL5S28TU115691 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1FBAX2YG5TKA46322 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1FMUK8HH7SGB81060 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1FMUK8HH4SGB81498 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1FBAX2YG5TKA46322 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 5YJ3E1EAXPF436940 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Queue updated: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 3: APPROVE - review and confirm
+============================================================
+Already paid, skipped automatically (22):
+  VIN 4T1DAACK2SU006245  |  [External] Invoice #4907720
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916334
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916354
+  VIN 1GTPHBEK0TZ324966  |  [External] Invoice #4916358
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916351
+  VIN 5NMP24GL3TH190378  |  [External] Invoice #4916362
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916333
+  VIN 4T1DAACKXSU598042  |  [External] Invoice #4916329
+  VIN 1FMDE7BH9TLA47847  |  [External] Invoice #4924232
+  VIN 1HGCY1F23TA025625  |  [External] Invoice #4924244
+  VIN 1HGCY1F23TA025625  |  [External] Invoice #4924241
+  VIN 5YFB4MDE7SP301836  |  [External] Invoice #4924233
+  VIN 1C4SJSBP2SS516587  |  [External] Receipt for Job #4946751
+  VIN 4T1DAACK8TU711861  |  [External] Receipt for Job #4946760
+  VIN 1V2HC2CA5TC222111  |  [External] Receipt for Job #4946737
+  VIN 1V2HC2CA5TC222111  |  [External] Receipt for Job #4946744
+  VIN KM8RL5S28TU115691  |  [External] Receipt for Job #4901821
+  VIN 1FBAX2YG5TKA46322  |  [External] Receipt for Job #4949692
+  VIN 1FMUK8HH7SGB81060  |  [External] Receipt for Job #4949662
+  VIN 1FMUK8HH4SGB81498  |  [External] Receipt for Job #4949660
+  VIN 1FBAX2YG5TKA46322  |  [External] Receipt for Job #4949692
+  VIN 5YJ3E1EAXPF436940  |  [External] Invoice #4930713
+Nothing pending review.
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-29 14:55:57
+======================================================================
+
+============================================================
+STEP 1: EXTRACT - reading Outlook AGN\Invoice folder
+============================================================
+Processed: [External] Invoice #4930797 -> VIN 5XYP64GC3SG682406, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4930779 -> VIN 1GNS6DRD7SR345620, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4930758 -> VIN 2T3H1RFV4SW366629, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4930651 -> VIN 4T1DAACK4SU130453, $225.98 (categorized: Green Category)
+Processed: [External] Invoice #4936317 -> VIN 1GNS6DRD9SR219002, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4936313 -> VIN 7MMVABBLXTN466404, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4936308 -> VIN 3GKALMEG5TL276842, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4936301 -> VIN LRBFZSR44TD067553, $469.13 (categorized: Green Category)
+Processed: [External] Invoice #4936310 -> VIN 3GKALMEGXTL400152, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4936298 -> VIN KMHL24JJ1TA157696, $306.00 (categorized: Green Category)
+Reached MAX_ITEMS_PER_RUN limit (10). Stopping for this run.
+
+10 invoice(s) added to queue: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 2: CHECK - looking up each queued VIN in FieldPO
+============================================================
+Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN 5XYP64GC3SG682406 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1GNS6DRD7SR345620 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 2T3H1RFV4SW366629 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 4T1DAACK4SU130453 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1GNS6DRD9SR219002 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 7MMVABBLXTN466404 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 3GKALMEG5TL276842 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Could not complete check for VIN 3GKALMEG5TL276842: Page.wait_for_timeout: Target page, context or browser has been closed
+
+Checking VIN LRBFZSR44TD067553 ...
+  Could not complete check for VIN LRBFZSR44TD067553: Page.goto: Target page, context or browser has been closed
+
+Checking VIN 3GKALMEGXTL400152 ...
+  Could not complete check for VIN 3GKALMEGXTL400152: Page.goto: Target page, context or browser has been closed
+
+Checking VIN KMHL24JJ1TA157696 ...
+  Could not complete check for VIN KMHL24JJ1TA157696: Page.goto: Target page, context or browser has been closed
+
+Queue updated: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 3: APPROVE - review and confirm
+============================================================
+Already paid, skipped automatically (28):
+  VIN 4T1DAACK2SU006245  |  [External] Invoice #4907720
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916334
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916354
+  VIN 1GTPHBEK0TZ324966  |  [External] Invoice #4916358
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916351
+  VIN 5NMP24GL3TH190378  |  [External] Invoice #4916362
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916333
+  VIN 4T1DAACKXSU598042  |  [External] Invoice #4916329
+  VIN 1FMDE7BH9TLA47847  |  [External] Invoice #4924232
+  VIN 1HGCY1F23TA025625  |  [External] Invoice #4924244
+  VIN 1HGCY1F23TA025625  |  [External] Invoice #4924241
+  VIN 5YFB4MDE7SP301836  |  [External] Invoice #4924233
+  VIN 1C4SJSBP2SS516587  |  [External] Receipt for Job #4946751
+  VIN 4T1DAACK8TU711861  |  [External] Receipt for Job #4946760
+  VIN 1V2HC2CA5TC222111  |  [External] Receipt for Job #4946737
+  VIN 1V2HC2CA5TC222111  |  [External] Receipt for Job #4946744
+  VIN KM8RL5S28TU115691  |  [External] Receipt for Job #4901821
+  VIN 1FBAX2YG5TKA46322  |  [External] Receipt for Job #4949692
+  VIN 1FMUK8HH7SGB81060  |  [External] Receipt for Job #4949662
+  VIN 1FMUK8HH4SGB81498  |  [External] Receipt for Job #4949660
+  VIN 1FBAX2YG5TKA46322  |  [External] Receipt for Job #4949692
+  VIN 5YJ3E1EAXPF436940  |  [External] Invoice #4930713
+  VIN 5XYP64GC3SG682406  |  [External] Invoice #4930797
+  VIN 1GNS6DRD7SR345620  |  [External] Invoice #4930779
+  VIN 2T3H1RFV4SW366629  |  [External] Invoice #4930758
+  VIN 4T1DAACK4SU130453  |  [External] Invoice #4930651
+  VIN 1GNS6DRD9SR219002  |  [External] Invoice #4936317
+  VIN 7MMVABBLXTN466404  |  [External] Invoice #4936313
+
+READY TO APPROVE (0) -- amounts matched:
+
+COULD NOT BE CHECKED (4):
+  VIN 3GKALMEG5TL276842  |  [External] Invoice #4936308
+  VIN LRBFZSR44TD067553  |  [External] Invoice #4936301
+  VIN 3GKALMEGXTL400152  |  [External] Invoice #4936310
+  VIN KMHL24JJ1TA157696  |  [External] Invoice #4936298
+
+No matched invoices to approve right now.
+
+All done.
+
+Press Enter to close...Traceback (most recent call last):
+  File "C:\Users\steeldir\Code\GlassOrchestrator\outlook\agn_invoices.py", line 699, in <module>
+    input("\nPress Enter to close...")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+
+======================================================================
+RUN STARTED: 2026-07-29 15:03:32
+======================================================================
+
+============================================================
+STEP 1: EXTRACT - reading Outlook AGN\Invoice folder
+============================================================
+Processed: [External] Invoice #4936312 -> VIN 1FMCU0MN7TUA29060, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4936293 -> VIN 2C4RC1BG1TR220160, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4936292 -> VIN KL77LHEP3TC062731, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4941921 -> VIN KL77LHEP0TC162530, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4941923 -> VIN 1V2WN2CA0TC533432, $125.00 (categorized: Green Category)
+Processed: [External] Invoice #4941918 -> VIN 1GKENKKS2TJ203458, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4941922 -> VIN 1V2WN2CA0TC533432, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4941916 -> VIN 5NMP24GL9TH188943, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4946760 -> VIN 4T1DAACK8TU711861, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4946751 -> VIN 1C4SJSBP2SS516587, $306.00 (categorized: Green Category)
+Reached MAX_ITEMS_PER_RUN limit (10). Stopping for this run.
+
+10 invoice(s) added to queue: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 2: CHECK - looking up each queued VIN in FieldPO
+============================================================
+Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN 1FMCU0MN7TUA29060 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 2C4RC1BG1TR220160 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN KL77LHEP3TC062731 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN KL77LHEP0TC162530 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1V2WN2CA0TC533432 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1GKENKKS2TJ203458 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1V2WN2CA0TC533432 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 5NMP24GL9TH188943 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 4T1DAACK8TU711861 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1C4SJSBP2SS516587 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Queue updated: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 3: APPROVE - review and confirm
+============================================================
+Already paid, skipped automatically (38):
+  VIN 4T1DAACK2SU006245  |  [External] Invoice #4907720
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916334
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916354
+  VIN 1GTPHBEK0TZ324966  |  [External] Invoice #4916358
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916351
+  VIN 5NMP24GL3TH190378  |  [External] Invoice #4916362
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916333
+  VIN 4T1DAACKXSU598042  |  [External] Invoice #4916329
+  VIN 1FMDE7BH9TLA47847  |  [External] Invoice #4924232
+  VIN 1HGCY1F23TA025625  |  [External] Invoice #4924244
+  VIN 1HGCY1F23TA025625  |  [External] Invoice #4924241
+  VIN 5YFB4MDE7SP301836  |  [External] Invoice #4924233
+  VIN 1C4SJSBP2SS516587  |  [External] Receipt for Job #4946751
+  VIN 4T1DAACK8TU711861  |  [External] Receipt for Job #4946760
+  VIN 1V2HC2CA5TC222111  |  [External] Receipt for Job #4946737
+  VIN 1V2HC2CA5TC222111  |  [External] Receipt for Job #4946744
+  VIN KM8RL5S28TU115691  |  [External] Receipt for Job #4901821
+  VIN 1FBAX2YG5TKA46322  |  [External] Receipt for Job #4949692
+  VIN 1FMUK8HH7SGB81060  |  [External] Receipt for Job #4949662
+  VIN 1FMUK8HH4SGB81498  |  [External] Receipt for Job #4949660
+  VIN 1FBAX2YG5TKA46322  |  [External] Receipt for Job #4949692
+  VIN 5YJ3E1EAXPF436940  |  [External] Invoice #4930713
+  VIN 5XYP64GC3SG682406  |  [External] Invoice #4930797
+  VIN 1GNS6DRD7SR345620  |  [External] Invoice #4930779
+  VIN 2T3H1RFV4SW366629  |  [External] Invoice #4930758
+  VIN 4T1DAACK4SU130453  |  [External] Invoice #4930651
+  VIN 1GNS6DRD9SR219002  |  [External] Invoice #4936317
+  VIN 7MMVABBLXTN466404  |  [External] Invoice #4936313
+  VIN 1FMCU0MN7TUA29060  |  [External] Invoice #4936312
+  VIN 2C4RC1BG1TR220160  |  [External] Invoice #4936293
+  VIN KL77LHEP3TC062731  |  [External] Invoice #4936292
+  VIN KL77LHEP0TC162530  |  [External] Invoice #4941921
+  VIN 1V2WN2CA0TC533432  |  [External] Invoice #4941923
+  VIN 1GKENKKS2TJ203458  |  [External] Invoice #4941918
+  VIN 1V2WN2CA0TC533432  |  [External] Invoice #4941922
+  VIN 5NMP24GL9TH188943  |  [External] Invoice #4941916
+  VIN 4T1DAACK8TU711861  |  [External] Invoice #4946760
+  VIN 1C4SJSBP2SS516587  |  [External] Invoice #4946751
+
+READY TO APPROVE (0) -- amounts matched:
+
+COULD NOT BE CHECKED (4):
+  VIN 3GKALMEG5TL276842  |  [External] Invoice #4936308
+  VIN LRBFZSR44TD067553  |  [External] Invoice #4936301
+  VIN 3GKALMEGXTL400152  |  [External] Invoice #4936310
+  VIN KMHL24JJ1TA157696  |  [External] Invoice #4936298
+
+Approval gate: Created By must be one of: Steele, Dirk
+
+No matched invoices to approve right now.
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-29 15:07:31
+======================================================================
+
+============================================================
+STEP 1: EXTRACT - reading Outlook AGN\Invoice folder
+============================================================
+Processed: [External] Invoice #4946737 -> VIN 1V2HC2CA5TC222111, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4946744 -> VIN 1V2HC2CA5TC222111, $125.00 (categorized: Green Category)
+Processed: [External] Invoice #4901821 -> VIN KM8RL5S28TU115691, $1359.49 (categorized: Green Category)
+Processed: [External] Receipt for Job #4949657 -> VIN 2C4RC1BG1TR160798, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4949696 -> VIN 5YFB4MDE8TP409724, $184.63 (categorized: Green Category)
+Processed: [External] Receipt for Job #4949681 -> VIN 1G1FX6S04P4150274, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4949678 -> VIN KNDJ23AU0S7964867, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4949675 -> VIN 5XYP6DGC0SG692715, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4948525 -> VIN 7MMVABBL6TN456758, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4957909 -> VIN 1GAZGPFP5S1260142, $316.50 (categorized: Green Category)
+Reached MAX_ITEMS_PER_RUN limit (10). Stopping for this run.
+
+10 invoice(s) added to queue: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 2: CHECK - looking up each queued VIN in FieldPO
+============================================================
+Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN 1V2HC2CA5TC222111 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1V2HC2CA5TC222111 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN KM8RL5S28TU115691 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 2C4RC1BG1TR160798 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 5YFB4MDE8TP409724 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1G1FX6S04P4150274 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN KNDJ23AU0S7964867 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 5XYP6DGC0SG692715 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 7MMVABBL6TN456758 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1GAZGPFP5S1260142 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Queue updated: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 3: APPROVE - review and confirm
+============================================================
+Already paid, skipped automatically (48):
+  VIN 4T1DAACK2SU006245  |  [External] Invoice #4907720
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916334
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916354
+  VIN 1GTPHBEK0TZ324966  |  [External] Invoice #4916358
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916351
+  VIN 5NMP24GL3TH190378  |  [External] Invoice #4916362
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916333
+  VIN 4T1DAACKXSU598042  |  [External] Invoice #4916329
+  VIN 1FMDE7BH9TLA47847  |  [External] Invoice #4924232
+  VIN 1HGCY1F23TA025625  |  [External] Invoice #4924244
+  VIN 1HGCY1F23TA025625  |  [External] Invoice #4924241
+  VIN 5YFB4MDE7SP301836  |  [External] Invoice #4924233
+  VIN 1C4SJSBP2SS516587  |  [External] Receipt for Job #4946751
+  VIN 4T1DAACK8TU711861  |  [External] Receipt for Job #4946760
+  VIN 1V2HC2CA5TC222111  |  [External] Receipt for Job #4946737
+  VIN 1V2HC2CA5TC222111  |  [External] Receipt for Job #4946744
+  VIN KM8RL5S28TU115691  |  [External] Receipt for Job #4901821
+  VIN 1FBAX2YG5TKA46322  |  [External] Receipt for Job #4949692
+  VIN 1FMUK8HH7SGB81060  |  [External] Receipt for Job #4949662
+  VIN 1FMUK8HH4SGB81498  |  [External] Receipt for Job #4949660
+  VIN 1FBAX2YG5TKA46322  |  [External] Receipt for Job #4949692
+  VIN 5YJ3E1EAXPF436940  |  [External] Invoice #4930713
+  VIN 5XYP64GC3SG682406  |  [External] Invoice #4930797
+  VIN 1GNS6DRD7SR345620  |  [External] Invoice #4930779
+  VIN 2T3H1RFV4SW366629  |  [External] Invoice #4930758
+  VIN 4T1DAACK4SU130453  |  [External] Invoice #4930651
+  VIN 1GNS6DRD9SR219002  |  [External] Invoice #4936317
+  VIN 7MMVABBLXTN466404  |  [External] Invoice #4936313
+  VIN 1FMCU0MN7TUA29060  |  [External] Invoice #4936312
+  VIN 2C4RC1BG1TR220160  |  [External] Invoice #4936293
+  VIN KL77LHEP3TC062731  |  [External] Invoice #4936292
+  VIN KL77LHEP0TC162530  |  [External] Invoice #4941921
+  VIN 1V2WN2CA0TC533432  |  [External] Invoice #4941923
+  VIN 1GKENKKS2TJ203458  |  [External] Invoice #4941918
+  VIN 1V2WN2CA0TC533432  |  [External] Invoice #4941922
+  VIN 5NMP24GL9TH188943  |  [External] Invoice #4941916
+  VIN 4T1DAACK8TU711861  |  [External] Invoice #4946760
+  VIN 1C4SJSBP2SS516587  |  [External] Invoice #4946751
+  VIN 1V2HC2CA5TC222111  |  [External] Invoice #4946737
+  VIN 1V2HC2CA5TC222111  |  [External] Invoice #4946744
+  VIN KM8RL5S28TU115691  |  [External] Invoice #4901821
+  VIN 2C4RC1BG1TR160798  |  [External] Receipt for Job #4949657
+  VIN 5YFB4MDE8TP409724  |  [External] Receipt for Job #4949696
+  VIN 1G1FX6S04P4150274  |  [External] Receipt for Job #4949681
+  VIN KNDJ23AU0S7964867  |  [External] Receipt for Job #4949678
+  VIN 5XYP6DGC0SG692715  |  [External] Receipt for Job #4949675
+  VIN 7MMVABBL6TN456758  |  [External] Receipt for Job #4948525
+  VIN 1GAZGPFP5S1260142  |  [External] Receipt for Job #4957909
+
+READY TO APPROVE (0) -- amounts matched:
+
+COULD NOT BE CHECKED (4):
+  VIN 3GKALMEG5TL276842  |  [External] Invoice #4936308
+  VIN LRBFZSR44TD067553  |  [External] Invoice #4936301
+  VIN 3GKALMEGXTL400152  |  [External] Invoice #4936310
+  VIN KMHL24JJ1TA157696  |  [External] Invoice #4936298
+
+Approval gate: Created By must be one of: Steele, Dirk
+
+No matched invoices to approve right now.
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-29 15:11:47
+======================================================================
+
+============================================================
+STEP 1: EXTRACT - reading Outlook AGN\Invoice folder
+============================================================
+Processed: [External] Receipt for Job #4957924 -> VIN 1C4RDHDG7TC214939, $187.97 (categorized: Green Category)
+Processed: [External] Receipt for Job #4957909 -> VIN 1GAZGPFP5S1260142, $316.50 (categorized: Green Category)
+Processed: [External] Receipt for Job #4957873 -> VIN 3GNAXHEG4TL311031, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4957865 -> VIN 2HGFE2F54TH550359, $125.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4957860 -> VIN 1C4RDHDGXTC215079, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4957831 -> VIN 2HGFE2F54TH550359, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4963794 -> VIN 7SVAAABA4TX089022, $197.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4957946 -> VIN 3VW5X7BU6SM070206, $285.61 (categorized: Green Category)
+Processed: [External] Receipt for Job #4957764 -> VIN 3VVHR7RMXTM096018, $816.81 (categorized: Green Category)
+Processed: [External] Receipt for Job #4966062 -> VIN 19XFL2H84TE022277, $125.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4965969 -> VIN 5FPYK3F50TB023227, $175.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4965915 -> VIN 5FPYK3F50TB023227, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4965993 -> VIN 5YFB4MDE5TP394003, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4963798 -> VIN 7MMVAAEW0TN144578, $557.94 (categorized: Green Category)
+Processed: [External] Receipt for Job #4966095 -> VIN YV4L12UC3S2583520, $125.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4968827 -> VIN JA4J4VA83SZ057876, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4968838 -> VIN 1HGCY1F26TA026588, $175.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4966092 -> VIN YV4L12UC3S2583520, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4968818 -> VIN 1HGCY1F26TA026588, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4966133 -> VIN 3C4NJDBNXST546829, $306.00 (categorized: Green Category)
+Reached MAX_ITEMS_PER_RUN limit (20). Stopping for this run.
+
+20 invoice(s) added to queue: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 2: CHECK - looking up each queued VIN in FieldPO
+============================================================
+Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN 1C4RDHDG7TC214939 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1GAZGPFP5S1260142 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 3GNAXHEG4TL311031 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 2HGFE2F54TH550359 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1C4RDHDGXTC215079 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 2HGFE2F54TH550359 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 7SVAAABA4TX089022 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 3VW5X7BU6SM070206 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 3VVHR7RMXTM096018 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 19XFL2H84TE022277 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 5FPYK3F50TB023227 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 5FPYK3F50TB023227 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 5YFB4MDE5TP394003 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 7MMVAAEW0TN144578 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN YV4L12UC3S2583520 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN JA4J4VA83SZ057876 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1HGCY1F26TA026588 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN YV4L12UC3S2583520 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1HGCY1F26TA026588 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 3C4NJDBNXST546829 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Queue updated: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 3: APPROVE - review and confirm
+============================================================
+Already paid, skipped automatically (68):
+  VIN 4T1DAACK2SU006245  |  [External] Invoice #4907720
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916334
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916354
+  VIN 1GTPHBEK0TZ324966  |  [External] Invoice #4916358
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916351
+  VIN 5NMP24GL3TH190378  |  [External] Invoice #4916362
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916333
+  VIN 4T1DAACKXSU598042  |  [External] Invoice #4916329
+  VIN 1FMDE7BH9TLA47847  |  [External] Invoice #4924232
+  VIN 1HGCY1F23TA025625  |  [External] Invoice #4924244
+  VIN 1HGCY1F23TA025625  |  [External] Invoice #4924241
+  VIN 5YFB4MDE7SP301836  |  [External] Invoice #4924233
+  VIN 1C4SJSBP2SS516587  |  [External] Receipt for Job #4946751
+  VIN 4T1DAACK8TU711861  |  [External] Receipt for Job #4946760
+  VIN 1V2HC2CA5TC222111  |  [External] Receipt for Job #4946737
+  VIN 1V2HC2CA5TC222111  |  [External] Receipt for Job #4946744
+  VIN KM8RL5S28TU115691  |  [External] Receipt for Job #4901821
+  VIN 1FBAX2YG5TKA46322  |  [External] Receipt for Job #4949692
+  VIN 1FMUK8HH7SGB81060  |  [External] Receipt for Job #4949662
+  VIN 1FMUK8HH4SGB81498  |  [External] Receipt for Job #4949660
+  VIN 1FBAX2YG5TKA46322  |  [External] Receipt for Job #4949692
+  VIN 5YJ3E1EAXPF436940  |  [External] Invoice #4930713
+  VIN 5XYP64GC3SG682406  |  [External] Invoice #4930797
+  VIN 1GNS6DRD7SR345620  |  [External] Invoice #4930779
+  VIN 2T3H1RFV4SW366629  |  [External] Invoice #4930758
+  VIN 4T1DAACK4SU130453  |  [External] Invoice #4930651
+  VIN 1GNS6DRD9SR219002  |  [External] Invoice #4936317
+  VIN 7MMVABBLXTN466404  |  [External] Invoice #4936313
+  VIN 1FMCU0MN7TUA29060  |  [External] Invoice #4936312
+  VIN 2C4RC1BG1TR220160  |  [External] Invoice #4936293
+  VIN KL77LHEP3TC062731  |  [External] Invoice #4936292
+  VIN KL77LHEP0TC162530  |  [External] Invoice #4941921
+  VIN 1V2WN2CA0TC533432  |  [External] Invoice #4941923
+  VIN 1GKENKKS2TJ203458  |  [External] Invoice #4941918
+  VIN 1V2WN2CA0TC533432  |  [External] Invoice #4941922
+  VIN 5NMP24GL9TH188943  |  [External] Invoice #4941916
+  VIN 4T1DAACK8TU711861  |  [External] Invoice #4946760
+  VIN 1C4SJSBP2SS516587  |  [External] Invoice #4946751
+  VIN 1V2HC2CA5TC222111  |  [External] Invoice #4946737
+  VIN 1V2HC2CA5TC222111  |  [External] Invoice #4946744
+  VIN KM8RL5S28TU115691  |  [External] Invoice #4901821
+  VIN 2C4RC1BG1TR160798  |  [External] Receipt for Job #4949657
+  VIN 5YFB4MDE8TP409724  |  [External] Receipt for Job #4949696
+  VIN 1G1FX6S04P4150274  |  [External] Receipt for Job #4949681
+  VIN KNDJ23AU0S7964867  |  [External] Receipt for Job #4949678
+  VIN 5XYP6DGC0SG692715  |  [External] Receipt for Job #4949675
+  VIN 7MMVABBL6TN456758  |  [External] Receipt for Job #4948525
+  VIN 1GAZGPFP5S1260142  |  [External] Receipt for Job #4957909
+  VIN 1C4RDHDG7TC214939  |  [External] Receipt for Job #4957924
+  VIN 1GAZGPFP5S1260142  |  [External] Receipt for Job #4957909
+  VIN 3GNAXHEG4TL311031  |  [External] Receipt for Job #4957873
+  VIN 2HGFE2F54TH550359  |  [External] Receipt for Job #4957865
+  VIN 1C4RDHDGXTC215079  |  [External] Receipt for Job #4957860
+  VIN 2HGFE2F54TH550359  |  [External] Receipt for Job #4957831
+  VIN 7SVAAABA4TX089022  |  [External] Receipt for Job #4963794
+  VIN 3VW5X7BU6SM070206  |  [External] Receipt for Job #4957946
+  VIN 3VVHR7RMXTM096018  |  [External] Receipt for Job #4957764
+  VIN 19XFL2H84TE022277  |  [External] Receipt for Job #4966062
+  VIN 5FPYK3F50TB023227  |  [External] Receipt for Job #4965969
+  VIN 5FPYK3F50TB023227  |  [External] Receipt for Job #4965915
+  VIN 5YFB4MDE5TP394003  |  [External] Receipt for Job #4965993
+  VIN 7MMVAAEW0TN144578  |  [External] Receipt for Job #4963798
+  VIN YV4L12UC3S2583520  |  [External] Receipt for Job #4966095
+  VIN JA4J4VA83SZ057876  |  [External] Receipt for Job #4968827
+  VIN 1HGCY1F26TA026588  |  [External] Receipt for Job #4968838
+  VIN YV4L12UC3S2583520  |  [External] Receipt for Job #4966092
+  VIN 1HGCY1F26TA026588  |  [External] Receipt for Job #4968818
+  VIN 3C4NJDBNXST546829  |  [External] Receipt for Job #4966133
+
+READY TO APPROVE (0) -- amounts matched:
+
+COULD NOT BE CHECKED (4):
+  VIN 3GKALMEG5TL276842  |  [External] Invoice #4936308
+  VIN LRBFZSR44TD067553  |  [External] Invoice #4936301
+  VIN 3GKALMEGXTL400152  |  [External] Invoice #4936310
+  VIN KMHL24JJ1TA157696  |  [External] Invoice #4936298
+
+Approval gate: Created By must be one of: Steele, Dirk
+
+No matched invoices to approve right now.
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-29 15:19:10
+======================================================================
+
+============================================================
+STEP 1: EXTRACT - reading Outlook AGN\Invoice folder
+============================================================
+Processed: [External] Receipt for Job #4966155 -> VIN 5NMJB3DE5TH663137, $421.30 (categorized: Green Category)
+Processed: [External] Receipt for Job #4966056 -> VIN 19XFL2H84TE022277, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4963741 -> VIN KNDNB5KA2T6127711, $387.15 (categorized: Green Category)
+Processed: [External] Invoice #4949692 -> VIN 1FBAX2YG5TKA46322, $547.15 (categorized: Green Category)
+Processed: [External] Invoice #4949662 -> VIN 1FMUK8HH7SGB81060, $403.40 (categorized: Green Category)
+Processed: [External] Invoice #4949660 -> VIN 1FMUK8HH4SGB81498, $403.40 (categorized: Green Category)
+Processed: [External] Invoice #4949681 -> VIN 1G1FX6S04P4150274, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4949657 -> VIN 2C4RC1BG1TR160798, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4949696 -> VIN 5YFB4MDE8TP409724, $184.63 (categorized: Green Category)
+Processed: [External] Invoice #4948525 -> VIN 7MMVABBL6TN456758, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4949678 -> VIN KNDJ23AU0S7964867, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4949675 -> VIN 5XYP6DGC0SG692715, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4957873 -> VIN 3GNAXHEG4TL311031, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4957924 -> VIN 1C4RDHDG7TC214939, $187.97 (categorized: Green Category)
+Processed: [External] Invoice #4957909 -> VIN 1GAZGPFP5S1260142, $316.50 (categorized: Green Category)
+Processed: [External] Invoice #4957860 -> VIN 1C4RDHDGXTC215079, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4957865 -> VIN 2HGFE2F54TH550359, $125.00 (categorized: Green Category)
+Processed: [External] Invoice #4957831 -> VIN 2HGFE2F54TH550359, $306.00 (categorized: Green Category)
+Processed: [External] Invoice #4963794 -> VIN 7SVAAABA4TX089022, $197.00 (categorized: Green Category)
+Processed: [External] Invoice #4957764 -> VIN 3VVHR7RMXTM096018, $816.81 (categorized: Green Category)
+Reached MAX_ITEMS_PER_RUN limit (20). Stopping for this run.
+
+20 invoice(s) added to queue: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 2: CHECK - looking up each queued VIN in FieldPO
+============================================================
+Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN 5NMJB3DE5TH663137 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 19XFL2H84TE022277 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN KNDNB5KA2T6127711 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1FBAX2YG5TKA46322 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1FMUK8HH7SGB81060 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1FMUK8HH4SGB81498 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1G1FX6S04P4150274 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 2C4RC1BG1TR160798 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 5YFB4MDE8TP409724 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 7MMVABBL6TN456758 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN KNDJ23AU0S7964867 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 5XYP6DGC0SG692715 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 3GNAXHEG4TL311031 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1C4RDHDG7TC214939 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1GAZGPFP5S1260142 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1C4RDHDGXTC215079 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 2HGFE2F54TH550359 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 2HGFE2F54TH550359 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 7SVAAABA4TX089022 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 3VVHR7RMXTM096018 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Queue updated: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 3: APPROVE - review and confirm
+============================================================
+Already paid, skipped automatically (88):
+  VIN 4T1DAACK2SU006245  |  [External] Invoice #4907720
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916334
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916354
+  VIN 1GTPHBEK0TZ324966  |  [External] Invoice #4916358
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916351
+  VIN 5NMP24GL3TH190378  |  [External] Invoice #4916362
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916333
+  VIN 4T1DAACKXSU598042  |  [External] Invoice #4916329
+  VIN 1FMDE7BH9TLA47847  |  [External] Invoice #4924232
+  VIN 1HGCY1F23TA025625  |  [External] Invoice #4924244
+  VIN 1HGCY1F23TA025625  |  [External] Invoice #4924241
+  VIN 5YFB4MDE7SP301836  |  [External] Invoice #4924233
+  VIN 1C4SJSBP2SS516587  |  [External] Receipt for Job #4946751
+  VIN 4T1DAACK8TU711861  |  [External] Receipt for Job #4946760
+  VIN 1V2HC2CA5TC222111  |  [External] Receipt for Job #4946737
+  VIN 1V2HC2CA5TC222111  |  [External] Receipt for Job #4946744
+  VIN KM8RL5S28TU115691  |  [External] Receipt for Job #4901821
+  VIN 1FBAX2YG5TKA46322  |  [External] Receipt for Job #4949692
+  VIN 1FMUK8HH7SGB81060  |  [External] Receipt for Job #4949662
+  VIN 1FMUK8HH4SGB81498  |  [External] Receipt for Job #4949660
+  VIN 1FBAX2YG5TKA46322  |  [External] Receipt for Job #4949692
+  VIN 5YJ3E1EAXPF436940  |  [External] Invoice #4930713
+  VIN 5XYP64GC3SG682406  |  [External] Invoice #4930797
+  VIN 1GNS6DRD7SR345620  |  [External] Invoice #4930779
+  VIN 2T3H1RFV4SW366629  |  [External] Invoice #4930758
+  VIN 4T1DAACK4SU130453  |  [External] Invoice #4930651
+  VIN 1GNS6DRD9SR219002  |  [External] Invoice #4936317
+  VIN 7MMVABBLXTN466404  |  [External] Invoice #4936313
+  VIN 1FMCU0MN7TUA29060  |  [External] Invoice #4936312
+  VIN 2C4RC1BG1TR220160  |  [External] Invoice #4936293
+  VIN KL77LHEP3TC062731  |  [External] Invoice #4936292
+  VIN KL77LHEP0TC162530  |  [External] Invoice #4941921
+  VIN 1V2WN2CA0TC533432  |  [External] Invoice #4941923
+  VIN 1GKENKKS2TJ203458  |  [External] Invoice #4941918
+  VIN 1V2WN2CA0TC533432  |  [External] Invoice #4941922
+  VIN 5NMP24GL9TH188943  |  [External] Invoice #4941916
+  VIN 4T1DAACK8TU711861  |  [External] Invoice #4946760
+  VIN 1C4SJSBP2SS516587  |  [External] Invoice #4946751
+  VIN 1V2HC2CA5TC222111  |  [External] Invoice #4946737
+  VIN 1V2HC2CA5TC222111  |  [External] Invoice #4946744
+  VIN KM8RL5S28TU115691  |  [External] Invoice #4901821
+  VIN 2C4RC1BG1TR160798  |  [External] Receipt for Job #4949657
+  VIN 5YFB4MDE8TP409724  |  [External] Receipt for Job #4949696
+  VIN 1G1FX6S04P4150274  |  [External] Receipt for Job #4949681
+  VIN KNDJ23AU0S7964867  |  [External] Receipt for Job #4949678
+  VIN 5XYP6DGC0SG692715  |  [External] Receipt for Job #4949675
+  VIN 7MMVABBL6TN456758  |  [External] Receipt for Job #4948525
+  VIN 1GAZGPFP5S1260142  |  [External] Receipt for Job #4957909
+  VIN 1C4RDHDG7TC214939  |  [External] Receipt for Job #4957924
+  VIN 1GAZGPFP5S1260142  |  [External] Receipt for Job #4957909
+  VIN 3GNAXHEG4TL311031  |  [External] Receipt for Job #4957873
+  VIN 2HGFE2F54TH550359  |  [External] Receipt for Job #4957865
+  VIN 1C4RDHDGXTC215079  |  [External] Receipt for Job #4957860
+  VIN 2HGFE2F54TH550359  |  [External] Receipt for Job #4957831
+  VIN 7SVAAABA4TX089022  |  [External] Receipt for Job #4963794
+  VIN 3VW5X7BU6SM070206  |  [External] Receipt for Job #4957946
+  VIN 3VVHR7RMXTM096018  |  [External] Receipt for Job #4957764
+  VIN 19XFL2H84TE022277  |  [External] Receipt for Job #4966062
+  VIN 5FPYK3F50TB023227  |  [External] Receipt for Job #4965969
+  VIN 5FPYK3F50TB023227  |  [External] Receipt for Job #4965915
+  VIN 5YFB4MDE5TP394003  |  [External] Receipt for Job #4965993
+  VIN 7MMVAAEW0TN144578  |  [External] Receipt for Job #4963798
+  VIN YV4L12UC3S2583520  |  [External] Receipt for Job #4966095
+  VIN JA4J4VA83SZ057876  |  [External] Receipt for Job #4968827
+  VIN 1HGCY1F26TA026588  |  [External] Receipt for Job #4968838
+  VIN YV4L12UC3S2583520  |  [External] Receipt for Job #4966092
+  VIN 1HGCY1F26TA026588  |  [External] Receipt for Job #4968818
+  VIN 3C4NJDBNXST546829  |  [External] Receipt for Job #4966133
+  VIN 5NMJB3DE5TH663137  |  [External] Receipt for Job #4966155
+  VIN 19XFL2H84TE022277  |  [External] Receipt for Job #4966056
+  VIN KNDNB5KA2T6127711  |  [External] Receipt for Job #4963741
+  VIN 1FBAX2YG5TKA46322  |  [External] Invoice #4949692
+  VIN 1FMUK8HH7SGB81060  |  [External] Invoice #4949662
+  VIN 1FMUK8HH4SGB81498  |  [External] Invoice #4949660
+  VIN 1G1FX6S04P4150274  |  [External] Invoice #4949681
+  VIN 2C4RC1BG1TR160798  |  [External] Invoice #4949657
+  VIN 5YFB4MDE8TP409724  |  [External] Invoice #4949696
+  VIN 7MMVABBL6TN456758  |  [External] Invoice #4948525
+  VIN KNDJ23AU0S7964867  |  [External] Invoice #4949678
+  VIN 5XYP6DGC0SG692715  |  [External] Invoice #4949675
+  VIN 3GNAXHEG4TL311031  |  [External] Invoice #4957873
+  VIN 1C4RDHDG7TC214939  |  [External] Invoice #4957924
+  VIN 1GAZGPFP5S1260142  |  [External] Invoice #4957909
+  VIN 1C4RDHDGXTC215079  |  [External] Invoice #4957860
+  VIN 2HGFE2F54TH550359  |  [External] Invoice #4957865
+  VIN 2HGFE2F54TH550359  |  [External] Invoice #4957831
+  VIN 7SVAAABA4TX089022  |  [External] Invoice #4963794
+  VIN 3VVHR7RMXTM096018  |  [External] Invoice #4957764
+
+READY TO APPROVE (0) -- amounts matched:
+
+COULD NOT BE CHECKED (4):
+  VIN 3GKALMEG5TL276842  |  [External] Invoice #4936308
+  VIN LRBFZSR44TD067553  |  [External] Invoice #4936301
+  VIN 3GKALMEGXTL400152  |  [External] Invoice #4936310
+  VIN KMHL24JJ1TA157696  |  [External] Invoice #4936298
+
+Approval gate: Created By must be one of: Steele, Dirk
+
+No matched invoices to approve right now.
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-29 15:38:31
+======================================================================
+
+============================================================
+STEP 1: EXTRACT - reading Outlook AGN\Invoice folder
+============================================================
+Skipping duplicate queue key for '[External] Invoice #4966095' -> VIN YV4L12UC3S2583520, $125.00
+Skipping duplicate queue key for '[External] Invoice #4965969' -> VIN 5FPYK3F50TB023227, $175.00
+Skipping duplicate queue key for '[External] Invoice #4966092' -> VIN YV4L12UC3S2583520, $306.00
+Skipping duplicate queue key for '[External] Invoice #4966155' -> VIN 5NMJB3DE5TH663137, $421.30
+Skipping duplicate queue key for '[External] Invoice #4966133' -> VIN 3C4NJDBNXST546829, $306.00
+Skipping duplicate queue key for '[External] Invoice #4965993' -> VIN 5YFB4MDE5TP394003, $306.00
+Skipping duplicate queue key for '[External] Invoice #4965915' -> VIN 5FPYK3F50TB023227, $306.00
+Skipping duplicate queue key for '[External] Invoice #4966062' -> VIN 19XFL2H84TE022277, $125.00
+Skipping duplicate queue key for '[External] Invoice #4966056' -> VIN 19XFL2H84TE022277, $306.00
+Skipping duplicate queue key for '[External] Invoice #4968827' -> VIN JA4J4VA83SZ057876, $306.00
+Skipping duplicate queue key for '[External] Invoice #4968838' -> VIN 1HGCY1F26TA026588, $175.00
+Skipping duplicate queue key for '[External] Invoice #4963798' -> VIN 7MMVAAEW0TN144578, $557.94
+Skipping duplicate queue key for '[External] Invoice #4968818' -> VIN 1HGCY1F26TA026588, $306.00
+Skipping duplicate queue key for '[External] Invoice #4963741' -> VIN KNDNB5KA2T6127711, $387.15
+Processed: [External] Receipt for Job #4973870 -> VIN 1GKS2DRL2SR268400, $511.71 (categorized: Green Category)
+Processed: [External] Receipt for Job #4973868 -> VIN KNDNB5K37S6535329, $387.15 (categorized: Green Category)
+Processed: [External] Receipt for Job #4973877 -> VIN 3CZRZ2H3XSM785547, $175.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4973876 -> VIN 3CZRZ2H3XSM785547, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4982714 -> VIN 5XYP64GC0SG619618, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4982035 -> VIN JN8BT3DD9TW476641, $125.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4982620 -> VIN 3GNAXHEG2TL288963, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4982533 -> VIN 19XFL2H85TE012812, $190.22 (categorized: Green Category)
+Processed: [External] Receipt for Job #4981899 -> VIN 7MMVABBL8TN465364, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4981827 -> VIN 3GNAXHEG5TL368953, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4981942 -> VIN 5NMP3DG14SH046803, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4982487 -> VIN 5TDAAAB55SS087829, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4973873 -> VIN KL79MRSL8TB138382, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4982642 -> VIN 3GNAXHEG2TL289563, $190.25 (categorized: Green Category)
+Processed: [External] Receipt for Job #4982029 -> VIN JN8BT3DD9TW476641, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4981995 -> VIN 7MUCAAAG1TV156843, $431.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4981981 -> VIN 3C4NJDDN0ST622216, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4981848 -> VIN 3GKALMEG8TL426006, $330.13 (categorized: Green Category)
+Processed: [External] Receipt for Job #4988941 -> VIN 3GNKBCR45SS249634, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4988938 -> VIN 1GNERGKS9TJ225865, $306.00 (categorized: Green Category)
+Reached MAX_ITEMS_PER_RUN limit (20). Stopping for this run.
+
+20 invoice(s) added to queue: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 2: CHECK - looking up each queued VIN in FieldPO
+============================================================
+Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN 1GKS2DRL2SR268400 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN KNDNB5K37S6535329 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 3CZRZ2H3XSM785547 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 3CZRZ2H3XSM785547 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 5XYP64GC0SG619618 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN JN8BT3DD9TW476641 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 3GNAXHEG2TL288963 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 19XFL2H85TE012812 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 7MMVABBL8TN465364 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 3GNAXHEG5TL368953 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Could not complete check for VIN 3GNAXHEG5TL368953: Locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("text=MVA#").first
+
+
+Checking VIN 5NMP3DG14SH046803 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 5TDAAAB55SS087829 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN KL79MRSL8TB138382 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 3GNAXHEG2TL289563 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN JN8BT3DD9TW476641 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 7MUCAAAG1TV156843 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 3C4NJDDN0ST622216 ...
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 3GKALMEG8TL426006 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 3GNKBCR45SS249634 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1GNERGKS9TJ225865 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Queue updated: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 3: APPROVE - review and confirm
+============================================================
+Already paid, skipped automatically (107):
+  VIN 4T1DAACK2SU006245  |  [External] Invoice #4907720
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916334
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916354
+  VIN 1GTPHBEK0TZ324966  |  [External] Invoice #4916358
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916351
+  VIN 5NMP24GL3TH190378  |  [External] Invoice #4916362
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916333
+  VIN 4T1DAACKXSU598042  |  [External] Invoice #4916329
+  VIN 1FMDE7BH9TLA47847  |  [External] Invoice #4924232
+  VIN 1HGCY1F23TA025625  |  [External] Invoice #4924244
+  VIN 1HGCY1F23TA025625  |  [External] Invoice #4924241
+  VIN 5YFB4MDE7SP301836  |  [External] Invoice #4924233
+  VIN 1C4SJSBP2SS516587  |  [External] Receipt for Job #4946751
+  VIN 4T1DAACK8TU711861  |  [External] Receipt for Job #4946760
+  VIN 1V2HC2CA5TC222111  |  [External] Receipt for Job #4946737
+  VIN 1V2HC2CA5TC222111  |  [External] Receipt for Job #4946744
+  VIN KM8RL5S28TU115691  |  [External] Receipt for Job #4901821
+  VIN 1FBAX2YG5TKA46322  |  [External] Receipt for Job #4949692
+  VIN 1FMUK8HH7SGB81060  |  [External] Receipt for Job #4949662
+  VIN 1FMUK8HH4SGB81498  |  [External] Receipt for Job #4949660
+  VIN 1FBAX2YG5TKA46322  |  [External] Receipt for Job #4949692
+  VIN 5YJ3E1EAXPF436940  |  [External] Invoice #4930713
+  VIN 5XYP64GC3SG682406  |  [External] Invoice #4930797
+  VIN 1GNS6DRD7SR345620  |  [External] Invoice #4930779
+  VIN 2T3H1RFV4SW366629  |  [External] Invoice #4930758
+  VIN 4T1DAACK4SU130453  |  [External] Invoice #4930651
+  VIN 1GNS6DRD9SR219002  |  [External] Invoice #4936317
+  VIN 7MMVABBLXTN466404  |  [External] Invoice #4936313
+  VIN 1FMCU0MN7TUA29060  |  [External] Invoice #4936312
+  VIN 2C4RC1BG1TR220160  |  [External] Invoice #4936293
+  VIN KL77LHEP3TC062731  |  [External] Invoice #4936292
+  VIN KL77LHEP0TC162530  |  [External] Invoice #4941921
+  VIN 1V2WN2CA0TC533432  |  [External] Invoice #4941923
+  VIN 1GKENKKS2TJ203458  |  [External] Invoice #4941918
+  VIN 1V2WN2CA0TC533432  |  [External] Invoice #4941922
+  VIN 5NMP24GL9TH188943  |  [External] Invoice #4941916
+  VIN 4T1DAACK8TU711861  |  [External] Invoice #4946760
+  VIN 1C4SJSBP2SS516587  |  [External] Invoice #4946751
+  VIN 1V2HC2CA5TC222111  |  [External] Invoice #4946737
+  VIN 1V2HC2CA5TC222111  |  [External] Invoice #4946744
+  VIN KM8RL5S28TU115691  |  [External] Invoice #4901821
+  VIN 2C4RC1BG1TR160798  |  [External] Receipt for Job #4949657
+  VIN 5YFB4MDE8TP409724  |  [External] Receipt for Job #4949696
+  VIN 1G1FX6S04P4150274  |  [External] Receipt for Job #4949681
+  VIN KNDJ23AU0S7964867  |  [External] Receipt for Job #4949678
+  VIN 5XYP6DGC0SG692715  |  [External] Receipt for Job #4949675
+  VIN 7MMVABBL6TN456758  |  [External] Receipt for Job #4948525
+  VIN 1GAZGPFP5S1260142  |  [External] Receipt for Job #4957909
+  VIN 1C4RDHDG7TC214939  |  [External] Receipt for Job #4957924
+  VIN 1GAZGPFP5S1260142  |  [External] Receipt for Job #4957909
+  VIN 3GNAXHEG4TL311031  |  [External] Receipt for Job #4957873
+  VIN 2HGFE2F54TH550359  |  [External] Receipt for Job #4957865
+  VIN 1C4RDHDGXTC215079  |  [External] Receipt for Job #4957860
+  VIN 2HGFE2F54TH550359  |  [External] Receipt for Job #4957831
+  VIN 7SVAAABA4TX089022  |  [External] Receipt for Job #4963794
+  VIN 3VW5X7BU6SM070206  |  [External] Receipt for Job #4957946
+  VIN 3VVHR7RMXTM096018  |  [External] Receipt for Job #4957764
+  VIN 19XFL2H84TE022277  |  [External] Receipt for Job #4966062
+  VIN 5FPYK3F50TB023227  |  [External] Receipt for Job #4965969
+  VIN 5FPYK3F50TB023227  |  [External] Receipt for Job #4965915
+  VIN 5YFB4MDE5TP394003  |  [External] Receipt for Job #4965993
+  VIN 7MMVAAEW0TN144578  |  [External] Receipt for Job #4963798
+  VIN YV4L12UC3S2583520  |  [External] Receipt for Job #4966095
+  VIN JA4J4VA83SZ057876  |  [External] Receipt for Job #4968827
+  VIN 1HGCY1F26TA026588  |  [External] Receipt for Job #4968838
+  VIN YV4L12UC3S2583520  |  [External] Receipt for Job #4966092
+  VIN 1HGCY1F26TA026588  |  [External] Receipt for Job #4968818
+  VIN 3C4NJDBNXST546829  |  [External] Receipt for Job #4966133
+  VIN 5NMJB3DE5TH663137  |  [External] Receipt for Job #4966155
+  VIN 19XFL2H84TE022277  |  [External] Receipt for Job #4966056
+  VIN KNDNB5KA2T6127711  |  [External] Receipt for Job #4963741
+  VIN 1FBAX2YG5TKA46322  |  [External] Invoice #4949692
+  VIN 1FMUK8HH7SGB81060  |  [External] Invoice #4949662
+  VIN 1FMUK8HH4SGB81498  |  [External] Invoice #4949660
+  VIN 1G1FX6S04P4150274  |  [External] Invoice #4949681
+  VIN 2C4RC1BG1TR160798  |  [External] Invoice #4949657
+  VIN 5YFB4MDE8TP409724  |  [External] Invoice #4949696
+  VIN 7MMVABBL6TN456758  |  [External] Invoice #4948525
+  VIN KNDJ23AU0S7964867  |  [External] Invoice #4949678
+  VIN 5XYP6DGC0SG692715  |  [External] Invoice #4949675
+  VIN 3GNAXHEG4TL311031  |  [External] Invoice #4957873
+  VIN 1C4RDHDG7TC214939  |  [External] Invoice #4957924
+  VIN 1GAZGPFP5S1260142  |  [External] Invoice #4957909
+  VIN 1C4RDHDGXTC215079  |  [External] Invoice #4957860
+  VIN 2HGFE2F54TH550359  |  [External] Invoice #4957865
+  VIN 2HGFE2F54TH550359  |  [External] Invoice #4957831
+  VIN 7SVAAABA4TX089022  |  [External] Invoice #4963794
+  VIN 3VVHR7RMXTM096018  |  [External] Invoice #4957764
+  VIN 1GKS2DRL2SR268400  |  [External] Receipt for Job #4973870
+  VIN KNDNB5K37S6535329  |  [External] Receipt for Job #4973868
+  VIN 3CZRZ2H3XSM785547  |  [External] Receipt for Job #4973877
+  VIN 3CZRZ2H3XSM785547  |  [External] Receipt for Job #4973876
+  VIN 5XYP64GC0SG619618  |  [External] Receipt for Job #4982714
+  VIN JN8BT3DD9TW476641  |  [External] Receipt for Job #4982035
+  VIN 3GNAXHEG2TL288963  |  [External] Receipt for Job #4982620
+  VIN 19XFL2H85TE012812  |  [External] Receipt for Job #4982533
+  VIN 7MMVABBL8TN465364  |  [External] Receipt for Job #4981899
+  VIN 5NMP3DG14SH046803  |  [External] Receipt for Job #4981942
+  VIN 5TDAAAB55SS087829  |  [External] Receipt for Job #4982487
+  VIN KL79MRSL8TB138382  |  [External] Receipt for Job #4973873
+  VIN 3GNAXHEG2TL289563  |  [External] Receipt for Job #4982642
+  VIN JN8BT3DD9TW476641  |  [External] Receipt for Job #4982029
+  VIN 7MUCAAAG1TV156843  |  [External] Receipt for Job #4981995
+  VIN 3C4NJDDN0ST622216  |  [External] Receipt for Job #4981981
+  VIN 3GKALMEG8TL426006  |  [External] Receipt for Job #4981848
+  VIN 3GNKBCR45SS249634  |  [External] Receipt for Job #4988941
+  VIN 1GNERGKS9TJ225865  |  [External] Receipt for Job #4988938
+
+READY TO APPROVE (0) -- amounts matched:
+
+COULD NOT BE CHECKED (5):
+  VIN 3GKALMEG5TL276842  |  [External] Invoice #4936308
+  VIN LRBFZSR44TD067553  |  [External] Invoice #4936301
+  VIN 3GKALMEGXTL400152  |  [External] Invoice #4936310
+  VIN KMHL24JJ1TA157696  |  [External] Invoice #4936298
+  VIN 3GNAXHEG5TL368953  |  [External] Receipt for Job #4981827
+
+Approval gate: Created By must be one of: Steele, Dirk
+
+No matched invoices to approve right now.
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-29 15:53:13
+======================================================================
+
+============================================================
+STEP 1: EXTRACT - reading Outlook AGN\Invoice folder
+============================================================
+Processed: [External] Receipt for Job #4982117 -> VIN 1V2BR2CA5SC574964, $438.01 (categorized: Green Category)
+Processed: [External] Receipt for Job #4988934 -> VIN 3GNKBCR40SS189813, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4988923 -> VIN 7MMVABDL4TN453838, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4988936 -> VIN 4T1DAACK7SU051052, $306.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #4988921 -> VIN 2C3CDZBT5LH128753, $184.65 (categorized: Green Category)
+Processed: [External] Invoice #5009625 -> VIN KL79MRSL6TB140874, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5009559 -> VIN 4S4WMABD2T3412746, $200.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5022994 -> VIN 4T1DAACK6SU599933, $340.00 (categorized: Green Category)
+Skipping duplicate queue key for '[External] Invoice #5022994' -> VIN 4T1DAACK6SU599933, $340.00
+Processed: [External] Receipt for Job #5021141 -> VIN 1GJZ7PFP7S1171558, $340.00 (categorized: Green Category)
+Skipping duplicate queue key for '[External] Invoice #5021141' -> VIN 1GJZ7PFP7S1171558, $340.00
+Processed: [External] Receipt for Job #5035396 -> VIN 3GNAXHEG1TL311598, $340.00 (categorized: Green Category)
+Skipping duplicate queue key for '[External] Invoice #5035396' -> VIN 3GNAXHEG1TL311598, $340.00
+Processed: [External] Invoice #5035400 -> VIN 5NMP24GL1TH180321, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5044224 -> VIN 5YFB4MDE9SP275160, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5044271 -> VIN 1C4SJSBPXSS511475, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5044303 -> VIN 4T1DAACK5TU259688, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5042638 -> VIN 7MMVABBM1SN346532, $340.00 (categorized: Green Category)
+Skipping duplicate queue key for '[External] Invoice #5042638' -> VIN 7MMVABBM1SN346532, $340.00
+Processed: [External] Invoice #5043687 -> VIN 3GNAXHEGXTL347189, $340.00 (categorized: Green Category)
+Skipping duplicate queue key for '[External] Invoice #5044224' -> VIN 5YFB4MDE9SP275160, $340.00
+Skipping duplicate queue key for '[External] Invoice #5044303' -> VIN 4T1DAACK5TU259688, $340.00
+Skipping duplicate queue key for '[External] Invoice #5044271' -> VIN 1C4SJSBPXSS511475, $340.00
+Processed: [External] Invoice #5044327 -> VIN 7MMVABDL2TN460044, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5045416 -> VIN LRBFZPR47TD083730, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5047688 -> VIN 1V2HC2CAXTC219110, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5047518 -> VIN 5YFB4MDE8SP253814, $340.00 (categorized: Green Category)
+Reached MAX_ITEMS_PER_RUN limit (20). Stopping for this run.
+
+20 invoice(s) added to queue: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 2: CHECK - looking up each queued VIN in FieldPO
+============================================================
+Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN 1V2BR2CA5SC574964 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 3GNKBCR40SS189813 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 7MMVABDL4TN453838 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 4T1DAACK7SU051052 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 2C3CDZBT5LH128753 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN KL79MRSL6TB140874 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 4S4WMABD2T3412746 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $200.00  |  Auth: $0.00  |  Match: False
+
+Checking VIN 4T1DAACK6SU599933 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Could not complete check for VIN 4T1DAACK6SU599933: Locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("text=MVA#").first
+
+
+Checking VIN 1GJZ7PFP7S1171558 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 3GNAXHEG1TL311598 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 5NMP24GL1TH180321 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 5YFB4MDE9SP275160 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 1C4SJSBPXSS511475 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 4T1DAACK5TU259688 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 7MMVABBM1SN346532 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 3GNAXHEGXTL347189 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 7MMVABDL2TN460044 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN LRBFZPR47TD083730 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 1V2HC2CAXTC219110 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 5YFB4MDE8SP253814 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Queue updated: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 3: APPROVE - review and confirm
+============================================================
+Already paid, skipped automatically (121):
+  VIN 4T1DAACK2SU006245  |  [External] Invoice #4907720
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916334
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916354
+  VIN 1GTPHBEK0TZ324966  |  [External] Invoice #4916358
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916351
+  VIN 5NMP24GL3TH190378  |  [External] Invoice #4916362
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916333
+  VIN 4T1DAACKXSU598042  |  [External] Invoice #4916329
+  VIN 1FMDE7BH9TLA47847  |  [External] Invoice #4924232
+  VIN 1HGCY1F23TA025625  |  [External] Invoice #4924244
+  VIN 1HGCY1F23TA025625  |  [External] Invoice #4924241
+  VIN 5YFB4MDE7SP301836  |  [External] Invoice #4924233
+  VIN 1C4SJSBP2SS516587  |  [External] Receipt for Job #4946751
+  VIN 4T1DAACK8TU711861  |  [External] Receipt for Job #4946760
+  VIN 1V2HC2CA5TC222111  |  [External] Receipt for Job #4946737
+  VIN 1V2HC2CA5TC222111  |  [External] Receipt for Job #4946744
+  VIN KM8RL5S28TU115691  |  [External] Receipt for Job #4901821
+  VIN 1FBAX2YG5TKA46322  |  [External] Receipt for Job #4949692
+  VIN 1FMUK8HH7SGB81060  |  [External] Receipt for Job #4949662
+  VIN 1FMUK8HH4SGB81498  |  [External] Receipt for Job #4949660
+  VIN 1FBAX2YG5TKA46322  |  [External] Receipt for Job #4949692
+  VIN 5YJ3E1EAXPF436940  |  [External] Invoice #4930713
+  VIN 5XYP64GC3SG682406  |  [External] Invoice #4930797
+  VIN 1GNS6DRD7SR345620  |  [External] Invoice #4930779
+  VIN 2T3H1RFV4SW366629  |  [External] Invoice #4930758
+  VIN 4T1DAACK4SU130453  |  [External] Invoice #4930651
+  VIN 1GNS6DRD9SR219002  |  [External] Invoice #4936317
+  VIN 7MMVABBLXTN466404  |  [External] Invoice #4936313
+  VIN 1FMCU0MN7TUA29060  |  [External] Invoice #4936312
+  VIN 2C4RC1BG1TR220160  |  [External] Invoice #4936293
+  VIN KL77LHEP3TC062731  |  [External] Invoice #4936292
+  VIN KL77LHEP0TC162530  |  [External] Invoice #4941921
+  VIN 1V2WN2CA0TC533432  |  [External] Invoice #4941923
+  VIN 1GKENKKS2TJ203458  |  [External] Invoice #4941918
+  VIN 1V2WN2CA0TC533432  |  [External] Invoice #4941922
+  VIN 5NMP24GL9TH188943  |  [External] Invoice #4941916
+  VIN 4T1DAACK8TU711861  |  [External] Invoice #4946760
+  VIN 1C4SJSBP2SS516587  |  [External] Invoice #4946751
+  VIN 1V2HC2CA5TC222111  |  [External] Invoice #4946737
+  VIN 1V2HC2CA5TC222111  |  [External] Invoice #4946744
+  VIN KM8RL5S28TU115691  |  [External] Invoice #4901821
+  VIN 2C4RC1BG1TR160798  |  [External] Receipt for Job #4949657
+  VIN 5YFB4MDE8TP409724  |  [External] Receipt for Job #4949696
+  VIN 1G1FX6S04P4150274  |  [External] Receipt for Job #4949681
+  VIN KNDJ23AU0S7964867  |  [External] Receipt for Job #4949678
+  VIN 5XYP6DGC0SG692715  |  [External] Receipt for Job #4949675
+  VIN 7MMVABBL6TN456758  |  [External] Receipt for Job #4948525
+  VIN 1GAZGPFP5S1260142  |  [External] Receipt for Job #4957909
+  VIN 1C4RDHDG7TC214939  |  [External] Receipt for Job #4957924
+  VIN 1GAZGPFP5S1260142  |  [External] Receipt for Job #4957909
+  VIN 3GNAXHEG4TL311031  |  [External] Receipt for Job #4957873
+  VIN 2HGFE2F54TH550359  |  [External] Receipt for Job #4957865
+  VIN 1C4RDHDGXTC215079  |  [External] Receipt for Job #4957860
+  VIN 2HGFE2F54TH550359  |  [External] Receipt for Job #4957831
+  VIN 7SVAAABA4TX089022  |  [External] Receipt for Job #4963794
+  VIN 3VW5X7BU6SM070206  |  [External] Receipt for Job #4957946
+  VIN 3VVHR7RMXTM096018  |  [External] Receipt for Job #4957764
+  VIN 19XFL2H84TE022277  |  [External] Receipt for Job #4966062
+  VIN 5FPYK3F50TB023227  |  [External] Receipt for Job #4965969
+  VIN 5FPYK3F50TB023227  |  [External] Receipt for Job #4965915
+  VIN 5YFB4MDE5TP394003  |  [External] Receipt for Job #4965993
+  VIN 7MMVAAEW0TN144578  |  [External] Receipt for Job #4963798
+  VIN YV4L12UC3S2583520  |  [External] Receipt for Job #4966095
+  VIN JA4J4VA83SZ057876  |  [External] Receipt for Job #4968827
+  VIN 1HGCY1F26TA026588  |  [External] Receipt for Job #4968838
+  VIN YV4L12UC3S2583520  |  [External] Receipt for Job #4966092
+  VIN 1HGCY1F26TA026588  |  [External] Receipt for Job #4968818
+  VIN 3C4NJDBNXST546829  |  [External] Receipt for Job #4966133
+  VIN 5NMJB3DE5TH663137  |  [External] Receipt for Job #4966155
+  VIN 19XFL2H84TE022277  |  [External] Receipt for Job #4966056
+  VIN KNDNB5KA2T6127711  |  [External] Receipt for Job #4963741
+  VIN 1FBAX2YG5TKA46322  |  [External] Invoice #4949692
+  VIN 1FMUK8HH7SGB81060  |  [External] Invoice #4949662
+  VIN 1FMUK8HH4SGB81498  |  [External] Invoice #4949660
+  VIN 1G1FX6S04P4150274  |  [External] Invoice #4949681
+  VIN 2C4RC1BG1TR160798  |  [External] Invoice #4949657
+  VIN 5YFB4MDE8TP409724  |  [External] Invoice #4949696
+  VIN 7MMVABBL6TN456758  |  [External] Invoice #4948525
+  VIN KNDJ23AU0S7964867  |  [External] Invoice #4949678
+  VIN 5XYP6DGC0SG692715  |  [External] Invoice #4949675
+  VIN 3GNAXHEG4TL311031  |  [External] Invoice #4957873
+  VIN 1C4RDHDG7TC214939  |  [External] Invoice #4957924
+  VIN 1GAZGPFP5S1260142  |  [External] Invoice #4957909
+  VIN 1C4RDHDGXTC215079  |  [External] Invoice #4957860
+  VIN 2HGFE2F54TH550359  |  [External] Invoice #4957865
+  VIN 2HGFE2F54TH550359  |  [External] Invoice #4957831
+  VIN 7SVAAABA4TX089022  |  [External] Invoice #4963794
+  VIN 3VVHR7RMXTM096018  |  [External] Invoice #4957764
+  VIN 1GKS2DRL2SR268400  |  [External] Receipt for Job #4973870
+  VIN KNDNB5K37S6535329  |  [External] Receipt for Job #4973868
+  VIN 3CZRZ2H3XSM785547  |  [External] Receipt for Job #4973877
+  VIN 3CZRZ2H3XSM785547  |  [External] Receipt for Job #4973876
+  VIN 5XYP64GC0SG619618  |  [External] Receipt for Job #4982714
+  VIN JN8BT3DD9TW476641  |  [External] Receipt for Job #4982035
+  VIN 3GNAXHEG2TL288963  |  [External] Receipt for Job #4982620
+  VIN 19XFL2H85TE012812  |  [External] Receipt for Job #4982533
+  VIN 7MMVABBL8TN465364  |  [External] Receipt for Job #4981899
+  VIN 5NMP3DG14SH046803  |  [External] Receipt for Job #4981942
+  VIN 5TDAAAB55SS087829  |  [External] Receipt for Job #4982487
+  VIN KL79MRSL8TB138382  |  [External] Receipt for Job #4973873
+  VIN 3GNAXHEG2TL289563  |  [External] Receipt for Job #4982642
+  VIN JN8BT3DD9TW476641  |  [External] Receipt for Job #4982029
+  VIN 7MUCAAAG1TV156843  |  [External] Receipt for Job #4981995
+  VIN 3C4NJDDN0ST622216  |  [External] Receipt for Job #4981981
+  VIN 3GKALMEG8TL426006  |  [External] Receipt for Job #4981848
+  VIN 3GNKBCR45SS249634  |  [External] Receipt for Job #4988941
+  VIN 1GNERGKS9TJ225865  |  [External] Receipt for Job #4988938
+  VIN 1V2BR2CA5SC574964  |  [External] Receipt for Job #4982117
+  VIN 3GNKBCR40SS189813  |  [External] Receipt for Job #4988934
+  VIN 7MMVABDL4TN453838  |  [External] Receipt for Job #4988923
+  VIN 4T1DAACK7SU051052  |  [External] Receipt for Job #4988936
+  VIN 2C3CDZBT5LH128753  |  [External] Receipt for Job #4988921
+  VIN KL79MRSL6TB140874  |  [External] Invoice #5009625
+  VIN 1GJZ7PFP7S1171558  |  [External] Receipt for Job #5021141
+  VIN 3GNAXHEG1TL311598  |  [External] Receipt for Job #5035396
+  VIN 5YFB4MDE9SP275160  |  [External] Receipt for Job #5044224
+  VIN 1C4SJSBPXSS511475  |  [External] Receipt for Job #5044271
+  VIN 4T1DAACK5TU259688  |  [External] Receipt for Job #5044303
+  VIN 7MMVABBM1SN346532  |  [External] Receipt for Job #5042638
+  VIN 3GNAXHEGXTL347189  |  [External] Invoice #5043687
+  VIN 7MMVABDL2TN460044  |  [External] Invoice #5044327
+
+READY TO APPROVE (5) -- amounts matched:
+  VIN 4S4WMABD2T3412746  |  $200.00  |  [External] Receipt for Job #5009559  |  AGE OVERRIDE (22 days old)
+  VIN 5NMP24GL1TH180321  |  $340.00  |  [External] Invoice #5035400
+  VIN LRBFZPR47TD083730  |  $340.00  |  [External] Receipt for Job #5045416
+  VIN 1V2HC2CAXTC219110  |  $340.00  |  [External] Receipt for Job #5047688
+  VIN 5YFB4MDE8SP253814  |  $340.00  |  [External] Receipt for Job #5047518
+
+AGE-BASED APPROVAL ENABLED (1) -- invoice age >= 21 days
+
+COULD NOT BE CHECKED (6):
+  VIN 3GKALMEG5TL276842  |  [External] Invoice #4936308
+  VIN LRBFZSR44TD067553  |  [External] Invoice #4936301
+  VIN 3GKALMEGXTL400152  |  [External] Invoice #4936310
+  VIN KMHL24JJ1TA157696  |  [External] Invoice #4936298
+  VIN 3GNAXHEG5TL368953  |  [External] Receipt for Job #4981827
+  VIN 4T1DAACK6SU599933  |  [External] Receipt for Job #5022994
+
+Approval gate: Created By must be one of: Steele, Dirk
+
+Type 'yes' to approve all 5 matched invoice(s) above: Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Approving VIN 4S4WMABD2T3412746 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Failed to approve: Locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for get_by_role("button", name="Approve")
+
+
+Approving VIN 5NMP24GL1TH180321 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN LRBFZPR47TD083730 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 1V2HC2CAXTC219110 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 5YFB4MDE8SP253814 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Done. Queue updated.
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-29 16:04:19
+======================================================================
+
+============================================================
+STEP 1: EXTRACT - reading Outlook AGN\Invoice folder
+============================================================
+Processed: [External] Receipt for Job #5047474 -> VIN KL79MPSP5TB193928, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5045358 -> VIN 5YFB4MDE5TP390081, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5050518 -> VIN 1C4SJSBP8SS511703, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5050513 -> VIN 5FNRL6H76SB052613, $340.00 (categorized: Green Category)
+Skipping duplicate queue key for '[External] Invoice #5045358' -> VIN 5YFB4MDE5TP390081, $340.00
+Skipping duplicate queue key for '[External] Invoice #5045416' -> VIN LRBFZPR47TD083730, $340.00
+Skipping duplicate queue key for '[External] Invoice #5047474' -> VIN KL79MPSP5TB193928, $340.00
+Skipping duplicate queue key for '[External] Invoice #5047518' -> VIN 5YFB4MDE8SP253814, $340.00
+Skipping duplicate queue key for '[External] Invoice #5047688' -> VIN 1V2HC2CAXTC219110, $340.00
+Skipping duplicate queue key for '[External] Invoice #5050513' -> VIN 5FNRL6H76SB052613, $340.00
+Skipping duplicate queue key for '[External] Invoice #5050518' -> VIN 1C4SJSBP8SS511703, $340.00
+Processed: [External] Receipt for Job #5057665 -> VIN 3GTPUBEK1TG358412, $340.00 (categorized: Green Category)
+Processed: [External] Invoice #5018095 -> VIN 5NMJB3DE2TH642195, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5057690 -> VIN 2C4RC1BGXTR167572, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5057699 -> VIN 1GKS2JRL0SR365027, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5057679 -> VIN 3GNKBCR46SS204024, $340.00 (categorized: Green Category)
+Skipping duplicate queue key for '[External] Invoice #5057665' -> VIN 3GTPUBEK1TG358412, $340.00
+Skipping duplicate queue key for '[External] Invoice #5057679' -> VIN 3GNKBCR46SS204024, $340.00
+Skipping duplicate queue key for '[External] Invoice #5057690' -> VIN 2C4RC1BGXTR167572, $340.00
+Skipping duplicate queue key for '[External] Invoice #5057699' -> VIN 1GKS2JRL0SR365027, $340.00
+Processed: [External] Receipt for Job #5062967 -> VIN KL47LAEP8TB129687, $340.00 (categorized: Green Category)
+Skipping duplicate queue key for '[External] Invoice #5062967' -> VIN KL47LAEP8TB129687, $340.00
+Processed: [External] Receipt for Job #5043816 -> VIN 1GKENKKS3TJ213318, $708.34 (categorized: Green Category)
+Processed: [External] Receipt for Job #5062785 -> VIN 3GNKBHR46SS239966, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5034522 -> VIN KNDPU3DG5T7311866, $374.63 (categorized: Green Category)
+Skipping duplicate queue key for '[External] Receipt for Job #5034522' -> VIN KNDPU3DG5T7311866, $374.63
+Skipping duplicate queue key for '[External] Invoice #5034522' -> VIN KNDPU3DG5T7311866, $374.63
+Skipping duplicate queue key for '[External] Invoice #5043816' -> VIN 1GKENKKS3TJ213318, $708.34
+Processed: [External] Receipt for Job #5075990 -> VIN JN8BT3DD8TW294669, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5075981 -> VIN 7MMVAAEW5TN146570, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5075986 -> VIN 3GNAXHEG0TL363983, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5077866 -> VIN 1C4RJKBG6R8549646, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5075961 -> VIN 1HGCY1F40TA028483, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5075959 -> VIN 2C4RC1BG6TR160747, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5075955 -> VIN 1G1ZD5ST1RF110087, $340.00 (categorized: Green Category)
+Reached MAX_ITEMS_PER_RUN limit (20). Stopping for this run.
+
+20 invoice(s) added to queue: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 2: CHECK - looking up each queued VIN in FieldPO
+============================================================
+Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN KL79MPSP5TB193928 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 5YFB4MDE5TP390081 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 1C4SJSBP8SS511703 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 5FNRL6H76SB052613 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 3GTPUBEK1TG358412 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 5NMJB3DE2TH642195 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 2C4RC1BGXTR167572 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 1GKS2JRL0SR365027 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $50.00  |  Match: False
+
+Checking VIN 3GNKBCR46SS204024 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN KL47LAEP8TB129687 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 1GKENKKS3TJ213318 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 3GNKBHR46SS239966 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN KNDPU3DG5T7311866 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN JN8BT3DD8TW294669 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 7MMVAAEW5TN146570 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 3GNAXHEG0TL363983 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $34000.00  |  Match: False
+
+Checking VIN 1C4RJKBG6R8549646 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $250.00  |  Match: False
+
+Checking VIN 1HGCY1F40TA028483 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 2C4RC1BG6TR160747 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 1G1ZD5ST1RF110087 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Queue updated: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 3: APPROVE - review and confirm
+============================================================
+Already paid, skipped automatically (126):
+  VIN 4T1DAACK2SU006245  |  [External] Invoice #4907720
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916334
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916354
+  VIN 1GTPHBEK0TZ324966  |  [External] Invoice #4916358
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916351
+  VIN 5NMP24GL3TH190378  |  [External] Invoice #4916362
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916333
+  VIN 4T1DAACKXSU598042  |  [External] Invoice #4916329
+  VIN 1FMDE7BH9TLA47847  |  [External] Invoice #4924232
+  VIN 1HGCY1F23TA025625  |  [External] Invoice #4924244
+  VIN 1HGCY1F23TA025625  |  [External] Invoice #4924241
+  VIN 5YFB4MDE7SP301836  |  [External] Invoice #4924233
+  VIN 1C4SJSBP2SS516587  |  [External] Receipt for Job #4946751
+  VIN 4T1DAACK8TU711861  |  [External] Receipt for Job #4946760
+  VIN 1V2HC2CA5TC222111  |  [External] Receipt for Job #4946737
+  VIN 1V2HC2CA5TC222111  |  [External] Receipt for Job #4946744
+  VIN KM8RL5S28TU115691  |  [External] Receipt for Job #4901821
+  VIN 1FBAX2YG5TKA46322  |  [External] Receipt for Job #4949692
+  VIN 1FMUK8HH7SGB81060  |  [External] Receipt for Job #4949662
+  VIN 1FMUK8HH4SGB81498  |  [External] Receipt for Job #4949660
+  VIN 1FBAX2YG5TKA46322  |  [External] Receipt for Job #4949692
+  VIN 5YJ3E1EAXPF436940  |  [External] Invoice #4930713
+  VIN 5XYP64GC3SG682406  |  [External] Invoice #4930797
+  VIN 1GNS6DRD7SR345620  |  [External] Invoice #4930779
+  VIN 2T3H1RFV4SW366629  |  [External] Invoice #4930758
+  VIN 4T1DAACK4SU130453  |  [External] Invoice #4930651
+  VIN 1GNS6DRD9SR219002  |  [External] Invoice #4936317
+  VIN 7MMVABBLXTN466404  |  [External] Invoice #4936313
+  VIN 1FMCU0MN7TUA29060  |  [External] Invoice #4936312
+  VIN 2C4RC1BG1TR220160  |  [External] Invoice #4936293
+  VIN KL77LHEP3TC062731  |  [External] Invoice #4936292
+  VIN KL77LHEP0TC162530  |  [External] Invoice #4941921
+  VIN 1V2WN2CA0TC533432  |  [External] Invoice #4941923
+  VIN 1GKENKKS2TJ203458  |  [External] Invoice #4941918
+  VIN 1V2WN2CA0TC533432  |  [External] Invoice #4941922
+  VIN 5NMP24GL9TH188943  |  [External] Invoice #4941916
+  VIN 4T1DAACK8TU711861  |  [External] Invoice #4946760
+  VIN 1C4SJSBP2SS516587  |  [External] Invoice #4946751
+  VIN 1V2HC2CA5TC222111  |  [External] Invoice #4946737
+  VIN 1V2HC2CA5TC222111  |  [External] Invoice #4946744
+  VIN KM8RL5S28TU115691  |  [External] Invoice #4901821
+  VIN 2C4RC1BG1TR160798  |  [External] Receipt for Job #4949657
+  VIN 5YFB4MDE8TP409724  |  [External] Receipt for Job #4949696
+  VIN 1G1FX6S04P4150274  |  [External] Receipt for Job #4949681
+  VIN KNDJ23AU0S7964867  |  [External] Receipt for Job #4949678
+  VIN 5XYP6DGC0SG692715  |  [External] Receipt for Job #4949675
+  VIN 7MMVABBL6TN456758  |  [External] Receipt for Job #4948525
+  VIN 1GAZGPFP5S1260142  |  [External] Receipt for Job #4957909
+  VIN 1C4RDHDG7TC214939  |  [External] Receipt for Job #4957924
+  VIN 1GAZGPFP5S1260142  |  [External] Receipt for Job #4957909
+  VIN 3GNAXHEG4TL311031  |  [External] Receipt for Job #4957873
+  VIN 2HGFE2F54TH550359  |  [External] Receipt for Job #4957865
+  VIN 1C4RDHDGXTC215079  |  [External] Receipt for Job #4957860
+  VIN 2HGFE2F54TH550359  |  [External] Receipt for Job #4957831
+  VIN 7SVAAABA4TX089022  |  [External] Receipt for Job #4963794
+  VIN 3VW5X7BU6SM070206  |  [External] Receipt for Job #4957946
+  VIN 3VVHR7RMXTM096018  |  [External] Receipt for Job #4957764
+  VIN 19XFL2H84TE022277  |  [External] Receipt for Job #4966062
+  VIN 5FPYK3F50TB023227  |  [External] Receipt for Job #4965969
+  VIN 5FPYK3F50TB023227  |  [External] Receipt for Job #4965915
+  VIN 5YFB4MDE5TP394003  |  [External] Receipt for Job #4965993
+  VIN 7MMVAAEW0TN144578  |  [External] Receipt for Job #4963798
+  VIN YV4L12UC3S2583520  |  [External] Receipt for Job #4966095
+  VIN JA4J4VA83SZ057876  |  [External] Receipt for Job #4968827
+  VIN 1HGCY1F26TA026588  |  [External] Receipt for Job #4968838
+  VIN YV4L12UC3S2583520  |  [External] Receipt for Job #4966092
+  VIN 1HGCY1F26TA026588  |  [External] Receipt for Job #4968818
+  VIN 3C4NJDBNXST546829  |  [External] Receipt for Job #4966133
+  VIN 5NMJB3DE5TH663137  |  [External] Receipt for Job #4966155
+  VIN 19XFL2H84TE022277  |  [External] Receipt for Job #4966056
+  VIN KNDNB5KA2T6127711  |  [External] Receipt for Job #4963741
+  VIN 1FBAX2YG5TKA46322  |  [External] Invoice #4949692
+  VIN 1FMUK8HH7SGB81060  |  [External] Invoice #4949662
+  VIN 1FMUK8HH4SGB81498  |  [External] Invoice #4949660
+  VIN 1G1FX6S04P4150274  |  [External] Invoice #4949681
+  VIN 2C4RC1BG1TR160798  |  [External] Invoice #4949657
+  VIN 5YFB4MDE8TP409724  |  [External] Invoice #4949696
+  VIN 7MMVABBL6TN456758  |  [External] Invoice #4948525
+  VIN KNDJ23AU0S7964867  |  [External] Invoice #4949678
+  VIN 5XYP6DGC0SG692715  |  [External] Invoice #4949675
+  VIN 3GNAXHEG4TL311031  |  [External] Invoice #4957873
+  VIN 1C4RDHDG7TC214939  |  [External] Invoice #4957924
+  VIN 1GAZGPFP5S1260142  |  [External] Invoice #4957909
+  VIN 1C4RDHDGXTC215079  |  [External] Invoice #4957860
+  VIN 2HGFE2F54TH550359  |  [External] Invoice #4957865
+  VIN 2HGFE2F54TH550359  |  [External] Invoice #4957831
+  VIN 7SVAAABA4TX089022  |  [External] Invoice #4963794
+  VIN 3VVHR7RMXTM096018  |  [External] Invoice #4957764
+  VIN 1GKS2DRL2SR268400  |  [External] Receipt for Job #4973870
+  VIN KNDNB5K37S6535329  |  [External] Receipt for Job #4973868
+  VIN 3CZRZ2H3XSM785547  |  [External] Receipt for Job #4973877
+  VIN 3CZRZ2H3XSM785547  |  [External] Receipt for Job #4973876
+  VIN 5XYP64GC0SG619618  |  [External] Receipt for Job #4982714
+  VIN JN8BT3DD9TW476641  |  [External] Receipt for Job #4982035
+  VIN 3GNAXHEG2TL288963  |  [External] Receipt for Job #4982620
+  VIN 19XFL2H85TE012812  |  [External] Receipt for Job #4982533
+  VIN 7MMVABBL8TN465364  |  [External] Receipt for Job #4981899
+  VIN 5NMP3DG14SH046803  |  [External] Receipt for Job #4981942
+  VIN 5TDAAAB55SS087829  |  [External] Receipt for Job #4982487
+  VIN KL79MRSL8TB138382  |  [External] Receipt for Job #4973873
+  VIN 3GNAXHEG2TL289563  |  [External] Receipt for Job #4982642
+  VIN JN8BT3DD9TW476641  |  [External] Receipt for Job #4982029
+  VIN 7MUCAAAG1TV156843  |  [External] Receipt for Job #4981995
+  VIN 3C4NJDDN0ST622216  |  [External] Receipt for Job #4981981
+  VIN 3GKALMEG8TL426006  |  [External] Receipt for Job #4981848
+  VIN 3GNKBCR45SS249634  |  [External] Receipt for Job #4988941
+  VIN 1GNERGKS9TJ225865  |  [External] Receipt for Job #4988938
+  VIN 1V2BR2CA5SC574964  |  [External] Receipt for Job #4982117
+  VIN 3GNKBCR40SS189813  |  [External] Receipt for Job #4988934
+  VIN 7MMVABDL4TN453838  |  [External] Receipt for Job #4988923
+  VIN 4T1DAACK7SU051052  |  [External] Receipt for Job #4988936
+  VIN 2C3CDZBT5LH128753  |  [External] Receipt for Job #4988921
+  VIN KL79MRSL6TB140874  |  [External] Invoice #5009625
+  VIN 1GJZ7PFP7S1171558  |  [External] Receipt for Job #5021141
+  VIN 3GNAXHEG1TL311598  |  [External] Receipt for Job #5035396
+  VIN 5YFB4MDE9SP275160  |  [External] Receipt for Job #5044224
+  VIN 1C4SJSBPXSS511475  |  [External] Receipt for Job #5044271
+  VIN 4T1DAACK5TU259688  |  [External] Receipt for Job #5044303
+  VIN 7MMVABBM1SN346532  |  [External] Receipt for Job #5042638
+  VIN 3GNAXHEGXTL347189  |  [External] Invoice #5043687
+  VIN 7MMVABDL2TN460044  |  [External] Invoice #5044327
+  VIN KL79MPSP5TB193928  |  [External] Receipt for Job #5047474
+  VIN 5NMJB3DE2TH642195  |  [External] Invoice #5018095
+  VIN 3GNKBCR46SS204024  |  [External] Receipt for Job #5057679
+  VIN 1GKENKKS3TJ213318  |  [External] Receipt for Job #5043816
+  VIN KNDPU3DG5T7311866  |  [External] Receipt for Job #5034522
+
+READY TO APPROVE (13) -- amounts matched:
+  VIN 5YFB4MDE5TP390081  |  $340.00  |  [External] Receipt for Job #5045358
+  VIN 1C4SJSBP8SS511703  |  $340.00  |  [External] Receipt for Job #5050518
+  VIN 5FNRL6H76SB052613  |  $340.00  |  [External] Receipt for Job #5050513
+  VIN 3GTPUBEK1TG358412  |  $340.00  |  [External] Receipt for Job #5057665
+  VIN 2C4RC1BGXTR167572  |  $340.00  |  [External] Receipt for Job #5057690
+  VIN 1GKS2JRL0SR365027  |  $340.00  |  [External] Receipt for Job #5057699  |  AGE OVERRIDE (14 days old)
+  VIN KL47LAEP8TB129687  |  $340.00  |  [External] Receipt for Job #5062967
+  VIN 3GNKBHR46SS239966  |  $340.00  |  [External] Receipt for Job #5062785
+  VIN JN8BT3DD8TW294669  |  $340.00  |  [External] Receipt for Job #5075990
+  VIN 7MMVAAEW5TN146570  |  $340.00  |  [External] Receipt for Job #5075981
+  VIN 1HGCY1F40TA028483  |  $340.00  |  [External] Receipt for Job #5075961
+  VIN 2C4RC1BG6TR160747  |  $340.00  |  [External] Receipt for Job #5075959
+  VIN 1G1ZD5ST1RF110087  |  $340.00  |  [External] Receipt for Job #5075955
+
+AGE-BASED APPROVAL ENABLED (1) -- invoice age >= 14 days
+
+NEEDS MANUAL REVIEW (2) -- amounts did NOT match:
+  VIN 3GNAXHEG0TL363983  |  invoice $340.00 vs auth $34000.00  |  [External] Receipt for Job #5075986
+  VIN 1C4RJKBG6R8549646  |  invoice $340.00 vs auth $250.00  |  [External] Receipt for Job #5077866
+
+COULD NOT BE CHECKED (6):
+  VIN 3GKALMEG5TL276842  |  [External] Invoice #4936308
+  VIN LRBFZSR44TD067553  |  [External] Invoice #4936301
+  VIN 3GKALMEGXTL400152  |  [External] Invoice #4936310
+  VIN KMHL24JJ1TA157696  |  [External] Invoice #4936298
+  VIN 3GNAXHEG5TL368953  |  [External] Receipt for Job #4981827
+  VIN 4T1DAACK6SU599933  |  [External] Receipt for Job #5022994
+
+Approval gate: Created By must be one of: Steele, Dirk
+
+Type 'yes' to approve all 13 matched invoice(s) above: Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Approving VIN 5YFB4MDE5TP390081 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 1C4SJSBP8SS511703 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 5FNRL6H76SB052613 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 3GTPUBEK1TG358412 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 2C4RC1BGXTR167572 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 1GKS2JRL0SR365027 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Skipped. Created By is 'Hampton, Indier' (allowed: Steele, Dirk).
+
+Approving VIN KL47LAEP8TB129687 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 3GNKBHR46SS239966 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN JN8BT3DD8TW294669 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 7MMVAAEW5TN146570 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 1HGCY1F40TA028483 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 2C4RC1BG6TR160747 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 1G1ZD5ST1RF110087 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Done. Queue updated.
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-29 17:04:23
+======================================================================
+
+============================================================
+STEP 1: EXTRACT - reading Outlook AGN\Invoice folder
+============================================================
+Processed: [External] Receipt for Job #5075952 -> VIN 3GNAXHEGXTL290668, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5075980 -> VIN JM3KFBCM4S0808511, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5075977 -> VIN JM3KKCHD0S1216785, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5075949 -> VIN KNDNB5KA5T6122311, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5075965 -> VIN 5FNRL6H68TB060544, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5075967 -> VIN KL77LHEP8TC138380, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5075940 -> VIN KMHL64JA4SA465139, $340.00 (categorized: Green Category)
+Skipping duplicate queue key for '[External] Invoice #5077866' -> VIN 1C4RJKBG6R8549646, $340.00
+Processed: [External] Receipt for Job #5075941 -> VIN 4T1DAACK4SU602117, $340.00 (categorized: Green Category)
+Skipping duplicate queue key for '[External] Invoice #5075949' -> VIN KNDNB5KA5T6122311, $340.00
+Skipping duplicate queue key for '[External] Invoice #5075980' -> VIN JM3KFBCM4S0808511, $340.00
+Skipping duplicate queue key for '[External] Invoice #5075967' -> VIN KL77LHEP8TC138380, $340.00
+Skipping duplicate queue key for '[External] Invoice #5075981' -> VIN 7MMVAAEW5TN146570, $340.00
+Skipping duplicate queue key for '[External] Invoice #5075986' -> VIN 3GNAXHEG0TL363983, $340.00
+Skipping duplicate queue key for '[External] Invoice #5075990' -> VIN JN8BT3DD8TW294669, $340.00
+Processed: [External] Receipt for Job #5084141 -> VIN 1GNERGKS9TJ214283, $340.00 (categorized: Green Category)
+Skipping duplicate queue key for '[External] Invoice #5075952' -> VIN 3GNAXHEGXTL290668, $340.00
+Skipping duplicate queue key for '[External] Invoice #5075955' -> VIN 1G1ZD5ST1RF110087, $340.00
+Skipping duplicate queue key for '[External] Invoice #5075959' -> VIN 2C4RC1BG6TR160747, $340.00
+Skipping duplicate queue key for '[External] Invoice #5075961' -> VIN 1HGCY1F40TA028483, $340.00
+Skipping duplicate queue key for '[External] Invoice #5075965' -> VIN 5FNRL6H68TB060544, $340.00
+Skipping duplicate queue key for '[External] Invoice #5075977' -> VIN JM3KKCHD0S1216785, $340.00
+Processed: [External] Receipt for Job #5084338 -> VIN 5YFB4MDE8TP431206, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5084148 -> VIN 5TDAAAB54TS131661, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5084145 -> VIN 3C4NJDBN3ST548874, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5084143 -> VIN 1FMCU9MN1SUA99382, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5084142 -> VIN 3GKALMEG8TL417614, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5075971 -> VIN 1FMJK1M81SEA27374, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5084144 -> VIN 5YJ3E1EA9PF436475, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5084304 -> VIN JM3KKCHD7T1354678, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5084326 -> VIN 7MMVABBL8TN463467, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5084317 -> VIN 5XYP64GC5SG653439, $340.00 (categorized: Green Category)
+Processed: [External] Receipt for Job #5081712 -> VIN 1V2HC2CAXTC219110, $0.00 (categorized: Green Category)
+Reached MAX_ITEMS_PER_RUN limit (20). Stopping for this run.
+
+20 invoice(s) added to queue: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 2: CHECK - looking up each queued VIN in FieldPO
+============================================================
+Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN 3GNAXHEGXTL290668 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN JM3KFBCM4S0808511 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN JM3KKCHD0S1216785 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN KNDNB5KA5T6122311 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 5FNRL6H68TB060544 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN KL77LHEP8TC138380 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN KMHL64JA4SA465139 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 4T1DAACK4SU602117 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 1GNERGKS9TJ214283 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 5YFB4MDE8TP431206 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 5TDAAAB54TS131661 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 3C4NJDBN3ST548874 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 1FMCU9MN1SUA99382 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 3GKALMEG8TL417614 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 1FMJK1M81SEA27374 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 5YJ3E1EA9PF436475 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN JM3KKCHD7T1354678 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 7MMVABBL8TN463467 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 5XYP64GC5SG653439 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 1V2HC2CAXTC219110 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Queue updated: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 3: APPROVE - review and confirm
+============================================================
+Already paid, skipped automatically (127):
+  VIN 4T1DAACK2SU006245  |  [External] Invoice #4907720
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916334
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916354
+  VIN 1GTPHBEK0TZ324966  |  [External] Invoice #4916358
+  VIN 4S4SLDD60T3069677  |  [External] Invoice #4916351
+  VIN 5NMP24GL3TH190378  |  [External] Invoice #4916362
+  VIN 4S4WMABD2T3416294  |  [External] Invoice #4916333
+  VIN 4T1DAACKXSU598042  |  [External] Invoice #4916329
+  VIN 1FMDE7BH9TLA47847  |  [External] Invoice #4924232
+  VIN 1HGCY1F23TA025625  |  [External] Invoice #4924244
+  VIN 1HGCY1F23TA025625  |  [External] Invoice #4924241
+  VIN 5YFB4MDE7SP301836  |  [External] Invoice #4924233
+  VIN 1C4SJSBP2SS516587  |  [External] Receipt for Job #4946751
+  VIN 4T1DAACK8TU711861  |  [External] Receipt for Job #4946760
+  VIN 1V2HC2CA5TC222111  |  [External] Receipt for Job #4946737
+  VIN 1V2HC2CA5TC222111  |  [External] Receipt for Job #4946744
+  VIN KM8RL5S28TU115691  |  [External] Receipt for Job #4901821
+  VIN 1FBAX2YG5TKA46322  |  [External] Receipt for Job #4949692
+  VIN 1FMUK8HH7SGB81060  |  [External] Receipt for Job #4949662
+  VIN 1FMUK8HH4SGB81498  |  [External] Receipt for Job #4949660
+  VIN 1FBAX2YG5TKA46322  |  [External] Receipt for Job #4949692
+  VIN 5YJ3E1EAXPF436940  |  [External] Invoice #4930713
+  VIN 5XYP64GC3SG682406  |  [External] Invoice #4930797
+  VIN 1GNS6DRD7SR345620  |  [External] Invoice #4930779
+  VIN 2T3H1RFV4SW366629  |  [External] Invoice #4930758
+  VIN 4T1DAACK4SU130453  |  [External] Invoice #4930651
+  VIN 1GNS6DRD9SR219002  |  [External] Invoice #4936317
+  VIN 7MMVABBLXTN466404  |  [External] Invoice #4936313
+  VIN 1FMCU0MN7TUA29060  |  [External] Invoice #4936312
+  VIN 2C4RC1BG1TR220160  |  [External] Invoice #4936293
+  VIN KL77LHEP3TC062731  |  [External] Invoice #4936292
+  VIN KL77LHEP0TC162530  |  [External] Invoice #4941921
+  VIN 1V2WN2CA0TC533432  |  [External] Invoice #4941923
+  VIN 1GKENKKS2TJ203458  |  [External] Invoice #4941918
+  VIN 1V2WN2CA0TC533432  |  [External] Invoice #4941922
+  VIN 5NMP24GL9TH188943  |  [External] Invoice #4941916
+  VIN 4T1DAACK8TU711861  |  [External] Invoice #4946760
+  VIN 1C4SJSBP2SS516587  |  [External] Invoice #4946751
+  VIN 1V2HC2CA5TC222111  |  [External] Invoice #4946737
+  VIN 1V2HC2CA5TC222111  |  [External] Invoice #4946744
+  VIN KM8RL5S28TU115691  |  [External] Invoice #4901821
+  VIN 2C4RC1BG1TR160798  |  [External] Receipt for Job #4949657
+  VIN 5YFB4MDE8TP409724  |  [External] Receipt for Job #4949696
+  VIN 1G1FX6S04P4150274  |  [External] Receipt for Job #4949681
+  VIN KNDJ23AU0S7964867  |  [External] Receipt for Job #4949678
+  VIN 5XYP6DGC0SG692715  |  [External] Receipt for Job #4949675
+  VIN 7MMVABBL6TN456758  |  [External] Receipt for Job #4948525
+  VIN 1GAZGPFP5S1260142  |  [External] Receipt for Job #4957909
+  VIN 1C4RDHDG7TC214939  |  [External] Receipt for Job #4957924
+  VIN 1GAZGPFP5S1260142  |  [External] Receipt for Job #4957909
+  VIN 3GNAXHEG4TL311031  |  [External] Receipt for Job #4957873
+  VIN 2HGFE2F54TH550359  |  [External] Receipt for Job #4957865
+  VIN 1C4RDHDGXTC215079  |  [External] Receipt for Job #4957860
+  VIN 2HGFE2F54TH550359  |  [External] Receipt for Job #4957831
+  VIN 7SVAAABA4TX089022  |  [External] Receipt for Job #4963794
+  VIN 3VW5X7BU6SM070206  |  [External] Receipt for Job #4957946
+  VIN 3VVHR7RMXTM096018  |  [External] Receipt for Job #4957764
+  VIN 19XFL2H84TE022277  |  [External] Receipt for Job #4966062
+  VIN 5FPYK3F50TB023227  |  [External] Receipt for Job #4965969
+  VIN 5FPYK3F50TB023227  |  [External] Receipt for Job #4965915
+  VIN 5YFB4MDE5TP394003  |  [External] Receipt for Job #4965993
+  VIN 7MMVAAEW0TN144578  |  [External] Receipt for Job #4963798
+  VIN YV4L12UC3S2583520  |  [External] Receipt for Job #4966095
+  VIN JA4J4VA83SZ057876  |  [External] Receipt for Job #4968827
+  VIN 1HGCY1F26TA026588  |  [External] Receipt for Job #4968838
+  VIN YV4L12UC3S2583520  |  [External] Receipt for Job #4966092
+  VIN 1HGCY1F26TA026588  |  [External] Receipt for Job #4968818
+  VIN 3C4NJDBNXST546829  |  [External] Receipt for Job #4966133
+  VIN 5NMJB3DE5TH663137  |  [External] Receipt for Job #4966155
+  VIN 19XFL2H84TE022277  |  [External] Receipt for Job #4966056
+  VIN KNDNB5KA2T6127711  |  [External] Receipt for Job #4963741
+  VIN 1FBAX2YG5TKA46322  |  [External] Invoice #4949692
+  VIN 1FMUK8HH7SGB81060  |  [External] Invoice #4949662
+  VIN 1FMUK8HH4SGB81498  |  [External] Invoice #4949660
+  VIN 1G1FX6S04P4150274  |  [External] Invoice #4949681
+  VIN 2C4RC1BG1TR160798  |  [External] Invoice #4949657
+  VIN 5YFB4MDE8TP409724  |  [External] Invoice #4949696
+  VIN 7MMVABBL6TN456758  |  [External] Invoice #4948525
+  VIN KNDJ23AU0S7964867  |  [External] Invoice #4949678
+  VIN 5XYP6DGC0SG692715  |  [External] Invoice #4949675
+  VIN 3GNAXHEG4TL311031  |  [External] Invoice #4957873
+  VIN 1C4RDHDG7TC214939  |  [External] Invoice #4957924
+  VIN 1GAZGPFP5S1260142  |  [External] Invoice #4957909
+  VIN 1C4RDHDGXTC215079  |  [External] Invoice #4957860
+  VIN 2HGFE2F54TH550359  |  [External] Invoice #4957865
+  VIN 2HGFE2F54TH550359  |  [External] Invoice #4957831
+  VIN 7SVAAABA4TX089022  |  [External] Invoice #4963794
+  VIN 3VVHR7RMXTM096018  |  [External] Invoice #4957764
+  VIN 1GKS2DRL2SR268400  |  [External] Receipt for Job #4973870
+  VIN KNDNB5K37S6535329  |  [External] Receipt for Job #4973868
+  VIN 3CZRZ2H3XSM785547  |  [External] Receipt for Job #4973877
+  VIN 3CZRZ2H3XSM785547  |  [External] Receipt for Job #4973876
+  VIN 5XYP64GC0SG619618  |  [External] Receipt for Job #4982714
+  VIN JN8BT3DD9TW476641  |  [External] Receipt for Job #4982035
+  VIN 3GNAXHEG2TL288963  |  [External] Receipt for Job #4982620
+  VIN 19XFL2H85TE012812  |  [External] Receipt for Job #4982533
+  VIN 7MMVABBL8TN465364  |  [External] Receipt for Job #4981899
+  VIN 5NMP3DG14SH046803  |  [External] Receipt for Job #4981942
+  VIN 5TDAAAB55SS087829  |  [External] Receipt for Job #4982487
+  VIN KL79MRSL8TB138382  |  [External] Receipt for Job #4973873
+  VIN 3GNAXHEG2TL289563  |  [External] Receipt for Job #4982642
+  VIN JN8BT3DD9TW476641  |  [External] Receipt for Job #4982029
+  VIN 7MUCAAAG1TV156843  |  [External] Receipt for Job #4981995
+  VIN 3C4NJDDN0ST622216  |  [External] Receipt for Job #4981981
+  VIN 3GKALMEG8TL426006  |  [External] Receipt for Job #4981848
+  VIN 3GNKBCR45SS249634  |  [External] Receipt for Job #4988941
+  VIN 1GNERGKS9TJ225865  |  [External] Receipt for Job #4988938
+  VIN 1V2BR2CA5SC574964  |  [External] Receipt for Job #4982117
+  VIN 3GNKBCR40SS189813  |  [External] Receipt for Job #4988934
+  VIN 7MMVABDL4TN453838  |  [External] Receipt for Job #4988923
+  VIN 4T1DAACK7SU051052  |  [External] Receipt for Job #4988936
+  VIN 2C3CDZBT5LH128753  |  [External] Receipt for Job #4988921
+  VIN KL79MRSL6TB140874  |  [External] Invoice #5009625
+  VIN 1GJZ7PFP7S1171558  |  [External] Receipt for Job #5021141
+  VIN 3GNAXHEG1TL311598  |  [External] Receipt for Job #5035396
+  VIN 5YFB4MDE9SP275160  |  [External] Receipt for Job #5044224
+  VIN 1C4SJSBPXSS511475  |  [External] Receipt for Job #5044271
+  VIN 4T1DAACK5TU259688  |  [External] Receipt for Job #5044303
+  VIN 7MMVABBM1SN346532  |  [External] Receipt for Job #5042638
+  VIN 3GNAXHEGXTL347189  |  [External] Invoice #5043687
+  VIN 7MMVABDL2TN460044  |  [External] Invoice #5044327
+  VIN KL79MPSP5TB193928  |  [External] Receipt for Job #5047474
+  VIN 5NMJB3DE2TH642195  |  [External] Invoice #5018095
+  VIN 3GNKBCR46SS204024  |  [External] Receipt for Job #5057679
+  VIN 1GKENKKS3TJ213318  |  [External] Receipt for Job #5043816
+  VIN KNDPU3DG5T7311866  |  [External] Receipt for Job #5034522
+  VIN 1V2HC2CAXTC219110  |  [External] Receipt for Job #5081712
+
+READY TO APPROVE (19) -- amounts matched:
+  VIN 3GNAXHEGXTL290668  |  $340.00  |  [External] Receipt for Job #5075952
+  VIN JM3KFBCM4S0808511  |  $340.00  |  [External] Receipt for Job #5075980
+  VIN JM3KKCHD0S1216785  |  $340.00  |  [External] Receipt for Job #5075977
+  VIN KNDNB5KA5T6122311  |  $340.00  |  [External] Receipt for Job #5075949
+  VIN 5FNRL6H68TB060544  |  $340.00  |  [External] Receipt for Job #5075965
+  VIN KL77LHEP8TC138380  |  $340.00  |  [External] Receipt for Job #5075967
+  VIN KMHL64JA4SA465139  |  $340.00  |  [External] Receipt for Job #5075940
+  VIN 4T1DAACK4SU602117  |  $340.00  |  [External] Receipt for Job #5075941
+  VIN 1GNERGKS9TJ214283  |  $340.00  |  [External] Receipt for Job #5084141
+  VIN 5YFB4MDE8TP431206  |  $340.00  |  [External] Receipt for Job #5084338
+  VIN 5TDAAAB54TS131661  |  $340.00  |  [External] Receipt for Job #5084148
+  VIN 3C4NJDBN3ST548874  |  $340.00  |  [External] Receipt for Job #5084145
+  VIN 1FMCU9MN1SUA99382  |  $340.00  |  [External] Receipt for Job #5084143
+  VIN 3GKALMEG8TL417614  |  $340.00  |  [External] Receipt for Job #5084142
+  VIN 1FMJK1M81SEA27374  |  $340.00  |  [External] Receipt for Job #5075971
+  VIN 5YJ3E1EA9PF436475  |  $340.00  |  [External] Receipt for Job #5084144
+  VIN JM3KKCHD7T1354678  |  $340.00  |  [External] Receipt for Job #5084304
+  VIN 7MMVABBL8TN463467  |  $340.00  |  [External] Receipt for Job #5084326
+  VIN 5XYP64GC5SG653439  |  $340.00  |  [External] Receipt for Job #5084317
+
+NEEDS MANUAL REVIEW (2) -- amounts did NOT match:
+  VIN 3GNAXHEG0TL363983  |  invoice $340.00 vs auth $34000.00  |  [External] Receipt for Job #5075986
+  VIN 1C4RJKBG6R8549646  |  invoice $340.00 vs auth $250.00  |  [External] Receipt for Job #5077866
+
+COULD NOT BE CHECKED (6):
+  VIN 3GKALMEG5TL276842  |  [External] Invoice #4936308
+  VIN LRBFZSR44TD067553  |  [External] Invoice #4936301
+  VIN 3GKALMEGXTL400152  |  [External] Invoice #4936310
+  VIN KMHL24JJ1TA157696  |  [External] Invoice #4936298
+  VIN 3GNAXHEG5TL368953  |  [External] Receipt for Job #4981827
+  VIN 4T1DAACK6SU599933  |  [External] Receipt for Job #5022994
+
+Approval gate: Created By must be one of: Steele, Dirk
+
+Type 'yes' to approve all 19 matched invoice(s) above: Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Approving VIN 3GNAXHEGXTL290668 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN JM3KFBCM4S0808511 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN JM3KKCHD0S1216785 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN KNDNB5KA5T6122311 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 5FNRL6H68TB060544 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN KL77LHEP8TC138380 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN KMHL64JA4SA465139 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 4T1DAACK4SU602117 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 1GNERGKS9TJ214283 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 5YFB4MDE8TP431206 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 5TDAAAB54TS131661 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 3C4NJDBN3ST548874 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 1FMCU9MN1SUA99382 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 3GKALMEG8TL417614 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 1FMJK1M81SEA27374 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 5YJ3E1EA9PF436475 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN JM3KKCHD7T1354678 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 7MMVABBL8TN463467 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Approving VIN 5XYP64GC5SG653439 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Approved.
+
+Done. Queue updated.
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-29 17:30:38
+======================================================================
+
+============================================================
+STEP 2: CHECK - looking up each queued VIN in FieldPO
+============================================================
+Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN 3GKALMEG5TL276842 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN LRBFZSR44TD067553 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 3GKALMEGXTL400152 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN KMHL24JJ1TA157696 ...
+  Already APPROVED -- skipping, moving to next invoice.
+
+Checking VIN 3GNAXHEG5TL368953 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Could not complete check for VIN 3GNAXHEG5TL368953: TimeoutError: Locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("text=MVA#").first
+
+    URL: https://supply-chain.east.prod.sdp.abg.cloud/fieldpo/search
+    Title: FieldPO
+
+Checking VIN 4T1DAACK6SU599933 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Queue updated: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-29 17:37:51
+======================================================================
+
+============================================================
+STEP 2: CHECK - looking up each queued VIN in FieldPO
+============================================================
+Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN 3GNAXHEG5TL368953 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Could not complete check for VIN 3GNAXHEG5TL368953: TimeoutError: Locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("text=MVA#").first
+
+    URL: https://supply-chain.east.prod.sdp.abg.cloud/fieldpo/search
+    Title: FieldPO
+
+Queue updated: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-29 17:47:06
+======================================================================
+
+============================================================
+STEP 2: CHECK - looking up each queued VIN in FieldPO
+============================================================
+Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN 3GNAXHEG3TL368952 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Already APPROVED -- skipping, moving to next invoice.
+
+Queue updated: C:\Users\steeldir\Code\GlassOrchestrator\outlook\invoices_queue.csv
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-29 18:03:13
+======================================================================
+
+============================================================
+VIN TRACE REPORT
+============================================================
+Searching Outlook AGN\Invoice folders for VIN matches...
+
+------------------------------------------------------------
+VIN: 1GKENKKSXTJ197778
+TRACE STATUS: FAILED
+Queue matches: 1 | Outlook email matches: 0
+Queue history:
+  [approve_failed] 2026-07-22 17:19:53.144000+00:00 | Amt $340.00 | Auth $340.00 | Match=True | [External] Invoice #5090850
+Outlook invoice email matches: no matches
+
+============================================================
+Trace summary: approved=0, failed=1, skipped=0, processed=0, missing=0
+============================================================
+
+All done.
+
+======================================================================
+RUN STARTED: 2026-07-29 18:04:13
+======================================================================
+
+============================================================
+VIN TRACE REPORT
+============================================================
+Searching Outlook AGN\Invoice folders for VIN matches...
+
+------------------------------------------------------------
+VIN: 1GKENKKSXTJ197778
+TRACE STATUS: FAILED
+Queue matches: 1 | Outlook email matches: 2
+Queue history:
+  [approve_failed] 2026-07-22 17:19:53.144000+00:00 | Amt $340.00 | Auth $340.00 | Match=True | [External] Invoice #5090850
+Outlook invoice email matches:
+  [Invoice] 2026-07-22 15:55:48.388000+00:00 | categorized_processed=no | source=subject_id | [External] Receipt for Job #5090850
+  [Invoice\Processed] 2026-07-22 17:19:53.144000+00:00 | categorized_processed=no | source=subject_id | [External] Invoice #5090850
+
+============================================================
+Trace summary: approved=0, failed=1, skipped=0, processed=0, missing=0
+============================================================
+
+All done.
+
+======================================================================
+RUN STARTED: 2026-07-29 18:06:49
+======================================================================
+usage: agn_invoices.py [-h] [--setup-credentials] [--extract-only] [--check-only] [--approve] [--approve-only] [--silent] [--yes] [--trace-vin TRACE_VIN]
+agn_invoices.py: error: argument --trace-vin: expected one argument
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-29 18:07:31
+======================================================================
+
+============================================================
+VIN TRACE REPORT
+============================================================
+Searching Outlook AGN\Invoice folders for VIN matches...
+
+------------------------------------------------------------
+VIN: KMHLM4DG4RU662228
+TRACE STATUS: MISSING
+Queue matches: 0 | Outlook email matches: 0
+Queue history: no matches
+Outlook invoice email matches: no matches
+
+============================================================
+Trace summary: approved=0, failed=0, skipped=0, processed=0, missing=1
+============================================================
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-29 18:10:21
+======================================================================
+
+============================================================
+VIN TRACE REPORT
+============================================================
+Searching Outlook AGN\Invoice folders for VIN matches...
+
+------------------------------------------------------------
+VIN: 3FMTK3SU1PMA97379
+TRACE STATUS: MISSING
+Queue matches: 0 | Outlook email matches: 0
+Queue history: no matches
+Outlook invoice email matches: no matches
+
+============================================================
+Trace summary: approved=0, failed=0, skipped=0, processed=0, missing=1
+============================================================
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-29 18:13:37
+======================================================================
+
+============================================================
+VIN TRACE REPORT
+============================================================
+Searching Outlook AGN\Invoice folders for VIN matches...
+
+------------------------------------------------------------
+VIN: JA4J4VA85SZ057913
+TRACE STATUS: MISSING
+Queue matches: 0 | Outlook email matches: 0
+Queue history: no matches
+Outlook invoice email matches: no matches
+
+============================================================
+Trace summary: approved=0, failed=0, skipped=0, processed=0, missing=1
+============================================================
+
+All done.
+
+Press Enter to close...
+======================================================================
+RUN STARTED: 2026-07-29 18:15:07
+======================================================================
+
+============================================================
+VIN TRACE REPORT
+============================================================
+Searching Outlook AGN\Invoice folders for VIN matches...
+
+------------------------------------------------------------
+VIN: 1GNS6DKD8TR304764
+TRACE STATUS: MISSING
+Queue matches: 0 | Outlook email matches: 0
+Queue history: no matches
+Outlook invoice email matches: no matches
+
+============================================================
+Trace summary: approved=0, failed=0, skipped=0, processed=0, missing=1
+============================================================
+
+All done.
+
+Press Enter to close...

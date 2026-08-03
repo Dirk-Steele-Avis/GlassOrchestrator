@@ -85,11 +85,14 @@ class ScanPage:
         # Ready as soon as the bottom-nav Scan tab, the Begin Scanning button,
         # or the MVA/VIN input is visible — these are the three Scan-related
         # surfaces the auth race may land on.
-        if self._scan_nav() is not None:
-            return True
-        if self._page.get_by_role("button", name=BEGIN_SCANNING_NAME).is_visible():
-            return True
-        return self._page.get_by_label(INPUT_ARIA_LABEL).first.is_visible()
+        try:
+            if self._scan_nav() is not None:
+                return True
+            if self._page.get_by_role("button", name=BEGIN_SCANNING_NAME).is_visible():
+                return True
+            return self._page.get_by_label(INPUT_ARIA_LABEL).first.is_visible()
+        except Exception:
+            return False
 
     def submit(self, mva: str) -> "VehicleDetailsPage":
         from .vehicle_details_page import VehicleDetailsPage

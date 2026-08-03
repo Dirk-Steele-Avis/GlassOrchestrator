@@ -104,6 +104,7 @@ async def _launch_persistent_profile_context(
             user_data_dir=str(user_data_dir),
             channel="msedge",
             headless=headless,
+            chromium_sandbox=True,
             no_viewport=not headless,
             args=launch_args,
         )

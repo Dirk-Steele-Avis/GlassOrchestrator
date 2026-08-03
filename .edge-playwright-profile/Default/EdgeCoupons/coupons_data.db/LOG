@@ -1,0 +1,15 @@
+2026/08/03-08:08:46.555 3820 Reusing MANIFEST C:\Users\steeldir\Code\GlassOrchestrator\.edge-playwright-profile\Default\EdgeCoupons/coupons_data.db/MANIFEST-000001
+2026/08/03-08:08:46.577 3820 Recovering log #133
+2026/08/03-08:08:46.578 3820 Reusing old log C:\Users\steeldir\Code\GlassOrchestrator\.edge-playwright-profile\Default\EdgeCoupons/coupons_data.db/000133.log 
+2026/08/03-08:08:47.208 2364 Level-0 table #137: started
+2026/08/03-08:08:47.349 2364 Level-0 table #137: 683264 bytes OK
+2026/08/03-08:08:47.356 2364 Delete type=0 #133
+2026/08/03-08:08:47.358 2364 Compacting 4@0 + 1@1 files
+2026/08/03-08:08:47.420 2364 Generated table #138@0: 3 keys, 683264 bytes
+2026/08/03-08:08:47.421 2364 Compacted 4@0 + 1@1 files => 683264 bytes
+2026/08/03-08:08:47.424 2364 compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/08/03-08:08:47.427 2364 Delete type=2 #125
+2026/08/03-08:08:47.428 2364 Delete type=2 #128
+2026/08/03-08:08:47.428 2364 Delete type=2 #131
+2026/08/03-08:08:47.428 2364 Delete type=2 #134
+2026/08/03-08:08:47.428 2364 Delete type=2 #137

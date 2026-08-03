@@ -82,16 +82,16 @@ class TestWIH2_ShouldHandleExistingComplaint:
 
     @pytest.mark.parametrize(
         "text",
-        ["glass repair needed", "windshield broken", "crack on front", "chip detected", "replace window"],
+        ["Open\nGlass repair needed", "Open\nWindshield broken", "Open\nCrack on front", "Open\nChip detected", "Open\nReplace window"],
     )
-    def test_returns_true_for_glass_keywords(self, text):
+    def test_returns_true_for_open_glass_complaints(self, text):
         assert self.handler.should_handle_existing_complaint(text) is True
 
     @pytest.mark.parametrize(
         "text",
-        ["oil change due", "brake pad replacement"],
+        ["Closed\nGlass repair needed", "Completed\nWindshield broken", "Open\nOil change due", "Open\nBrake pad replacement"],
     )
-    def test_returns_false_for_non_glass_keywords(self, text):
+    def test_returns_false_for_non_open_or_non_glass_complaints(self, text):
         assert self.handler.should_handle_existing_complaint(text) is False
 
 

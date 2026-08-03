@@ -1,0 +1,83 @@
+{
+  "created_at": "2026-07-29T08:34:18.432258",
+  "spreadsheet_id": "1eltlDO-nt-rBicbz_h3CmPc4g0TJNR9wFcsAw2ngNvs",
+  "sheet_name": "GlassClaims",
+  "next_action_column_1based": 4,
+  "rows": [
+    {
+      "row_index": 2104,
+      "mva": "61317244",
+      "previous_next_action": ""
+    },
+    {
+      "row_index": 2105,
+      "mva": "56663132",
+      "previous_next_action": ""
+    },
+    {
+      "row_index": 2106,
+      "mva": "60111192",
+      "previous_next_action": ""
+    },
+    {
+      "row_index": 2107,
+      "mva": "59753341",
+      "previous_next_action": ""
+    },
+    {
+      "row_index": 2108,
+      "mva": "61585624",
+      "previous_next_action": ""
+    },
+    {
+      "row_index": 2109,
+      "mva": "61583454",
+      "previous_next_action": ""
+    },
+    {
+      "row_index": 2110,
+      "mva": "61648064",
+      "previous_next_action": ""
+    },
+    {
+      "row_index": 2113,
+      "mva": "57950410",
+      "previous_next_action": ""
+    },
+    {
+      "row_index": 2114,
+      "mva": "60565595",
+      "previous_next_action": ""
+    },
+    {
+      "row_index": 2115,
+      "mva": "53659756",
+      "previous_next_action": ""
+    },
+    {
+      "row_index": 2116,
+      "mva": "61744550",
+      "previous_next_action": ""
+    },
+    {
+      "row_index": 2117,
+      "mva": "54036953",
+      "previous_next_action": ""
+    },
+    {
+      "row_index": 2118,
+      "mva": "60217706",
+      "previous_next_action": ""
+    },
+    {
+      "row_index": 2119,
+      "mva": "61563821",
+      "previous_next_action": ""
+    },
+    {
+      "row_index": 2122,
+      "mva": "59646996",
+      "previous_next_action": ""
+    }
+  ]
+}

@@ -15,9 +15,12 @@ class LocationPickerPage:
         self._page = page
 
     def is_displayed(self) -> bool:
-        return self._page.get_by_role(
-            "heading", name="Now, choose your location:"
-        ).is_visible()
+        try:
+            return self._page.get_by_role(
+                "heading", name="Now, choose your location:"
+            ).is_visible()
+        except Exception:
+            return False
 
     def finish_setup(self) -> None:
         self._page.get_by_role("button", name="Finish Setup").click()
