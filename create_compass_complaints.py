@@ -81,6 +81,7 @@ class CandidateRow:
     row_index: int
     mva: str
     inventory_date_raw: str
+    damage_expectation: str | None = None
 
 
 @dataclass
@@ -197,6 +198,29 @@ def _is_valid_mva(raw: str) -> bool:
     # Requirement: skip blank/invalid/non-numeric MVA rows.
     value = _normalize_mva(raw)
     return bool(value) and value.isdigit()
+
+
+def _normalize_damage_expectation(raw: str) -> str | None:
+    value = raw.strip().lower()
+    if not value:
+        return None
+
+    is_repair = bool(re.search(r"\brepair\b|\bchip\b", value)) or value == "r"
+    is_replace = bool(re.search(r"\breplace\b|\breplacement\b|\bcrack\b", value))
+
+    if is_repair and not is_replace:
+        return "repair"
+    if is_replace and not is_repair:
+        return "replace"
+    return None
+
+
+def _subcategory_for_damage_expectation(expectation: str | None) -> str | None:
+    if expectation == "repair":
+        return "Windshield Chip"
+    if expectation == "replace":
+        return "Windshield Crack"
+    return None
 
 
 def _read_title_texts(table_locator) -> list[str]:
@@ -757,14 +781,30 @@ def _fill_complaint_description(scope, text: str) -> None:
     raise RuntimeError("Complaint Description input not found")
 
 
-def _select_subcategory_if_present(scope) -> bool:
+def _select_subcategory_if_present(scope, preferred: str | None = None, strict_preference: bool = False) -> bool:
     # Some flows require a sub-category before Submit Complaint is enabled.
-    options = [
-        r"windshield\s*crack",
-        r"side/rear\s*window\s*damage",
-        r"windshield\s*chip",
-    ]
-    for pattern in options:
+    # Prefer selecting the exact radio value when available in the popup markup.
+    exact_values: list[str] = []
+    if preferred:
+        exact_values.append(preferred)
+
+    if not strict_preference:
+        exact_values.extend(["Windshield Crack", "Side/Rear Window Damage", "Windshield Chip"])
+
+    for value in exact_values:
+        try:
+            radio = scope.locator(f"input[type='radio'][value='{value}']").first
+            if radio.count() > 0:
+                radio.wait_for(state="attached", timeout=5000)
+                if not radio.is_checked():
+                    radio.check(force=True)
+                if radio.is_checked():
+                    return True
+        except Exception:
+            continue
+
+    label_patterns = [re.escape(v) for v in exact_values]
+    for pattern in label_patterns:
         try:
             option = scope.locator("label", has_text=re.compile(pattern, re.I)).first
             if option.count() > 0 and option.is_visible():
@@ -775,7 +815,7 @@ def _select_subcategory_if_present(scope) -> bool:
     return False
 
 
-def _create_complaint_only(page, mva: str) -> tuple[bool, str]:
+def _create_complaint_only(page, mva: str, damage_expectation: str | None = None) -> tuple[bool, str]:
     try:
         _click_button_by_name(page, r"create\s*complaint")
         page.wait_for_timeout(1200)
@@ -793,6 +833,15 @@ def _create_complaint_only(page, mva: str) -> tuple[bool, str]:
         # Confirmed markup is an anchor role=button that starts disabled.
         submit = scope.locator("a[role='button']", has_text="Submit Complaint").first
         submit.wait_for(state="visible", timeout=10_000)
+        preferred_subcategory = _subcategory_for_damage_expectation(damage_expectation)
+        if preferred_subcategory:
+            log.info(
+                "MVA %s -> expected damage=%s, preferred sub-category=%s",
+                mva,
+                damage_expectation,
+                preferred_subcategory,
+            )
+
         log.info(
             "Complaint form state before submit: drivable_yes=%s category_glass=%s",
             scope.locator("input[type='radio'][value='Yes']").first.is_checked(),
@@ -809,10 +858,32 @@ def _create_complaint_only(page, mva: str) -> tuple[bool, str]:
             )
             return state.get("aria") != "true" and not state.get("disabled")
 
+        if preferred_subcategory:
+            used_subcategory = _select_subcategory_if_present(
+                scope,
+                preferred=preferred_subcategory,
+                strict_preference=True,
+            )
+            if not used_subcategory:
+                return False, f"required_subcategory_not_found: {preferred_subcategory}"
+            page.wait_for_timeout(800)
+
         if not _submit_ready():
             used_subcategory = _select_subcategory_if_present(scope)
             if used_subcategory:
                 page.wait_for_timeout(1000)
+
+        chosen_subcategory = "UNKNOWN"
+        for candidate_value in ["Windshield Chip", "Windshield Crack", "Side/Rear Window Damage"]:
+            try:
+                candidate_radio = scope.locator(f"input[type='radio'][value='{candidate_value}']").first
+                if candidate_radio.count() > 0 and candidate_radio.is_checked():
+                    chosen_subcategory = candidate_value
+                    break
+            except Exception:
+                continue
+
+        log.info("MVA %s -> chosen sub-category=%s", mva, chosen_subcategory)
 
         page.wait_for_function(
             "el => el && el.getAttribute('aria-disabled') !== 'true' && !el.hasAttribute('disabled')",
@@ -1038,6 +1109,15 @@ def _collect_candidates(values: list[list[str]], run_day: date) -> tuple[list[Ca
     headers = values[0]
     inv_col = _find_col(headers, "Inventory Date")
     mva_col = _find_col(headers, "MVA")
+    damage_col = _find_col(
+        headers,
+        "DamageType",
+        "Damage Type",
+        "Repair/Replace",
+        "Repair Replace",
+        "Repair Or Replace",
+        "Repair / Replace",
+    )
 
     missing = []
     if inv_col is None:
@@ -1059,6 +1139,8 @@ def _collect_candidates(values: list[list[str]], run_day: date) -> tuple[list[Ca
         summary.rows_for_day += 1
 
         mva_raw = row[mva_col].strip() if len(row) > mva_col else ""
+        damage_raw = row[damage_col].strip() if (damage_col is not None and len(row) > damage_col) else ""
+        damage_expectation = _normalize_damage_expectation(damage_raw)
         if not inv_raw or inv_date is None or not _is_valid_mva(mva_raw):
             summary.skipped_invalid += 1
             log.info(
@@ -1074,6 +1156,7 @@ def _collect_candidates(values: list[list[str]], run_day: date) -> tuple[list[Ca
                 row_index=row_idx,
                 mva=_normalize_mva(mva_raw),
                 inventory_date_raw=inv_raw,
+                damage_expectation=damage_expectation,
             )
         )
 
@@ -1085,7 +1168,7 @@ def _build_single_candidate(raw_mva: str) -> tuple[list[CandidateRow], RunSummar
     if not _is_valid_mva(mva):
         raise RuntimeError(f"Invalid MVA override: {raw_mva!r}")
     summary = RunSummary(total_rows_read=1, rows_for_day=1)
-    return [CandidateRow(row_index=1, mva=mva, inventory_date_raw=str(date.today()))], summary
+    return [CandidateRow(row_index=1, mva=mva, inventory_date_raw=str(date.today()), damage_expectation=None)], summary
 
 
 # ------------------------------------------------------------
@@ -1163,7 +1246,7 @@ def _create_glass_complaint_and_work_item(mva: str) -> tuple[bool, str]:
             _open_home_page(page)
             page = _click_vehicles(page)
             _search_mva(page, mva)
-            return _create_complaint_only(page, mva)
+            return _create_complaint_only(page, mva, damage_expectation=None)
         except Exception as exc:
             return False, f"create_flow_failed: {exc}"
         finally:
@@ -1234,7 +1317,11 @@ def _process_candidates(candidates: list[CandidateRow], dry_run: bool, summary: 
                         continue
 
                     if not lookup.exists:
-                        complaint_created, complaint_reason = _create_complaint_only(page, item.mva)
+                        complaint_created, complaint_reason = _create_complaint_only(
+                            page,
+                            item.mva,
+                            damage_expectation=item.damage_expectation,
+                        )
                         if not complaint_created:
                             summary.failed += 1
                             log.error(
