@@ -458,3 +458,82 @@ playwright._impl._errors.TargetClosedError: Target page, context or browser has 
 2026-08-03 08:46:36,906 [INFO] FieldPO popup detected. Clicking Resume Work.
 2026-08-03 08:46:50,978 [INFO] Row 2163 MVA 59549011 -> NextAction=FPO1090183
 2026-08-03 08:46:58,180 [INFO] Complete. Updated=18, multi=0, missing=0, single=18, patched_blanks=0, forced_scope_fills=0, verify_match=0, verify_mismatch=0
+2026-08-04 07:56:42,926 [INFO] Starting FieldPO NextAction fill script
+2026-08-04 07:56:46,120 [INFO] Found 11 lookup candidate row(s) and 0 non-blank verification row(s) for today.
+2026-08-04 07:56:46,124 [INFO] Backup written: C:\Users\steeldir\Code\GlassOrchestrator\log\fieldpo_nextaction_backups\nextaction_backup_20260804_075646.json
+2026-08-04 07:56:56,245 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-04 07:56:56,647 [INFO] Lookup MVA 59927501
+2026-08-04 07:56:58,646 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-04 07:57:12,828 [INFO] Row 2164 MVA 59927501 -> NextAction=FPO1093508
+2026-08-04 07:57:12,828 [INFO] Lookup MVA 57732570
+2026-08-04 07:57:14,810 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-04 07:57:28,838 [INFO] Row 2165 MVA 57732570 -> NextAction=FPO1093506
+2026-08-04 07:57:28,838 [INFO] Lookup MVA 60926191
+2026-08-04 07:57:30,838 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-04 07:57:44,993 [INFO] Row 2167 MVA 60926191 -> NextAction=FPO1093499
+2026-08-04 07:57:44,994 [INFO] Lookup MVA 52199280
+2026-08-04 07:57:46,974 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-04 07:58:01,130 [INFO] Row 2170 MVA 52199280 -> NextAction=FPO1091497
+2026-08-04 07:58:01,130 [INFO] Lookup MVA 61335245
+2026-08-04 07:58:03,146 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-04 07:58:17,372 [INFO] Row 2171 MVA 61335245 -> NextAction=FPO1090238
+2026-08-04 07:58:17,372 [INFO] Lookup MVA 61585624
+2026-08-04 07:58:19,350 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-04 07:58:33,404 [INFO] Row 2172 MVA 61585624 -> NextAction=FPO1079594
+2026-08-04 07:58:33,405 [INFO] Lookup MVA 60435756
+2026-08-04 07:58:35,382 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-04 07:58:49,429 [INFO] Row 2173 MVA 60435756 -> NextAction=FPO1093497
+2026-08-04 07:58:49,430 [INFO] Lookup MVA 60566461
+2026-08-04 07:58:51,415 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-04 07:59:05,455 [INFO] Row 2174 MVA 60566461 -> NextAction=FPO1093495
+2026-08-04 07:59:05,456 [INFO] Lookup MVA 61894825
+2026-08-04 07:59:07,450 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-04 07:59:21,574 [INFO] Row 2175 MVA 61894825 -> NextAction=FPO1093469
+2026-08-04 07:59:21,575 [INFO] Lookup MVA 61104131
+2026-08-04 07:59:23,724 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-04 07:59:37,716 [INFO] Row 2177 MVA 61104131 -> NextAction=FPO1091397
+2026-08-04 07:59:37,716 [INFO] Lookup MVA 60565595
+2026-08-04 07:59:39,699 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-04 07:59:53,744 [INFO] Row 2178 MVA 60565595 -> NextAction=FPO1082782
+2026-08-04 07:59:59,273 [INFO] Complete. Updated=11, multi=0, missing=0, single=11, patched_blanks=0, forced_scope_fills=0, verify_match=0, verify_mismatch=0
+2026-08-05 07:59:11,850 [INFO] Starting FieldPO NextAction fill script
+2026-08-05 07:59:15,483 [INFO] Found 12 lookup candidate row(s) and 0 non-blank verification row(s) for today.
+2026-08-05 07:59:15,487 [INFO] Backup written: C:\Users\steeldir\Code\GlassOrchestrator\log\fieldpo_nextaction_backups\nextaction_backup_20260805_075915.json
+2026-08-05 07:59:26,770 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-05 07:59:27,298 [INFO] Lookup MVA 60091511
+2026-08-05 07:59:29,636 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-05 07:59:43,981 [INFO] Row 2180 MVA 60091511 -> NextAction=FPO1086518
+2026-08-05 07:59:43,982 [INFO] Lookup MVA 61107616
+2026-08-05 07:59:46,045 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-05 08:00:00,251 [INFO] Row 2181 MVA 61107616 -> NextAction=FPO1077597
+2026-08-05 08:00:00,251 [INFO] Lookup MVA 60073440
+2026-08-05 08:00:02,255 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-05 08:00:16,367 [INFO] Row 2182 MVA 60073440 -> NextAction=FPO1095181
+2026-08-05 08:00:16,368 [INFO] Lookup MVA 61585624
+2026-08-05 08:00:18,494 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-05 08:00:32,605 [INFO] Row 2184 MVA 61585624 -> NextAction=FPO1079594
+2026-08-05 08:00:32,605 [INFO] Lookup MVA 52199280
+2026-08-05 08:00:34,570 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-05 08:00:48,862 [INFO] Row 2185 MVA 52199280 -> NextAction=FPO1091497
+2026-08-05 08:00:48,862 [INFO] Lookup MVA 59833270
+2026-08-05 08:00:50,929 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-05 08:01:05,085 [INFO] Row 2188 MVA 59833270 -> NextAction=FPO1095179
+2026-08-05 08:01:05,086 [INFO] Lookup MVA 60255031
+2026-08-05 08:01:07,062 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-05 08:01:21,022 [INFO] Row 2189 MVA 60255031 -> NextAction=FPO1095177
+2026-08-05 08:01:21,022 [INFO] Lookup MVA 61317244
+2026-08-05 08:01:23,081 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-05 08:01:37,311 [INFO] Row 2191 MVA 61317244 -> NextAction=FPO1086502
+2026-08-05 08:01:37,312 [INFO] Lookup MVA 61104131
+2026-08-05 08:01:39,294 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-05 08:01:53,484 [INFO] Row 2194 MVA 61104131 -> NextAction=FPO1091397
+2026-08-05 08:01:53,497 [INFO] Lookup MVA 57356154
+2026-08-05 08:01:55,493 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-05 08:02:09,715 [INFO] Row 2195 MVA 57356154 -> NextAction=FPO1095053
+2026-08-05 08:02:09,716 [INFO] Lookup MVA 60565595
+2026-08-05 08:02:11,689 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-05 08:02:25,753 [INFO] Row 2196 MVA 60565595 -> NextAction=FPO1082782
+2026-08-05 08:02:25,753 [INFO] Lookup MVA 59549011
+2026-08-05 08:02:27,733 [INFO] FieldPO popup detected. Clicking Resume Work.
+2026-08-05 08:02:41,783 [INFO] Row 2197 MVA 59549011 -> NextAction=FPO1090183
+2026-08-05 08:02:47,312 [INFO] Complete. Updated=12, multi=0, missing=0, single=12, patched_blanks=0, forced_scope_fills=0, verify_match=0, verify_mismatch=0
