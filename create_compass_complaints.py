@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import re
 import time
 import sys
@@ -41,6 +42,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
+from config.config_loader import get_config
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -576,8 +578,90 @@ def _has_open_glass_work_item(page) -> tuple[bool, str]:
 def _open_home_page(page) -> None:
     page.goto(COMPASS_HOME_URL)
     page.wait_for_load_state("domcontentloaded")
+    _handle_msft_auth_if_needed(page)
     log.info("Compass page after goto: url=%s title=%s", page.url, page.title())
     page.wait_for_timeout(SETTLE_WAIT_MS)
+
+
+def _credentials() -> tuple[str, str, str]:
+    """Resolve Microsoft SSO credentials from env first, then config."""
+    username = str(os.getenv("GLASS_LOGIN_USERNAME") or get_config("username", "")).strip()
+    password = str(os.getenv("GLASS_LOGIN_PASSWORD") or get_config("password", "")).strip()
+    sso_email = str(get_config("credentials.sso_email", "")).strip()
+    return username, password, sso_email
+
+
+def _pick_sso_account_if_needed(page, sso_email: str) -> None:
+    """Select account on Microsoft picker when it appears."""
+    try:
+        picker = page.locator(
+            '[aria-label*="Pick an account"], [data-testid="sso-page-identifier"]'
+        ).first
+        if picker.count() == 0 or not picker.is_visible(timeout=3_000):
+            return
+
+        tile = None
+        if sso_email:
+            candidate = page.locator('[data-testid="account-tile"]').filter(has_text=sso_email).first
+            if candidate.count() > 0:
+                tile = candidate
+
+        if tile is None:
+            tile = page.locator('[data-testid="account-tile"]').first
+
+        if tile.count() > 0:
+            tile.click(timeout=8_000)
+            page.wait_for_load_state("domcontentloaded")
+            log.info("Selected SSO account tile")
+    except Exception:
+        # Optional step: continue and let downstream selectors reveal auth state.
+        return
+
+
+def _handle_msft_auth_if_needed(page) -> None:
+    """Handle Microsoft auth prompts when present; no-op when already authenticated."""
+    username, password, sso_email = _credentials()
+
+    # Automatic-login relay page can take a moment before showing the next auth state.
+    if "automatic-login" in (page.url or ""):
+        page.wait_for_timeout(2_000)
+
+    # If account picker appears first, resolve it.
+    _pick_sso_account_if_needed(page, sso_email)
+
+    # If login form is visible, attempt credentialed sign-in.
+    try:
+        login_input = page.locator('input[name="loginfmt"]').first
+        if login_input.count() == 0 or not login_input.is_visible(timeout=3_000):
+            return
+
+        if not username or not password:
+            log.info(
+                "Microsoft login form detected but username/password are not configured; "
+                "manual login is required for this run."
+            )
+            return
+
+        log.info("Microsoft login form detected; attempting automated sign-in")
+        login_input.fill(username, timeout=10_000)
+        page.locator("#idSIButton9").first.click(timeout=10_000)
+
+        password_input = page.locator('input[name="passwd"]').first
+        password_input.wait_for(state="visible", timeout=10_000)
+        password_input.fill(password, timeout=10_000)
+        page.locator("#idSIButton9").first.click(timeout=10_000)
+
+        # Optional "Stay signed in" prompt.
+        try:
+            page.locator("#idBtn_Back").first.click(timeout=3_000)
+        except Exception:
+            pass
+
+        _pick_sso_account_if_needed(page, sso_email)
+        page.wait_for_load_state("domcontentloaded")
+        log.info("Microsoft sign-in flow completed")
+    except Exception as exc:
+        log.warning("Microsoft sign-in automation did not complete cleanly: %s", exc)
 
 
 def _click_vehicles(page):

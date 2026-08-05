@@ -38,6 +38,7 @@ log/*.log
 log/*.png
 log/failures/
 !log/.gitkeep
+CreateCompassComplaints.log
 
 # Runtime diagnostics artifacts
 artifacts/
