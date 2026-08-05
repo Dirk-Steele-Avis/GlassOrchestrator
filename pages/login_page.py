@@ -1,5 +1,5 @@
 import time
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import ElementClickInterceptedException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
@@ -255,9 +255,47 @@ class LoginPage:
                 )
 
             # Submit via button because Enter key behavior is inconsistent here.
-            if not click_element(self.driver, (By.XPATH, "//button[.//span[normalize-space()='Submit']]")):
+            submit_locator = (By.XPATH, "//button[.//span[normalize-space()='Submit']]")
+            overlay_locator = (By.CSS_SELECTOR, "div[class*='fleet-operations-pwa__overlay__']")
+            submit_clicked = False
+
+            for attempt in range(1, 6):
+                try:
+                    # Overlay is transient; wait briefly for it to disappear before clicking.
+                    WebDriverWait(self.driver, 3).until(
+                        EC.invisibility_of_element_located(overlay_locator)
+                    )
+                except TimeoutException:
+                    pass
+
+                try:
+                    submit_button = WebDriverWait(self.driver, 5).until(
+                        EC.element_to_be_clickable(submit_locator)
+                    )
+                    submit_button.click()
+                    submit_clicked = True
+                    break
+                except ElementClickInterceptedException:
+                    log.warning("[LOGIN][WWID] Submit click intercepted (attempt %d/5)", attempt)
+                    time.sleep(1)
+                except TimeoutException:
+                    log.warning("[LOGIN][WWID] Submit button not clickable yet (attempt %d/5)", attempt)
+                    time.sleep(1)
+
+            if not submit_clicked:
+                # Final fallback: JS click in case Selenium click is repeatedly intercepted.
+                try:
+                    submit_button = self.driver.find_element(*submit_locator)
+                    self.driver.execute_script("arguments[0].click();", submit_button)
+                    submit_clicked = True
+                    log.info("[LOGIN][WWID] Submit clicked via JS fallback")
+                except Exception:
+                    pass
+
+            if not submit_clicked:
                 log.warning(f"[LOGIN][WARN] Could not click WWID submit button")
                 return {"status": "failed", "reason": "wwid_submit_failed"}
+
             log.info(f"[LOGIN] WWID submitted via button")
             return {"status": "ok"}
 
