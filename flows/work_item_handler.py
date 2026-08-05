@@ -158,12 +158,14 @@ class GlassWorkItemHandler(WorkItemHandler):
     
     def should_handle_existing_complaint(self, complaint_text: str) -> bool:
         """
-        Determine if existing complaint is glass-related.
-        Look for glass keywords in complaint text.
+        Determine if existing complaint is open and glass-related.
+        Only open complaints should be reused.
         """
         glass_keywords = ["glass", "windshield", "crack", "chip", "window"]
-        complaint_lower = complaint_text.lower()
-        return any(keyword in complaint_lower for keyword in glass_keywords)
+        complaint_lower = (complaint_text or "").lower()
+        lines = [line.strip() for line in complaint_lower.splitlines() if line.strip()]
+        is_open = bool(lines) and lines[0] == "open"
+        return is_open and any(keyword in complaint_lower for keyword in glass_keywords)
     
     # ----------------------------------------------------------------------------
     # AUTHOR:       Dirk Steele <dirk.avis@gmail.com>
