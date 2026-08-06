@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -73,10 +74,9 @@ async def click_compass_mobile_tile(page: Page) -> Page:
     """Click the 'Compass Mobile' app launcher; returns the new Page that opens in a new tab."""
     log.info("[LOGIN] Clicking Compass Mobile tile (current URL: %s)", page.url)
     try:
+        await page.wait_for_timeout(3_000)
         compass_app_label = str(get_config("compass_app_label", "Compass Mobile"))
         selectors = [
-            'a[data-test-id="workshop-inline-button"][role="button"]',
-            '//a[@data-test-id="workshop-inline-button" and @role="button"]',
             '//a[@role="button" and .//span[contains(normalize-space(.), "Compass Mobile (Leaving Soon")]]',
             f"//a[@role='button']//span[contains(normalize-space(.), '{compass_app_label}')]",
             f"//a[@role='button'][.//*[contains(normalize-space(.), '{compass_app_label}')]]",
@@ -90,10 +90,32 @@ async def click_compass_mobile_tile(page: Page) -> Page:
             try:
                 tile = page.locator(selector).first
                 await tile.wait_for(state="visible", timeout=6_000)
-                async with page.context.expect_page(timeout=20_000) as new_page_info:
+
+                pages_before = len(page.context.pages)
+                await page.wait_for_timeout(BUTTON_PUSH_DELAY_MS)
+                await tile.click(timeout=10_000)
+                await page.wait_for_timeout(1_500)
+
+                continue_button = page.locator(
+                    "xpath=//div[@role='dialog'][.//*[contains(normalize-space(.), 'External link')]]"
+                    "//button[normalize-space()='Continue']"
+                ).first
+                if await continue_button.is_visible(timeout=1_500):
                     await page.wait_for_timeout(BUTTON_PUSH_DELAY_MS)
-                    await tile.click(timeout=10_000)
-                new_page = await new_page_info.value
+                    await continue_button.click(timeout=8_000)
+                    await page.wait_for_timeout(1_500)
+
+                deadline = time.monotonic() + 20.0
+                while time.monotonic() < deadline:
+                    pages = list(page.context.pages)
+                    if len(pages) > pages_before:
+                        new_page = pages[-1]
+                        break
+                    await page.wait_for_timeout(300)
+
+                if new_page is None:
+                    raise RuntimeError("Compass Mobile tile click did not open a new tab")
+
                 clicked = True
                 log.info("[LOGIN] Compass tile clicked via selector: %s", selector)
                 break
@@ -104,6 +126,7 @@ async def click_compass_mobile_tile(page: Page) -> Page:
             raise RuntimeError("Compass Mobile tile was not clickable with known selectors")
 
         await new_page.wait_for_load_state("domcontentloaded")
+        await new_page.wait_for_timeout(1_500)
         # Compass opens in a new tab; close the launcher tab to keep a single active tab.
         try:
             if new_page != page and len(page.context.pages) > 1:

@@ -7,6 +7,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import argparse
 import asyncio
 import csv
+from datetime import date, datetime
+import inspect
 import os
 import re
 import subprocess
@@ -27,10 +29,8 @@ from playwright_prototype.config import (
     resolve_step_delay,
 )
 from playwright_prototype.session import ensure_profile_context
-from playwright_prototype.steps import warmup_compass as pw_warmup_compass
+from playwright_prototype.steps import close_open_work_item, warmup_compass as pw_warmup_compass
 from playwright_prototype.steps import navigate_to_mva as pw_navigate_to_mva
-from playwright_prototype.steps import open_glass_work_item_tile, complete_glass_work_item
-from playwright_prototype.steps import COMPLAINT_TYPE_PATTERNS
 
 if TYPE_CHECKING:
     from playwright.async_api import Page
@@ -41,6 +41,26 @@ RESULT_NOT_FOUND = "not_found"
 RESULT_NAV_FAILED = "nav_failed"
 RESULT_ERROR = "error"
 RESULT_TIMEOUT = "timeout"
+
+
+async def _debug_hold_if_configured(page: "Page", args: argparse.Namespace, mva: str, reason: str) -> None:
+    """Keep the page open for manual debugging when configured.
+
+    This is useful for investigating transient UI states before the browser closes.
+    """
+    hold_seconds = int(getattr(args, "debug_hold_seconds", 0) or 0)
+    if hold_seconds <= 0:
+        return
+    log.warning(
+        "[CLOSE] %s - debug hold active for %ss after %s. Capture screenshots now.",
+        mva,
+        hold_seconds,
+        reason,
+    )
+    try:
+        await page.wait_for_timeout(hold_seconds * 1000)
+    except Exception as exc:
+        log.warning("[CLOSE] %s - debug hold interrupted (%s)", mva, exc)
 
 
 def _is_edge_running() -> bool:
@@ -81,41 +101,169 @@ def _load_csv(path: str) -> list[dict]:
         return [row for row in reader if row.get("mva", "").strip()]
 
 
-def _build_targets(args: argparse.Namespace) -> list[dict]:
-    """Build list of (mva, complaint_type) targets from CLI args.
+def _load_sheet_rows() -> list[dict]:
+    """Return rows from the configured Glass sheet tab."""
+    try:
+        import gspread  # pyright: ignore[reportMissingImports]
+    except ModuleNotFoundError:
+        log.error("[CLOSE] Missing dependency 'gspread'. Use project venv and install requirements.")
+        sys.exit(1)
 
-    Returns list of dicts with 'mva' and 'complaint_type' keys.
-    """
-    if args.csv_path:
-        rows = _load_csv(args.csv_path)
-        targets = []
-        valid_types = _get_valid_complaint_types()
+    service_account_json = str(get_config("service_account_json", "Service_account.json")).strip()
+    spreadsheet_id = str(get_config("spreadsheet_id", "")).strip()
+    sheet_name = str(get_config("sheet_name", "GlassClaims")).strip() or "GlassClaims"
 
-        for i, row in enumerate(rows, start=2):
-            mva = row.get("mva", "").strip()
-            if not mva:
-                log.warning("[CLOSE] Row %d: empty MVA, skipping", i)
-                continue
+    if not spreadsheet_id:
+        log.error("[CLOSE] Missing spreadsheet_id in config.")
+        sys.exit(1)
+    if not service_account_json:
+        log.error("[CLOSE] Missing service_account_json in config.")
+        sys.exit(1)
+    if not os.path.exists(service_account_json):
+        log.error("[CLOSE] Service account file not found: %s", service_account_json)
+        sys.exit(1)
 
-            complaint_type = row.get("Type", "").strip()
-            if not complaint_type:
-                log.error("[CLOSE] Row %d: missing 'Type' column for MVA %s", i, mva)
-                sys.exit(1)
+    try:
+        gc = gspread.service_account(filename=service_account_json)
+        sh = gc.open_by_key(spreadsheet_id)
+        ws = sh.worksheet(sheet_name)
+        values = ws.get_all_values()
+        if not values:
+            return []
 
-            if complaint_type not in valid_types:
-                log.error("[CLOSE] Row %d: invalid Type '%s' for MVA %s — must be one of: %s",
-                         i, complaint_type, mva, ", ".join(valid_types))
-                sys.exit(1)
+        headers = [str(header).strip() for header in values[0]]
+        active_columns = [(idx, header) for idx, header in enumerate(headers) if header]
+        rows: list[dict] = []
+        for raw_row in values[1:]:
+            row = {
+                header: (raw_row[idx].strip() if idx < len(raw_row) else "")
+                for idx, header in active_columns
+            }
+            rows.append(row)
+        return rows
+    except Exception as exc:
+        log.error("[CLOSE] Failed to read sheet '%s' (%s): %s", sheet_name, spreadsheet_id, exc)
+        sys.exit(1)
 
-            targets.append({"mva": mva, "complaint_type": complaint_type})
 
-        if not targets:
-            log.error("[CLOSE] No valid MVAs found in %s", args.csv_path)
+def _normalize_sheet_type(raw_type: str, valid_types: list[str]) -> str:
+    """Map sheet type/damage values into supported complaint types."""
+    value = (raw_type or "").strip()
+    if value in valid_types:
+        return value
+
+    lowered = value.lower()
+    if lowered in {"replacement", "repair", "glass"}:
+        return "Glass"
+    if lowered.startswith("pm"):
+        return "PM"
+
+    return ""
+
+
+def _normalize_sheet_mva(raw_mva: str) -> str:
+    """Normalize a sheet MVA to the required 9-digit search form."""
+    value = (raw_mva or "").strip()
+    if len(value) == 8 and value.isdigit():
+        return f"0{value}"
+    if len(value) == 9 and value.isdigit():
+        return value
+    return ""
+
+
+def _parse_inventory_date(value: str) -> date | None:
+    """Parse an Inventory Date cell in strict MM/DD/YYYY format."""
+    raw = (value or "").strip()
+    if not raw:
+        return None
+    try:
+        return datetime.strptime(raw, "%m/%d/%Y").date()
+    except ValueError:
+        return None
+
+
+def _build_targets_from_sheet(max_rows: int | None = None) -> list[dict]:
+    """Build close targets from the configured Glass sheet tab."""
+    rows = _load_sheet_rows()
+    valid_types = _get_valid_complaint_types()
+    targets: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    today = date.today()
+
+    for row in rows:
+        inventory_raw = str(row.get("Inventory Date") or "").strip()
+        inventory_date = _parse_inventory_date(inventory_raw)
+        if inventory_raw and inventory_date is None:
+            log.error("[CLOSE] Invalid Inventory Date format for MVA %s: %s (expected MM/DD/YYYY)", row.get("MVA") or row.get("mva") or "", inventory_raw)
             sys.exit(1)
-        log.info("[CLOSE] Loaded %d MVA(s) from %s", len(targets), args.csv_path)
-        return targets
+        if inventory_date != today:
+            continue
 
-    return [{"mva": args.mva.strip(), "complaint_type": args.complaint_type or "Glass"}]
+        raw_mva = str(row.get("MVA") or row.get("mva") or "").strip()
+        if not raw_mva:
+            continue
+
+        mva = _normalize_sheet_mva(raw_mva)
+        if not mva:
+            log.error("[CLOSE] Invalid MVA format in sheet: %s (expected 8 or 9 digits)", raw_mva)
+            sys.exit(1)
+
+        raw_type = str(row.get("Type") or row.get("Damage Type") or "Glass")
+        complaint_type = _normalize_sheet_type(raw_type, valid_types)
+        if not complaint_type:
+            log.warning("[CLOSE] Sheet row for MVA %s has unsupported type '%s' — skipping", mva, raw_type)
+            continue
+
+        key = (mva, complaint_type)
+        if key in seen:
+            continue
+        seen.add(key)
+        targets.append({"mva": mva, "complaint_type": complaint_type})
+        if max_rows is not None and len(targets) >= max_rows:
+            break
+
+    if not targets:
+        log.error("[CLOSE] No valid MVA targets found in configured sheet.")
+        sys.exit(1)
+
+    if max_rows is None:
+        log.info("[CLOSE] Loaded %d MVA(s) from sheet source", len(targets))
+    else:
+        log.info("[CLOSE] Loaded %d MVA(s) from sheet source (max_rows=%d)", len(targets), max_rows)
+    return targets
+
+
+def _build_targets_from_mvas(raw_mvas: str) -> list[dict]:
+    """Build close targets from a caller-provided list of MVAs."""
+    tokens = [token.strip() for token in re.split(r"[,\s]+", raw_mvas or "") if token.strip()]
+    if not tokens:
+        log.error("[CLOSE] --mvas was provided but no MVA values were parsed.")
+        sys.exit(1)
+
+    targets: list[dict] = []
+    seen: set[str] = set()
+    for raw_mva in tokens:
+        mva = _normalize_sheet_mva(raw_mva)
+        if not mva:
+            log.error("[CLOSE] Invalid MVA format in --mvas: %s (expected 8 or 9 digits)", raw_mva)
+            sys.exit(1)
+        if mva in seen:
+            continue
+        seen.add(mva)
+        targets.append({"mva": mva, "complaint_type": "Glass"})
+
+    log.info("[CLOSE] Loaded %d MVA(s) from explicit --mvas list", len(targets))
+    return targets
+
+
+def _build_targets(args: argparse.Namespace) -> list[dict]:
+    """Build list of targets from explicit MVAs or configured Glass sheet."""
+    explicit_mvas = str(getattr(args, "mvas", "") or "").strip()
+    if explicit_mvas:
+        return _build_targets_from_mvas(explicit_mvas)
+
+    max_rows = getattr(args, "max_rows", None)
+    return _build_targets_from_sheet(max_rows=max_rows)
 
 
 async def _capture_playwright_screenshot(page: "Page", label: str, mva: str) -> None:
@@ -130,49 +278,47 @@ async def _capture_playwright_screenshot(page: "Page", label: str, mva: str) -> 
         log.warning("[CLOSE] Could not capture screenshot: %s", e)
 
 
+async def _ensure_live_page(context, page: "Page", mva: str) -> "Page":
+    """Return a usable page, rebinding to another context page when needed."""
+    try:
+        if page:
+            closed = page.is_closed()
+            if inspect.isawaitable(closed):
+                closed = await closed
+            if not closed:
+                return page
+    except Exception:
+        pass
+
+    live_pages = []
+    for candidate in context.pages:
+        try:
+            closed = candidate.is_closed()
+            if inspect.isawaitable(closed):
+                closed = await closed
+            if not closed:
+                live_pages.append(candidate)
+        except Exception:
+            continue
+    if live_pages:
+        rebound = live_pages[-1]
+        log.warning("[CLOSE] %s - current page closed; rebinding to existing tab: %s", mva, rebound.url)
+        return rebound
+
+    rebound = await context.new_page()
+    await rebound.goto(LOGIN_URL, wait_until="domcontentloaded")
+    log.warning("[CLOSE] %s - current page closed; opened a new tab at login URL", mva)
+    return rebound
+
+
 async def _playwright_close_work_item(page: "Page", mva: str, complaint_type: str) -> tuple[str, str]:
-    """Find the open work item tile of the specified type, expand it, and mark it complete.
-
-    Verifies the tile's actual complaint type matches the expected type before attempting close.
-
-    Returns (result_constant, tile_detail_text).
-    """
-    pattern = COMPLAINT_TYPE_PATTERNS.get(complaint_type, COMPLAINT_TYPE_PATTERNS["Glass"])
-
-    tiles = page.locator("div[class*='fleet-operations-pwa__scan-record__']").filter(
-        has=page.locator("[class*='fleet-operations-pwa__scan-record-header-title-right__']",
-                         has_text=re.compile(r"^open$", re.I))
-    )
-
-    count = await tiles.count()
-    if count == 0:
-        return RESULT_NOT_FOUND, ""
-
-    for idx in range(count):
-        tile = tiles.nth(idx)
-        raw = (await tile.inner_text()).strip()
-        detail = " | ".join(line.strip() for line in raw.splitlines() if line.strip())
-
-        complaints_elem = tile.locator("[class*='fleet-operations-pwa__left__']").filter(
-            has_text=re.compile(r"complaints\s*:", re.I)
-        )
-        if await complaints_elem.count() > 0:
-            complaints_text = (await complaints_elem.first.inner_text()).strip()
-            log.info("[CLOSE] %s - tile %d complaints row: %s", mva, idx, complaints_text)
-
-            match = re.search(r"complaints\s*:\s*(.+)", complaints_text, re.I)
-            if match:
-                actual_complaint = match.group(1).strip()
-                if not pattern.search(actual_complaint):
-                    log.info("[CLOSE] %s - tile %d type mismatch (expected %s, got %s) — skipping", mva, idx, complaint_type, actual_complaint)
-                    continue
-
-        await open_glass_work_item_tile(page, mva, complaint_type)
-        await complete_glass_work_item(page, mva, type=complaint_type)
+    """Open the live Open Work Items row and mark it complete."""
+    try:
+        detail = await close_open_work_item(page, mva, complaint_type=complaint_type)
         return RESULT_CLOSED, detail
-
-    log.warning("[CLOSE] %s - no open %s tile found among %d open tile(s)", mva, complaint_type, count)
-    return RESULT_NOT_FOUND, ""
+    except LookupError:
+        log.warning("[CLOSE] %s - no open %s work item row found", mva, complaint_type)
+        return RESULT_NOT_FOUND, ""
 
 
 async def _run_playwright_close_async(args: argparse.Namespace, targets: list[dict]) -> list[dict]:
@@ -192,13 +338,15 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
     log.info("[CLOSE] %s", "=" * 50)
     log.info("[CLOSE] Close workflow - %d MVA(s)", len(targets))
     log.info("[CLOSE] Runtime config | login_url=%s", LOGIN_URL)
+    debug_hold_seconds = int(getattr(args, "debug_hold_seconds", 0) or 0)
     log.info(
-        "[CLOSE] Runtime config | profile=%s | headless=%s | initial_delay_ms=%s | step_delay_ms=%s | timeout_seconds=%s",
+        "[CLOSE] Runtime config | profile=%s | headless=%s | initial_delay_ms=%s | step_delay_ms=%s | timeout_seconds=%s | debug_hold_seconds=%s",
         edge_profile_directory,
         headless,
         initial_delay_ms,
         step_delay_ms,
         args.timeout_seconds,
+        debug_hold_seconds,
     )
     log.info("[CLOSE] %s", "=" * 50)
 
@@ -244,6 +392,7 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
             for target in targets:
                 mva = target["mva"]
                 complaint_type = target["complaint_type"]
+                page = await _ensure_live_page(context, page, mva)
 
                 log.info("[CLOSE] %s", "-" * 40)
                 log.info("[CLOSE] MVA %s  |  type=%s", mva, complaint_type)
@@ -252,6 +401,7 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
                 settle_timeout = 10.0
                 while (time.monotonic() - settle_start) < settle_timeout:
                     try:
+                        page = await _ensure_live_page(context, page, mva)
                         await page.wait_for_load_state("networkidle", timeout=1_000)
                         log.info("[CLOSE] UI settled")
                         break
@@ -280,7 +430,7 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
                         await page.wait_for_timeout(step_delay_ms or 1000)
 
                     log.info("[CLOSE] %s - navigating to MVA", mva)
-                    await asyncio.wait_for(pw_navigate_to_mva(page, mva), timeout=args.timeout_seconds)
+                    page = await asyncio.wait_for(pw_navigate_to_mva(page, mva), timeout=args.timeout_seconds)
                     landing_url = page.url
                     log.info("[CLOSE] %s - navigation landed at URL: %s", mva, landing_url)
                     _validate_post_navigation_url(landing_url, mva)
@@ -289,20 +439,23 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
                 except asyncio.TimeoutError:
                     log.error("[CLOSE] %s - timed out after %ss during navigation", mva, args.timeout_seconds)
                     await _capture_playwright_screenshot(page, "timeout", mva)
-                    results.append({"mva": mva, "result": RESULT_TIMEOUT, "detail": ""})
+                    await _debug_hold_if_configured(page, args, mva, "navigation timeout")
+                    results.append({"mva": mva, "result": RESULT_TIMEOUT, "detail": "navigation"})
                     continue
                 except (PlaywrightTimeoutError, Exception) as exc:
                     log.error("[CLOSE] %s - navigation failed, skipping: %s", mva, exc)
                     await _capture_playwright_screenshot(page, "nav_failure", mva)
+                    await _debug_hold_if_configured(page, args, mva, "navigation failure")
                     results.append({"mva": mva, "result": RESULT_NAV_FAILED, "detail": ""})
                     continue
 
                 elapsed = time.monotonic() - started
-                remaining = max(1.0, args.timeout_seconds - elapsed)
+                close_timeout = float(args.timeout_seconds)
+                log.info("[CLOSE] %s - navigation completed in %.1fs; close timeout budget=%ss", mva, elapsed, args.timeout_seconds)
 
                 try:
                     result, detail = await asyncio.wait_for(
-                        _playwright_close_work_item(page, mva, complaint_type), timeout=remaining
+                        _playwright_close_work_item(page, mva, complaint_type), timeout=close_timeout
                     )
                     if result == RESULT_CLOSED:
                         log.info("[CLOSE] %s - CLOSED: %s work item marked complete", mva, complaint_type)
@@ -316,10 +469,12 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
                 except asyncio.TimeoutError:
                     log.error("[CLOSE] %s - timed out after %ss during close", mva, args.timeout_seconds)
                     await _capture_playwright_screenshot(page, "timeout", mva)
-                    results.append({"mva": mva, "result": RESULT_TIMEOUT, "detail": ""})
+                    await _debug_hold_if_configured(page, args, mva, "close timeout")
+                    results.append({"mva": mva, "result": RESULT_TIMEOUT, "detail": "close"})
                 except Exception as exc:
                     log.error("[CLOSE] %s - error during close: %s", mva, exc)
                     await _capture_playwright_screenshot(page, "error", mva)
+                    await _debug_hold_if_configured(page, args, mva, "close error")
                     results.append({"mva": mva, "result": RESULT_ERROR, "detail": ""})
         finally:
             await context.close()
@@ -342,6 +497,13 @@ def _log_summary(results: list[dict]) -> tuple[int, int]:
     closed_count = sum(1 for r in results if r["result"] == RESULT_CLOSED)
     not_found_count = sum(1 for r in results if r["result"] == RESULT_NOT_FOUND)
     timeout_count = sum(1 for r in results if r["result"] == RESULT_TIMEOUT)
+    timeout_nav_count = sum(
+        1 for r in results if r["result"] == RESULT_TIMEOUT and r.get("detail") == "navigation"
+    )
+    timeout_close_count = sum(
+        1 for r in results if r["result"] == RESULT_TIMEOUT and r.get("detail") == "close"
+    )
+    timeout_other_count = timeout_count - timeout_nav_count - timeout_close_count
     failed_count = sum(1 for r in results if r["result"] in {RESULT_NAV_FAILED, RESULT_ERROR, RESULT_TIMEOUT})
 
     log.info("[CLOSE] %s", "=" * 50)
@@ -349,6 +511,13 @@ def _log_summary(results: list[dict]) -> tuple[int, int]:
     log.info("[CLOSE]   + Closed:    %d", closed_count)
     log.info("[CLOSE]   - Not found: %d", not_found_count)
     log.info("[CLOSE]   - Timeout:   %d", timeout_count)
+    if timeout_count > 0:
+        log.info(
+            "[CLOSE]     Timeout breakdown: navigation=%d close=%d other=%d",
+            timeout_nav_count,
+            timeout_close_count,
+            timeout_other_count,
+        )
     log.info("[CLOSE]   ! Failed:    %d", failed_count)
     log.info("[CLOSE] %s", "=" * 50)
     for r in results:
@@ -363,23 +532,23 @@ def _log_summary(results: list[dict]) -> tuple[int, int]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Close open glass work items for one or more MVAs."
+        description="Close open glass work items for MVAs loaded from the configured Glass sheet."
     )
-    parser.add_argument("mva", nargs="?", default=None, help="Single target MVA (omit when using --csv)")
-    parser.add_argument("--csv", dest="csv_path", default=None, help="Path to CSV file with 'mva' and 'Type' columns")
-    parser.add_argument("--type", dest="complaint_type", default=None, help="Complaint type for single MVA (e.g., Glass, PM) — optional, defaults to Glass")
     parser.add_argument("--no-pause", action="store_true", help="Deprecated: no-op kept for backward compatibility")
     parser.add_argument("--pause", action="store_true", help="Prompt for Enter before closing the browser (opt-in)")
-    parser.add_argument("--timeout-seconds", type=int, default=90, help="Per-MVA timeout in seconds (default: 90)")
+    parser.add_argument("--timeout-seconds", type=int, default=120, help="Per-phase timeout in seconds for navigation and close (default: 120)")
+    parser.add_argument("--debug-hold-seconds", type=int, default=0, help="Keep browser open this many seconds after failures/timeouts for manual debugging")
+    parser.add_argument("--max-rows", type=int, default=None, help="Cap sheet-sourced targets to the first N eligible rows")
+    parser.add_argument("--mvas", type=str, default="", help="Comma/space-separated MVA list to process explicitly (overrides sheet source)")
 
     args = parser.parse_args()
 
     if args.timeout_seconds <= 0:
         parser.error("--timeout-seconds must be greater than 0")
-    if not args.mva and not args.csv_path:
-        parser.error("Provide a single MVA positional argument or --csv <path>")
-    if args.mva and args.csv_path:
-        parser.error("Provide either a single MVA or --csv, not both")
+    if args.debug_hold_seconds < 0:
+        parser.error("--debug-hold-seconds must be 0 or greater")
+    if args.max_rows is not None and args.max_rows <= 0:
+        parser.error("--max-rows must be greater than 0")
 
     agentic_env = os.getenv("GLASS_AGENTIC", "").strip().lower() in {"1", "true", "yes"}
     should_pause = sys.stdin.isatty() and args.pause and not agentic_env

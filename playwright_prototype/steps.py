@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import inspect
 import logging
 import re
 import time
@@ -22,6 +23,129 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 DATA_ENTRY_SUBMIT_DELAY_MS = 2000
 BUTTON_PUSH_DELAY_MS = 2000
+UI_SETTLE_DELAY_MS = 1500
+
+COMPASS_VEHICLES_BUTTON_SELECTOR = "[data-test-id='workshop-inline-button']"
+COMPASS_SCAN_TAB_SELECTOR = 'button[role="tab"][data-key="scan"]'
+COMPASS_MVA_VIN_INPUT_SELECTOR = "[data-testid='mva-vin-input']"
+COMPASS_MVA_VIN_SUBMIT_SELECTOR = "[data-testid='mva-vin-submit']"
+COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR = "input[type='search'][placeholder*='Keyword Search']"
+COMPASS_WORKSHOP_OBJECT_TABLE_SELECTOR = "[data-test-id='workshop-object-table']"
+COMPASS_WORKSHOP_OBJECT_TITLE_SELECTOR = "[data-test-id='workshop-object-title']"
+
+
+async def _has_visible_mva_input(page: Page) -> bool:
+    """Return True when any known MVA input selector is visible on the current page."""
+    selectors = [
+        'input.bp6-input[placeholder*="Enter MVA"]',
+        'input[type="text"][placeholder*="MVA"]',
+        'div[role="tabpanel"][aria-hidden="false"] input[type="text"]',
+        '[aria-label="Or enter MVA/VIN"]',
+        COMPASS_MVA_VIN_INPUT_SELECTOR,
+        COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR,
+    ]
+    for selector in selectors:
+        try:
+            field = page.locator(selector).first
+            if await field.is_visible(timeout=1_500):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+async def _wait_for_mva_input_visible(page: Page, timeout_ms: int = 15_000) -> bool:
+    """Poll for MVA input visibility until timeout and return True when found."""
+    deadline = time.monotonic() + (timeout_ms / 1000.0)
+    while time.monotonic() < deadline:
+        if await _has_visible_mva_input(page):
+            return True
+        await page.wait_for_timeout(400)
+    return False
+
+
+async def _click_first_visible(locator_candidates: list) -> bool:
+    """Click the first visible locator from a list and return True if a click succeeded."""
+    for locator in locator_candidates:
+        try:
+            visible = locator.is_visible(timeout=2_000)
+            if inspect.isawaitable(visible):
+                visible = await visible
+            if visible:
+                await locator.click(timeout=8_000)
+                return True
+        except Exception:
+            continue
+    return False
+
+
+async def _locator_is_visible(locator, timeout_ms: int = 2_000) -> bool:
+    """Return locator visibility for both Playwright locators and mocked test locators."""
+    try:
+        visible = locator.is_visible(timeout=timeout_ms)
+    except TypeError:
+        visible = locator.is_visible()
+    if inspect.isawaitable(visible):
+        visible = await visible
+    return bool(visible)
+
+
+async def _wait_for_context_page_count(page: Page, prior_count: int, timeout_ms: int = 10_000) -> Page:
+    """Wait for a new page to appear in the current context, returning it when available."""
+    deadline = time.monotonic() + (timeout_ms / 1000.0)
+    while time.monotonic() < deadline:
+        pages = list(page.context.pages)
+        if len(pages) > prior_count:
+            new_page = pages[-1]
+            await new_page.wait_for_load_state("domcontentloaded")
+            return new_page
+        await page.wait_for_timeout(250)
+    return page
+
+
+async def _handle_compass_go_quick_fix(page: Page, mva: str) -> None:
+    """Resolve the Compass Go quick-fix interstitial when it appears."""
+    quick_fix_panel = page.locator("xpath=//*[contains(normalize-space(.), 'This device needs a quick fix')]").first
+    if not await _locator_is_visible(quick_fix_panel, timeout_ms=2_000):
+        return
+
+    log.warning("[STEPS] %s — Compass Go quick-fix screen detected; clicking Try again", mva)
+    try_again = page.get_by_role("button", name=re.compile(r"^Try again$", re.I)).first
+    await try_again.wait_for(state="visible", timeout=8_000)
+    await page.wait_for_timeout(UI_SETTLE_DELAY_MS)
+    await try_again.click(timeout=8_000)
+    await page.wait_for_timeout(3_000)
+
+
+async def _open_vehicle_search_context(page: Page, mva: str) -> Page:
+    """Ensure we are on the Workshop Vehicle Search page using a strict path."""
+    await _handle_compass_go_quick_fix(page, mva)
+
+    if await _has_visible_mva_input(page):
+        return page
+
+    current_page = page
+    log.info("[STEPS] %s — MVA input not visible, opening Vehicles search page", mva)
+
+    vehicles_button = current_page.locator(COMPASS_VEHICLES_BUTTON_SELECTOR).filter(has_text="Vehicles").first
+    await vehicles_button.wait_for(state="visible", timeout=8_000)
+
+    pages_before = list(current_page.context.pages)
+    await vehicles_button.click(timeout=8_000)
+    await current_page.wait_for_timeout(700)
+    pages_after = list(current_page.context.pages)
+    if len(pages_after) > len(pages_before):
+        current_page = pages_after[-1]
+        await current_page.wait_for_load_state("domcontentloaded")
+        log.info("[STEPS] %s — Vehicles click opened new tab: %s", mva, current_page.url)
+
+    if await _wait_for_mva_input_visible(current_page, timeout_ms=20_000):
+        log.info("[STEPS] %s — Vehicle Search context ready", mva)
+        return current_page
+
+    raise RuntimeError(
+        f"[STEPS] {mva} — unable to reach Vehicle Search context (MVA input still not visible)"
+    )
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -89,42 +213,169 @@ async def _wait_for_vehicle_details_ready(page: Page, mva: str, timeout_ms: int 
 
 
 async def _enter_mva(page: Page, mva: str) -> None:
-    """Type an MVA into the Compass search field using a defensive locator chain."""
-    locators = [
-        'input.bp6-input[placeholder*="Enter MVA"]',
-        'input[type="text"][placeholder*="MVA"]',
-        'div[role="tabpanel"][aria-hidden="false"] input[type="text"]',
-    ]
-    for selector in locators:
+    """Type an MVA into the strict Workshop search field and submit.
+
+    No fallback selector chains are used by design.
+    """
+    # Prefer dedicated MVA/VIN input when present.
+    mva_input = page.locator(COMPASS_MVA_VIN_INPUT_SELECTOR).first
+    if await mva_input.is_visible(timeout=2_000):
+        await mva_input.click(timeout=5_000)
+        await mva_input.press("Control+a")
+        await mva_input.press("Backspace")
+        await mva_input.fill(mva)
+        await page.wait_for_timeout(DATA_ENTRY_SUBMIT_DELAY_MS)
+
+        submit_btn = page.locator(COMPASS_MVA_VIN_SUBMIT_SELECTOR).first
+        await submit_btn.wait_for(state="visible", timeout=5_000)
+        await submit_btn.click(timeout=5_000)
+        return
+
+    # Keyword Search mode (confirmed in user-provided screenshot).
+    by_mva = page.get_by_role("button", name=re.compile(r"^Search\s+by\s+MVA$", re.I)).first
+    keyword = page.locator(COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR).first
+
+    await by_mva.wait_for(state="visible", timeout=8_000)
+    await by_mva.click(timeout=5_000)
+
+    await keyword.wait_for(state="visible", timeout=8_000)
+    await keyword.click(timeout=5_000)
+    await keyword.press("Control+a")
+    await keyword.press("Backspace")
+    await keyword.fill(mva)
+    await page.wait_for_timeout(DATA_ENTRY_SUBMIT_DELAY_MS)
+    await keyword.press("Enter")
+
+
+async def _select_vehicle_search_result(page: Page, mva: str) -> None:
+    """Select the searched vehicle from the left-side result list."""
+    if await _locator_is_visible(page.get_by_role("button", name="Add Work Item").first, timeout_ms=2_000):
+        return
+
+    table = page.locator(COMPASS_WORKSHOP_OBJECT_TABLE_SELECTOR).first
+    await table.wait_for(state="visible", timeout=20_000)
+
+    title = table.locator(COMPASS_WORKSHOP_OBJECT_TITLE_SELECTOR).filter(
+        has_text=re.compile(rf"^\s*{re.escape(mva)}\s*$", re.I)
+    ).first
+
+    if await title.count() == 0:
+        result_row = page.locator(
+            f"//div[contains(., '{mva}') and ancestor::*[contains(., 'Searched Vehicles List')]]"
+        ).first
+        await result_row.wait_for(state="visible", timeout=20_000)
+        await page.wait_for_timeout(UI_SETTLE_DELAY_MS)
+        await result_row.click(timeout=8_000)
+    else:
+        await title.wait_for(state="visible", timeout=20_000)
+        await page.wait_for_timeout(UI_SETTLE_DELAY_MS)
+        await title.click(timeout=8_000)
+    await page.wait_for_timeout(UI_SETTLE_DELAY_MS)
+
+
+async def _wait_for_open_work_items_tab_ready(page: Page, mva: str, timeout_ms: int = 30_000) -> None:
+    """Wait for the exact Open Work Items tab to appear for the selected vehicle."""
+    tab = page.locator(
+        "xpath=//div[@role='tab'][.//div[normalize-space()='Open Work Items']]"
+    ).first
+    await tab.wait_for(state="visible", timeout=timeout_ms)
+    log.info("[STEPS] %s — Open Work Items tab is visible", mva)
+
+
+async def _open_open_work_items_row(page: Page, row_title: str) -> tuple[Page, str]:
+    """Open the requested row from the Open Work Items table and return the detail page."""
+    open_tab = page.locator(
+        "xpath=//div[@role='tab'][.//div[normalize-space()='Open Work Items']]"
+    ).first
+    await open_tab.wait_for(state="visible", timeout=15_000)
+    await open_tab.scroll_into_view_if_needed(timeout=5_000)
+    await page.wait_for_timeout(UI_SETTLE_DELAY_MS)
+    await open_tab.click(timeout=10_000)
+    await page.wait_for_timeout(UI_SETTLE_DELAY_MS)
+
+    title = page.locator(
+        f"xpath=//div[normalize-space()='{row_title}']"
+    ).first
+    try:
+        await title.wait_for(state="visible", timeout=15_000)
+    except Exception as exc:
+        raise LookupError(f"Open Work Items row not found: {row_title}") from exc
+    detail_text = (await title.inner_text()).strip()
+
+    prior_count = len(page.context.pages)
+    await page.wait_for_timeout(UI_SETTLE_DELAY_MS)
+    await title.click(timeout=10_000)
+    detail_page = await _wait_for_context_page_count(page, prior_count, timeout_ms=12_000)
+    if detail_page is page:
+        raise RuntimeError("Open work item row click did not open a new tab")
+    return detail_page, detail_text
+
+
+async def _click_action_menu(page: Page) -> None:
+    """Open the work-item action menu on the current details page."""
+    action_menu = page.get_by_role("button", name=re.compile(r"^Action Menu$", re.I)).first
+    await action_menu.wait_for(state="visible", timeout=20_000)
+    await page.wait_for_timeout(UI_SETTLE_DELAY_MS)
+    await action_menu.click(timeout=10_000)
+    await page.wait_for_timeout(UI_SETTLE_DELAY_MS)
+
+
+async def _confirm_mark_complete(page: Page, note: str = "Done") -> None:
+    """Confirm the Mark Complete dialog, filling an optional note when present."""
+    dialog = page.locator("div[role='dialog'], div.bp6-dialog").first
+    try:
+        await dialog.wait_for(state="visible", timeout=15_000)
+    except Exception as exc:
+        raise RuntimeError("Mark Complete dialog not visible") from exc
+
+    for candidate in [
+        dialog.locator("textarea").first,
+        dialog.locator("input[type='text']").first,
+        dialog.locator("input[placeholder*='Correction']").first,
+        dialog.locator("textarea[placeholder*='Correction']").first,
+    ]:
         try:
-            field = page.locator(selector).first
-            await field.wait_for(state="visible", timeout=5_000)
-
-            # Some Compass states keep a prior MVA cached in the input. Use
-            # a strict clear/type path and verify the final value.
-            await field.click(timeout=5_000)
-            await field.press("Control+a")
-            await field.press("Backspace")
-            await field.fill(mva)
-
-            current_value = (await field.input_value()).strip()
-            if current_value != mva:
-                await field.press("Control+a")
-                await field.type(mva, delay=30)
-                current_value = (await field.input_value()).strip()
-
-            if current_value != mva:
-                raise RuntimeError(
-                    f"[STEPS] MVA field value mismatch (expected={mva}, actual={current_value})"
-                )
-
-            # Trigger downstream lookup in case the app only reacts to key events.
-            await page.wait_for_timeout(DATA_ENTRY_SUBMIT_DELAY_MS)
-            await field.press("Enter")
-            return
+            if await candidate.is_visible(timeout=500):
+                await candidate.click(timeout=5_000)
+                await candidate.fill(note)
+                break
         except Exception:
             continue
-    raise RuntimeError(f"[STEPS] MVA input field not found for MVA {mva}")
+
+    confirm = dialog.get_by_role("button", name=re.compile(r"^Mark Complete$", re.I)).first
+    await confirm.wait_for(state="visible", timeout=10_000)
+    await confirm.click(timeout=10_000)
+
+
+async def close_open_work_item(page: Page, mva: str, complaint_type: str = "Glass", note: str = "Done") -> str:
+    """Open the live Open Work Items row and close it through the action menu."""
+    row_title = "GLASS-GLASS" if complaint_type == "Glass" else f"{complaint_type}-{complaint_type}".upper()
+    log.info("[STEPS] %s — opening open-work-items row %s", mva, row_title)
+
+    detail_page, detail_text = await _open_open_work_items_row(page, row_title)
+    log.info("[STEPS] %s — work item details opened", mva)
+
+    await detail_page.wait_for_load_state("domcontentloaded")
+    await detail_page.wait_for_timeout(UI_SETTLE_DELAY_MS)
+
+    await _click_action_menu(detail_page)
+
+    menu_overlay = detail_page.locator("xpath=//*[@role='menu']").first
+    await menu_overlay.wait_for(state="visible", timeout=20_000)
+    menu_text = (await menu_overlay.inner_text()).strip()
+    log.info("[STEPS] %s — action menu opened: %s", mva, menu_text.replace("\n", " | "))
+
+    mark_complete_menu_item = detail_page.locator(
+        "xpath=(//*[@role='menu']//*[contains(normalize-space(.), 'Mark Complete')])[1]"
+    ).first
+    await mark_complete_menu_item.wait_for(state="visible", timeout=20_000)
+    await detail_page.wait_for_timeout(UI_SETTLE_DELAY_MS)
+    await mark_complete_menu_item.click(timeout=10_000)
+    await detail_page.wait_for_timeout(UI_SETTLE_DELAY_MS)
+
+    await _confirm_mark_complete(detail_page, note=note)
+    log.info("[STEPS] %s — %s work item marked complete", mva, complaint_type)
+    return detail_text
 
 
 # ─── Warmup & Navigation ─────────────────────────────────────────────────────
@@ -151,11 +402,10 @@ async def warmup_compass(page: Page) -> None:
         log.warning("[STEPS] Warm-up: 'Add Work Item' not confirmed within timeout — proceeding anyway")
 
 
-async def navigate_to_mva(page: Page, mva: str) -> None:
+async def navigate_to_mva(page: Page, mva: str) -> Page:
     """Enter an MVA and wait for the vehicle page to fully load.
 
-    Waits for 'Add Work Item' to be enabled, then confirms the vehicle detail
-    panel has a populated MVA value matching the requested MVA.
+    Waits for the exact 'Open Work Items' tab to be visible for the selected vehicle.
     """
     log.info("[STEPS] %s — navigating", mva)
     try:
@@ -181,12 +431,13 @@ async def navigate_to_mva(page: Page, mva: str) -> None:
                 page.url,
             )
 
+        page = await _open_vehicle_search_context(page, mva)
+
         await _enter_mva(page, mva)
-        await page.locator("button:not([disabled])").filter(
-            has_text="Add Work Item"
-        ).wait_for(state="visible", timeout=30_000)
-        await _wait_for_vehicle_details_ready(page, mva, timeout_ms=25_000)
+        await _select_vehicle_search_result(page, mva)
+        await _wait_for_open_work_items_tab_ready(page, mva, timeout_ms=30_000)
         log.info("[STEPS] %s — vehicle page loaded", mva)
+        return page
     except Exception as exc:
         raise RuntimeError(f"[STEPS] navigate_to_mva failed for {mva}: {exc}") from exc
 
