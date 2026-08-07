@@ -21,12 +21,12 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.compass_go.auth_flow import AuthFlow  # noqa: E402
 from src.compass_go.diagnostics import setup_file_logging  # noqa: E402
 from src.compass_go.scrape_flow import ScrapeFlow  # noqa: E402
-from src.compass_go.session import CompassGoSession  # noqa: E402
+from src.compass_go.session import CompassGoSession, reset_automation_profile_dir  # noqa: E402
 from src.compass_go.writer import ResultsWriter  # noqa: E402
 
 MVA_CSV = PROJECT_ROOT / "data" / "GlassDataParser.csv"
 RESULTS_FILE = PROJECT_ROOT / "GlassResults.txt"
-AUTH_SESSION_ATTEMPTS = 2
+AUTH_SESSION_ATTEMPTS = 3
 
 logging.basicConfig(
     level=logging.INFO,
@@ -79,7 +79,7 @@ def main() -> int:
                 count = ScrapeFlow(scan, writer).run(mvas)
             log.info("Done: wrote %d rows to %s", count, RESULTS_FILE)
             return 0
-        except RuntimeError as exc:
+        except (RuntimeError, TimeoutError) as exc:
             msg = str(exc)
             if (
                 "browser page closed during sign-in before ScanPage was reachable" in msg
@@ -90,6 +90,28 @@ def main() -> int:
                     attempt,
                     AUTH_SESSION_ATTEMPTS,
                 )
+                continue
+            if (
+                "last_state=quick_fix_recovery" in msg
+                and attempt < AUTH_SESSION_ATTEMPTS
+            ):
+                log.warning(
+                    "Auth session stuck on quick-fix interstitial (attempt %d/%d); resetting automation profile and retrying",
+                    attempt,
+                    AUTH_SESSION_ATTEMPTS,
+                )
+                reset_automation_profile_dir()
+                continue
+            if (
+                "quick-fix interstitial persisted after clear app data" in msg
+                and attempt < AUTH_SESSION_ATTEMPTS
+            ):
+                log.warning(
+                    "Auth session remained on quick-fix after clear app data (attempt %d/%d); resetting automation profile and retrying",
+                    attempt,
+                    AUTH_SESSION_ATTEMPTS,
+                )
+                reset_automation_profile_dir()
                 continue
             raise
 

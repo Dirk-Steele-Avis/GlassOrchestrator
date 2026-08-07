@@ -28,6 +28,7 @@ log = logging.getLogger(__name__)
 DEFAULT_ENTRY_URL = "https://go.avisbudget.palantirfoundry.com/"
 MAX_AUTH_SECONDS = int(os.getenv("COMPASS_GO_AUTH_TIMEOUT_S", "300"))
 POLL_INTERVAL_S = 0.5
+QUICK_FIX_TRY_AGAIN_MAX = int(os.getenv("COMPASS_GO_QUICK_FIX_TRY_AGAIN_MAX", "3"))
 
 
 class AuthFlow:
@@ -37,6 +38,8 @@ class AuthFlow:
         setup_file_logging()
         self._page = page
         self._entry_url = os.getenv("COMPASS_GO_ENTRY_URL", DEFAULT_ENTRY_URL)
+        self._quick_fix_attempts = 0
+        self._quick_fix_cleared = False
         self._sync_pages()
 
     def _sync_pages(self) -> None:
@@ -142,6 +145,48 @@ class AuthFlow:
             "AuthFlow: browser page closed during sign-in before ScanPage was reachable"
         )
 
+    def _handle_quick_fix_if_needed(self) -> bool:
+        """Recover from Compass Go quick-fix interstitial when it appears."""
+        try:
+            panel = self._page.locator(
+                "xpath=//*[contains(normalize-space(.), 'This device needs a quick fix')]"
+            ).first
+            if panel.count() == 0 or not panel.is_visible(timeout=2_000):
+                self._quick_fix_attempts = 0
+                return False
+
+            if self._quick_fix_cleared and self._quick_fix_attempts >= QUICK_FIX_TRY_AGAIN_MAX:
+                raise RuntimeError(
+                    "AuthFlow: quick-fix interstitial persisted after clear app data"
+                )
+
+            if self._quick_fix_attempts >= QUICK_FIX_TRY_AGAIN_MAX and not self._quick_fix_cleared:
+                log.warning("Auth: quick-fix persists; clicking Clear app data")
+                clear_button = self._page.get_by_role("button", name="Clear app data").first
+                clear_button.wait_for(state="visible", timeout=8_000)
+                clear_button.click(timeout=8_000)
+                self._quick_fix_cleared = True
+                self._quick_fix_attempts = 0
+                self._page.wait_for_timeout(2_500)
+                return True
+
+            self._quick_fix_attempts += 1
+            log.warning(
+                "Auth: quick-fix interstitial detected; clicking Try again (%d/%d)",
+                self._quick_fix_attempts,
+                QUICK_FIX_TRY_AGAIN_MAX,
+            )
+            retry_button = self._page.get_by_role("button", name="Try again").first
+            retry_button.wait_for(state="visible", timeout=8_000)
+            retry_button.click(timeout=8_000)
+            self._page.wait_for_timeout(1_500)
+            return True
+        except Exception as exc:
+            if isinstance(exc, RuntimeError):
+                raise
+            log.warning("Auth: quick-fix interstitial handling failed: %s", exc)
+            return False
+
     def ensure_signed_in(self) -> ScanPage:
         """Block until ScanPage is reachable. Raise if it doesn't appear."""
         deadline = time.monotonic() + MAX_AUTH_SECONDS
@@ -151,6 +196,11 @@ class AuthFlow:
             self._adopt_best_context_page()
             self._ensure_page_alive()
             self._adopt_best_context_page()
+
+            if self._handle_quick_fix_if_needed():
+                last_state = "quick_fix_recovery"
+                time.sleep(POLL_INTERVAL_S)
+                continue
 
             if self._scan.is_displayed():
                 log.info("Auth: ScanPage ready (state=%s)", last_state)

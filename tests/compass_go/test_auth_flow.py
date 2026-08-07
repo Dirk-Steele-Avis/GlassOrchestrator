@@ -1,4 +1,5 @@
 import os
+import time
 
 from src.compass_go.auth_flow import AuthFlow
 
@@ -108,3 +109,74 @@ def test_adopt_best_context_page_prefers_scan_url_over_blank():
     flow._adopt_best_context_page()
 
     assert flow._page is scan
+
+
+def test_ensure_signed_in_handles_quick_fix_before_scan(monkeypatch):
+    page = type("Page", (), {})()
+    page.context = type("Ctx", (), {"pages": [page]})()
+    page.is_closed = lambda: False
+    page.url = "https://go.avisbudget.palantirfoundry.com/"
+
+    flow = AuthFlow(page)
+
+    # Avoid real sleeping during loop.
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+
+    # Simulate quick-fix once, then scan ready.
+    quick_fix_calls = {"count": 0}
+
+    def _handle_quick_fix_once():
+        quick_fix_calls["count"] += 1
+        return quick_fix_calls["count"] == 1
+
+    monkeypatch.setattr(flow, "_adopt_best_context_page", lambda: None)
+    monkeypatch.setattr(flow, "_ensure_page_alive", lambda: None)
+    monkeypatch.setattr(flow, "_handle_quick_fix_if_needed", _handle_quick_fix_once)
+
+    class _Scan:
+        def __init__(self):
+            self.calls = 0
+
+        def is_displayed(self):
+            self.calls += 1
+            return self.calls >= 1 and quick_fix_calls["count"] > 1
+
+    scan = _Scan()
+    flow._scan = scan
+    flow._login = type("Login", (), {"is_displayed": lambda self: False})()
+    flow._location = type("Loc", (), {"is_displayed": lambda self: False})()
+
+    result = flow.ensure_signed_in()
+
+    assert result is scan
+    assert quick_fix_calls["count"] >= 2
+
+
+def test_handle_quick_fix_raises_when_persistent_after_clear(monkeypatch):
+    page = type("Page", (), {})()
+    page.context = type("Ctx", (), {"pages": [page]})()
+    page.is_closed = lambda: False
+    page.url = "https://go.avisbudget.palantirfoundry.com/"
+
+    flow = AuthFlow(page)
+    flow._quick_fix_cleared = True
+    flow._quick_fix_attempts = 3
+
+    class _Panel:
+        @property
+        def first(self):
+            return self
+
+        def count(self):
+            return 1
+
+        def is_visible(self, timeout=None):
+            return True
+
+    page.locator = lambda *_args, **_kwargs: _Panel()
+
+    try:
+        flow._handle_quick_fix_if_needed()
+        assert False, "Expected RuntimeError for persistent quick-fix state"
+    except RuntimeError as exc:
+        assert "persisted after clear app data" in str(exc)
