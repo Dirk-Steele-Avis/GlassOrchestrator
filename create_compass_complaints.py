@@ -1058,18 +1058,14 @@ def _create_work_item_for_glass_complaint(page, mva: str) -> tuple[bool, str]:
 
         dropdown_opened = False
         dropdown_candidates = [
-            scope.locator("button", has_text=re.compile(r"select an option\.\.\.", re.I)).first,
-            scope.locator("[class*='bp6-button-text']", has_text=re.compile(r"select an option\.\.\.", re.I)).first,
-            scope.get_by_text(re.compile(r"^select an option\.\.\.$", re.I)).first,
-            scope.locator("[class*='bp6-select'] [class*='bp6-button-text']", has_text=re.compile(r"select an option", re.I)).first,
-            scope.locator("[class*='bp6-popover-target']", has_text=re.compile(r"select an option", re.I)).first,
-            scope.locator("button[aria-haspopup='listbox'], button[aria-haspopup='menu']").first,
-            scope.get_by_role("combobox", name=re.compile(r"op\s*code|opcode", re.I)).first,
-            scope.locator("[role='combobox']").filter(has_text=re.compile(r"op\s*code|opcode", re.I)).first,
-            scope.get_by_label(re.compile(r"op\s*code|opcode", re.I)).first,
-            scope.locator("label", has_text=re.compile(r"op\s*code|opcode", re.I)).first,
-            scope.locator("button", has_text=re.compile(r"op\s*code|opcode", re.I)).first,
-            scope.get_by_text(re.compile(r"op\s*code|opcode", re.I)).first,
+            scope.locator("div[role='combobox'][aria-label='Select an option…']").first,
+            scope.locator("div[role='combobox'][aria-label*='Select an option']").first,
+            scope.get_by_role("combobox", name=re.compile(r"^Select an option", re.I)).first,
+            scope.locator("[data-widget-display-name*='op code'] [role='combobox']").first,
+            scope.locator("button[aria-haspopup='menu'], button[aria-haspopup='listbox']").first,
+            scope.get_by_text(re.compile(r"select an option", re.I)).first,
+            scope.get_by_role("button", name=re.compile(r"select an option", re.I)).first,
+            scope.get_by_role("button", name=re.compile(r"op\s*code|opcode", re.I)).first,
         ]
         for candidate in dropdown_candidates:
             try:
@@ -1089,28 +1085,30 @@ def _create_work_item_for_glass_complaint(page, mva: str) -> tuple[bool, str]:
         exact_opcode_pattern = re.compile(r"^glass\s*repair\s*/\s*replace$", re.I)
 
         try:
-            popup_search = page.locator(
-                ".bp6-portal input[placeholder*='Search' i]:visible, [role='listbox'] input[placeholder*='Search' i]:visible, [role='menu'] input[placeholder*='Search' i]:visible"
-            ).last
+            popup_search = page.get_by_placeholder(re.compile(r"^Search…?$", re.I)).last
             if popup_search.count() == 0:
-                popup_search = scope.locator("input[placeholder*='Search' i]:visible").last
+                popup_search = page.locator("input.bp6-input[placeholder*='Search' i]:visible").last
+            if popup_search.count() == 0:
+                popup_search = scope.locator("input.bp6-input[placeholder*='Search' i]").last
             popup_search.wait_for(state="visible", timeout=4000)
             popup_search.click(timeout=4000)
-            popup_search.fill("", timeout=4000)
-            popup_search.press("Control+a")
-            popup_search.type("glass", delay=75)
+            popup_search.fill("glass", timeout=4000)
             typed_value = (popup_search.input_value(timeout=2000) or "").strip().lower()
             if typed_value != "glass":
-                popup_search.fill("glass", timeout=4000)
+                popup_search.click(timeout=4000)
+                popup_search.press("Control+a")
+                popup_search.press("Backspace")
+                popup_search.type("glass", delay=50)
                 typed_value = (popup_search.input_value(timeout=2000) or "").strip().lower()
             if typed_value != "glass":
                 return False, f"opcode_search_input_not_set: {typed_value or 'empty'}"
-            page.wait_for_timeout(700)
+            page.wait_for_timeout(900)
 
             option_candidates = [
-                page.locator("[role='listbox'] [role='option']").first,
-                page.locator("[role='menu'] [role='menuitem']").first,
-                scope.locator("[class*='opCodeText']").first,
+                page.locator("[role='listbox'] [role='option']").filter(has_text=exact_opcode_pattern).first,
+                page.locator("[role='menu'] [role='menuitem']").filter(has_text=exact_opcode_pattern).first,
+                page.locator("[role='option']").filter(has_text=exact_opcode_pattern).first,
+                scope.locator("[class*='opCodeText']").filter(has_text=exact_opcode_pattern).first,
             ]
             top_option = None
             for candidate in option_candidates:
@@ -1128,6 +1126,16 @@ def _create_work_item_for_glass_complaint(page, mva: str) -> tuple[bool, str]:
                     opcode_selected = True
                 else:
                     return False, f"unexpected_top_opcode_option: {selected_opcode_text or 'unknown'}"
+
+            if not opcode_selected:
+                fallback_option = page.get_by_text(exact_opcode_pattern).first
+                try:
+                    fallback_option.wait_for(state="visible", timeout=2000)
+                    fallback_option.click(timeout=4000)
+                    selected_opcode_text = (fallback_option.inner_text(timeout=1000) or "").strip()
+                    opcode_selected = bool(selected_opcode_text)
+                except Exception:
+                    pass
         except Exception:
             opcode_selected = False
 
