@@ -901,6 +901,23 @@ def _select_subcategory_if_present(scope, preferred: str | None = None, strict_p
 
 def _create_complaint_only(page, mva: str, damage_expectation: str | None = None) -> tuple[bool, str]:
     try:
+        def _submit_state(submit_locator):
+            return submit_locator.evaluate(
+                """
+                el => {
+                    if (!el) {
+                        return { enabled: false, aria: null, disabledAttr: false, className: "" };
+                    }
+                    const aria = el.getAttribute('aria-disabled');
+                    const disabledAttr = el.hasAttribute('disabled');
+                    const className = (el.getAttribute('class') || '').toLowerCase();
+                    const classDisabled = className.includes('disabled');
+                    const enabled = aria !== 'true' && !disabledAttr && !classDisabled;
+                    return { enabled, aria, disabledAttr, className };
+                }
+                """
+            )
+
         _click_button_by_name(page, r"create\s*complaint")
         page.wait_for_timeout(1200)
         scope = _complaint_popup_scope(page)
@@ -931,17 +948,6 @@ def _create_complaint_only(page, mva: str, damage_expectation: str | None = None
             scope.locator("input[type='radio'][value='Yes']").first.is_checked(),
             scope.locator("input[type='radio'][value='Glass Damage']").first.is_checked(),
         )
-        submit_el = submit.element_handle()
-        if submit_el is None:
-            raise RuntimeError("Submit Complaint button handle unavailable")
-
-        def _submit_ready() -> bool:
-            state = page.evaluate(
-                "el => ({ aria: el.getAttribute('aria-disabled'), disabled: el.hasAttribute('disabled') })",
-                submit_el,
-            )
-            return state.get("aria") != "true" and not state.get("disabled")
-
         if preferred_subcategory:
             used_subcategory = _select_subcategory_if_present(
                 scope,
@@ -952,7 +958,8 @@ def _create_complaint_only(page, mva: str, damage_expectation: str | None = None
                 return False, f"required_subcategory_not_found: {preferred_subcategory}"
             page.wait_for_timeout(800)
 
-        if not _submit_ready():
+        submit = scope.locator("a[role='button']", has_text="Submit Complaint").first
+        if not _submit_state(submit).get("enabled", False):
             used_subcategory = _select_subcategory_if_present(scope)
             if used_subcategory:
                 page.wait_for_timeout(1000)
@@ -969,12 +976,28 @@ def _create_complaint_only(page, mva: str, damage_expectation: str | None = None
 
         log.info("MVA %s -> chosen sub-category=%s", mva, chosen_subcategory)
 
-        page.wait_for_function(
-            "el => el && el.getAttribute('aria-disabled') !== 'true' && !el.hasAttribute('disabled')",
-            arg=submit_el,
-            timeout=15_000,
-        )
-        submit.click(timeout=10_000)
+        ready = False
+        last_submit_state = {}
+        for _ in range(30):
+            submit = scope.locator("a[role='button']", has_text="Submit Complaint").first
+            submit.wait_for(state="visible", timeout=10_000)
+            last_submit_state = _submit_state(submit)
+            if last_submit_state.get("enabled", False):
+                ready = True
+                break
+            page.wait_for_timeout(500)
+
+        if not ready:
+            raise RuntimeError(
+                "submit_not_enabled_after_form_fill: "
+                f"aria={last_submit_state.get('aria')} disabled_attr={last_submit_state.get('disabledAttr')}"
+            )
+
+        try:
+            submit.click(timeout=10_000)
+        except Exception:
+            submit.scroll_into_view_if_needed(timeout=5_000)
+            submit.click(timeout=10_000, force=True)
         page.wait_for_timeout(SETTLE_WAIT_MS)
 
         verify = _inspect_glass_complaint(page, mva)
