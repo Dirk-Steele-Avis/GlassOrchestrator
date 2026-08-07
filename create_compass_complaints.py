@@ -901,6 +901,23 @@ def _select_subcategory_if_present(scope, preferred: str | None = None, strict_p
 
 def _create_complaint_only(page, mva: str, damage_expectation: str | None = None) -> tuple[bool, str]:
     try:
+        def _submit_state(submit_locator):
+            return submit_locator.evaluate(
+                """
+                el => {
+                    if (!el) {
+                        return { enabled: false, aria: null, disabledAttr: false, className: "" };
+                    }
+                    const aria = el.getAttribute('aria-disabled');
+                    const disabledAttr = el.hasAttribute('disabled');
+                    const className = (el.getAttribute('class') || '').toLowerCase();
+                    const classDisabled = className.includes('disabled');
+                    const enabled = aria !== 'true' && !disabledAttr && !classDisabled;
+                    return { enabled, aria, disabledAttr, className };
+                }
+                """
+            )
+
         _click_button_by_name(page, r"create\s*complaint")
         page.wait_for_timeout(1200)
         scope = _complaint_popup_scope(page)
@@ -931,17 +948,6 @@ def _create_complaint_only(page, mva: str, damage_expectation: str | None = None
             scope.locator("input[type='radio'][value='Yes']").first.is_checked(),
             scope.locator("input[type='radio'][value='Glass Damage']").first.is_checked(),
         )
-        submit_el = submit.element_handle()
-        if submit_el is None:
-            raise RuntimeError("Submit Complaint button handle unavailable")
-
-        def _submit_ready() -> bool:
-            state = page.evaluate(
-                "el => ({ aria: el.getAttribute('aria-disabled'), disabled: el.hasAttribute('disabled') })",
-                submit_el,
-            )
-            return state.get("aria") != "true" and not state.get("disabled")
-
         if preferred_subcategory:
             used_subcategory = _select_subcategory_if_present(
                 scope,
@@ -952,7 +958,8 @@ def _create_complaint_only(page, mva: str, damage_expectation: str | None = None
                 return False, f"required_subcategory_not_found: {preferred_subcategory}"
             page.wait_for_timeout(800)
 
-        if not _submit_ready():
+        submit = scope.locator("a[role='button']", has_text="Submit Complaint").first
+        if not _submit_state(submit).get("enabled", False):
             used_subcategory = _select_subcategory_if_present(scope)
             if used_subcategory:
                 page.wait_for_timeout(1000)
@@ -969,12 +976,28 @@ def _create_complaint_only(page, mva: str, damage_expectation: str | None = None
 
         log.info("MVA %s -> chosen sub-category=%s", mva, chosen_subcategory)
 
-        page.wait_for_function(
-            "el => el && el.getAttribute('aria-disabled') !== 'true' && !el.hasAttribute('disabled')",
-            arg=submit_el,
-            timeout=15_000,
-        )
-        submit.click(timeout=10_000)
+        ready = False
+        last_submit_state = {}
+        for _ in range(30):
+            submit = scope.locator("a[role='button']", has_text="Submit Complaint").first
+            submit.wait_for(state="visible", timeout=10_000)
+            last_submit_state = _submit_state(submit)
+            if last_submit_state.get("enabled", False):
+                ready = True
+                break
+            page.wait_for_timeout(500)
+
+        if not ready:
+            raise RuntimeError(
+                "submit_not_enabled_after_form_fill: "
+                f"aria={last_submit_state.get('aria')} disabled_attr={last_submit_state.get('disabledAttr')}"
+            )
+
+        try:
+            submit.click(timeout=10_000)
+        except Exception:
+            submit.scroll_into_view_if_needed(timeout=5_000)
+            submit.click(timeout=10_000, force=True)
         page.wait_for_timeout(SETTLE_WAIT_MS)
 
         verify = _inspect_glass_complaint(page, mva)
@@ -1058,18 +1081,14 @@ def _create_work_item_for_glass_complaint(page, mva: str) -> tuple[bool, str]:
 
         dropdown_opened = False
         dropdown_candidates = [
-            scope.locator("button", has_text=re.compile(r"select an option\.\.\.", re.I)).first,
-            scope.locator("[class*='bp6-button-text']", has_text=re.compile(r"select an option\.\.\.", re.I)).first,
-            scope.get_by_text(re.compile(r"^select an option\.\.\.$", re.I)).first,
-            scope.locator("[class*='bp6-select'] [class*='bp6-button-text']", has_text=re.compile(r"select an option", re.I)).first,
-            scope.locator("[class*='bp6-popover-target']", has_text=re.compile(r"select an option", re.I)).first,
-            scope.locator("button[aria-haspopup='listbox'], button[aria-haspopup='menu']").first,
-            scope.get_by_role("combobox", name=re.compile(r"op\s*code|opcode", re.I)).first,
-            scope.locator("[role='combobox']").filter(has_text=re.compile(r"op\s*code|opcode", re.I)).first,
-            scope.get_by_label(re.compile(r"op\s*code|opcode", re.I)).first,
-            scope.locator("label", has_text=re.compile(r"op\s*code|opcode", re.I)).first,
-            scope.locator("button", has_text=re.compile(r"op\s*code|opcode", re.I)).first,
-            scope.get_by_text(re.compile(r"op\s*code|opcode", re.I)).first,
+            scope.locator("div[role='combobox'][aria-label='Select an option…']").first,
+            scope.locator("div[role='combobox'][aria-label*='Select an option']").first,
+            scope.get_by_role("combobox", name=re.compile(r"^Select an option", re.I)).first,
+            scope.locator("[data-widget-display-name*='op code'] [role='combobox']").first,
+            scope.locator("button[aria-haspopup='menu'], button[aria-haspopup='listbox']").first,
+            scope.get_by_text(re.compile(r"select an option", re.I)).first,
+            scope.get_by_role("button", name=re.compile(r"select an option", re.I)).first,
+            scope.get_by_role("button", name=re.compile(r"op\s*code|opcode", re.I)).first,
         ]
         for candidate in dropdown_candidates:
             try:
@@ -1089,28 +1108,30 @@ def _create_work_item_for_glass_complaint(page, mva: str) -> tuple[bool, str]:
         exact_opcode_pattern = re.compile(r"^glass\s*repair\s*/\s*replace$", re.I)
 
         try:
-            popup_search = page.locator(
-                ".bp6-portal input[placeholder*='Search' i]:visible, [role='listbox'] input[placeholder*='Search' i]:visible, [role='menu'] input[placeholder*='Search' i]:visible"
-            ).last
+            popup_search = page.get_by_placeholder(re.compile(r"^Search…?$", re.I)).last
             if popup_search.count() == 0:
-                popup_search = scope.locator("input[placeholder*='Search' i]:visible").last
+                popup_search = page.locator("input.bp6-input[placeholder*='Search' i]:visible").last
+            if popup_search.count() == 0:
+                popup_search = scope.locator("input.bp6-input[placeholder*='Search' i]").last
             popup_search.wait_for(state="visible", timeout=4000)
             popup_search.click(timeout=4000)
-            popup_search.fill("", timeout=4000)
-            popup_search.press("Control+a")
-            popup_search.type("glass", delay=75)
+            popup_search.fill("glass", timeout=4000)
             typed_value = (popup_search.input_value(timeout=2000) or "").strip().lower()
             if typed_value != "glass":
-                popup_search.fill("glass", timeout=4000)
+                popup_search.click(timeout=4000)
+                popup_search.press("Control+a")
+                popup_search.press("Backspace")
+                popup_search.type("glass", delay=50)
                 typed_value = (popup_search.input_value(timeout=2000) or "").strip().lower()
             if typed_value != "glass":
                 return False, f"opcode_search_input_not_set: {typed_value or 'empty'}"
-            page.wait_for_timeout(700)
+            page.wait_for_timeout(900)
 
             option_candidates = [
-                page.locator("[role='listbox'] [role='option']").first,
-                page.locator("[role='menu'] [role='menuitem']").first,
-                scope.locator("[class*='opCodeText']").first,
+                page.locator("[role='listbox'] [role='option']").filter(has_text=exact_opcode_pattern).first,
+                page.locator("[role='menu'] [role='menuitem']").filter(has_text=exact_opcode_pattern).first,
+                page.locator("[role='option']").filter(has_text=exact_opcode_pattern).first,
+                scope.locator("[class*='opCodeText']").filter(has_text=exact_opcode_pattern).first,
             ]
             top_option = None
             for candidate in option_candidates:
@@ -1128,6 +1149,16 @@ def _create_work_item_for_glass_complaint(page, mva: str) -> tuple[bool, str]:
                     opcode_selected = True
                 else:
                     return False, f"unexpected_top_opcode_option: {selected_opcode_text or 'unknown'}"
+
+            if not opcode_selected:
+                fallback_option = page.get_by_text(exact_opcode_pattern).first
+                try:
+                    fallback_option.wait_for(state="visible", timeout=2000)
+                    fallback_option.click(timeout=4000)
+                    selected_opcode_text = (fallback_option.inner_text(timeout=1000) or "").strip()
+                    opcode_selected = bool(selected_opcode_text)
+                except Exception:
+                    pass
         except Exception:
             opcode_selected = False
 
