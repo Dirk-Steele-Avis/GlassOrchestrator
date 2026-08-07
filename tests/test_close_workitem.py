@@ -13,6 +13,7 @@ E2E smoke test (opt-in):
 import argparse
 import asyncio
 import os
+from datetime import date, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -23,43 +24,99 @@ import close_workitem as cw
 # ─── Unit tests ──────────────────────────────────────────────────────────────
 
 class TestBuildTargets:
-    def _args(self, mva=None, csv_path=None, complaint_type=None):
+    def _args(self, max_rows=None):
         ns = argparse.Namespace()
-        ns.mva = mva
-        ns.csv_path = csv_path
-        ns.complaint_type = complaint_type
+        ns.max_rows = max_rows
         return ns
 
-    def test_single_mva(self):
-        targets = cw._build_targets(self._args(mva="12345678"))
-        assert targets == [{"mva": "12345678", "complaint_type": "Glass"}]
+    def test_build_targets_uses_sheet_source(self, monkeypatch):
+        expected = [{"mva": "11111111", "complaint_type": "Glass"}]
+        monkeypatch.setattr("close_workitem._build_targets_from_sheet", lambda max_rows=None: expected)
+        assert cw._build_targets(self._args()) == expected
 
-    def test_single_mva_strips_whitespace(self):
-        targets = cw._build_targets(self._args(mva="  99887766  "))
-        assert targets == [{"mva": "99887766", "complaint_type": "Glass"}]
+    def test_normalize_sheet_type_maps_damage_values(self):
+        valid_types = ["Glass", "PM"]
+        assert cw._normalize_sheet_type("Replacement", valid_types) == "Glass"
+        assert cw._normalize_sheet_type("Repair", valid_types) == "Glass"
+        assert cw._normalize_sheet_type("PM Gas", valid_types) == "PM"
 
-    def test_single_mva_with_explicit_type(self):
-        targets = cw._build_targets(self._args(mva="12345678", complaint_type="PM"))
-        assert targets == [{"mva": "12345678", "complaint_type": "PM"}]
+    def test_normalize_sheet_mva_prepends_zero_to_8_digit_values(self):
+        assert cw._normalize_sheet_mva("56477761") == "056477761"
+        assert cw._normalize_sheet_mva("056477761") == "056477761"
+        assert cw._normalize_sheet_mva("ABC") == ""
 
-    def test_csv_produces_mva_list(self, tmp_path):
-        csv_file = tmp_path / "mvas.csv"
-        csv_file.write_text("mva,Type\n11111111,Glass\n22222222,PM\n33333333,Glass\n")
-        targets = cw._build_targets(self._args(csv_path=str(csv_file)))
-        assert targets == [
-            {"mva": "11111111", "complaint_type": "Glass"},
-            {"mva": "22222222", "complaint_type": "PM"},
-            {"mva": "33333333", "complaint_type": "Glass"},
-        ]
+    def test_build_targets_from_sheet_deduplicates_mva_and_type(self, monkeypatch):
+        today = date.today().strftime("%m/%d/%Y")
+        monkeypatch.setattr(
+            "close_workitem._load_sheet_rows",
+            lambda: [
+                {"MVA": "12345678", "Damage Type": "Replacement", "Inventory Date": today},
+                {"MVA": "12345678", "Damage Type": "Replacement", "Inventory Date": today},
+            ],
+        )
+        targets = cw._build_targets_from_sheet()
+        assert targets == [{"mva": "012345678", "complaint_type": "Glass"}]
 
-    def test_csv_skips_blank_mva_rows(self, tmp_path):
-        csv_file = tmp_path / "mvas.csv"
-        csv_file.write_text("mva,Type\n11111111,Glass\n\n22222222,Glass\n")
-        targets = cw._build_targets(self._args(csv_path=str(csv_file)))
-        assert targets == [
-            {"mva": "11111111", "complaint_type": "Glass"},
-            {"mva": "22222222", "complaint_type": "Glass"},
-        ]
+    def test_build_targets_from_sheet_exits_when_empty(self, monkeypatch):
+        monkeypatch.setattr("close_workitem._load_sheet_rows", lambda: [])
+        with pytest.raises(SystemExit):
+            cw._build_targets_from_sheet()
+
+    def test_build_targets_from_sheet_filters_to_today_inventory_date(self, monkeypatch):
+        today = date.today().strftime("%m/%d/%Y")
+        yesterday = (date.today() - timedelta(days=1)).strftime("%m/%d/%Y")
+        monkeypatch.setattr(
+            "close_workitem._load_sheet_rows",
+            lambda: [
+                {"MVA": "12345678", "Damage Type": "Replacement", "Inventory Date": yesterday},
+                {"MVA": "87654321", "Damage Type": "Replacement", "Inventory Date": today},
+            ],
+        )
+        targets = cw._build_targets_from_sheet()
+        assert targets == [{"mva": "087654321", "complaint_type": "Glass"}]
+
+    def test_build_targets_from_sheet_honors_max_rows(self, monkeypatch):
+        today = date.today().strftime("%m/%d/%Y")
+        monkeypatch.setattr(
+            "close_workitem._load_sheet_rows",
+            lambda: [
+                {"MVA": "11111111", "Damage Type": "Replacement", "Inventory Date": today},
+                {"MVA": "22222222", "Damage Type": "Replacement", "Inventory Date": today},
+            ],
+        )
+        targets = cw._build_targets_from_sheet(max_rows=1)
+        assert targets == [{"mva": "011111111", "complaint_type": "Glass"}]
+
+    def test_build_targets_from_sheet_normalizes_8_digit_mva(self, monkeypatch):
+        today = date.today().strftime("%m/%d/%Y")
+        monkeypatch.setattr(
+            "close_workitem._load_sheet_rows",
+            lambda: [{"MVA": "56477761", "Damage Type": "Replacement", "Inventory Date": today}],
+        )
+        targets = cw._build_targets_from_sheet()
+        assert targets == [{"mva": "056477761", "complaint_type": "Glass"}]
+
+    def test_parse_inventory_date_supports_sheet_formats(self):
+        assert cw._parse_inventory_date("08/06/2026") == date(2026, 8, 6)
+        assert cw._parse_inventory_date("08-06-2026") is None
+        assert cw._parse_inventory_date("2026-08-06") is None
+
+    def test_build_targets_from_sheet_exits_on_invalid_inventory_date_format(self, monkeypatch):
+        monkeypatch.setattr(
+            "close_workitem._load_sheet_rows",
+            lambda: [{"MVA": "12345678", "Damage Type": "Replacement", "Inventory Date": "2026-08-06"}],
+        )
+        with pytest.raises(SystemExit):
+            cw._build_targets_from_sheet()
+
+    def test_build_targets_from_sheet_exits_on_invalid_mva_format(self, monkeypatch):
+        today = date.today().strftime("%m/%d/%Y")
+        monkeypatch.setattr(
+            "close_workitem._load_sheet_rows",
+            lambda: [{"MVA": "12A4567", "Damage Type": "Replacement", "Inventory Date": today}],
+        )
+        with pytest.raises(SystemExit):
+            cw._build_targets_from_sheet()
 
 
 class TestLogSummary:
@@ -114,23 +171,13 @@ class TestLogSummary:
 
 
 class TestBuildTargetsValidation:
-    def _args(self, csv_path):
-        ns = argparse.Namespace()
-        ns.mva = None
-        ns.csv_path = csv_path
-        return ns
-
-    def test_missing_file_exits(self, tmp_path):
-        """Non-existent CSV path must exit with an error, not raise FileNotFoundError."""
+    def test_sheet_row_with_invalid_type_is_skipped(self, monkeypatch):
+        monkeypatch.setattr(
+            "close_workitem._load_sheet_rows",
+            lambda: [{"MVA": "12345678", "Damage Type": "Unknown Type"}],
+        )
         with pytest.raises(SystemExit):
-            cw._build_targets(self._args(str(tmp_path / "missing.csv")))
-
-    def test_csv_without_mva_column_exits(self, tmp_path):
-        """CSV missing the 'mva' column must exit with a clear error."""
-        f = tmp_path / "bad.csv"
-        f.write_text("vehicle,action\n11111111,Replace\n")
-        with pytest.raises(SystemExit):
-            cw._build_targets(self._args(str(f)))
+            cw._build_targets_from_sheet()
 
 
 def _make_async_playwright_mocks():
@@ -167,7 +214,7 @@ class TestRunPlaywrightCloseAsync:
             AsyncMock(return_value=(context, page)),
         )
         monkeypatch.setattr("close_workitem.pw_warmup_compass", AsyncMock())
-        monkeypatch.setattr("close_workitem.pw_navigate_to_mva", AsyncMock())
+        monkeypatch.setattr("close_workitem.pw_navigate_to_mva", AsyncMock(return_value=page))
         monkeypatch.setattr(
             "close_workitem._playwright_close_work_item",
             AsyncMock(return_value=(cw.RESULT_NOT_FOUND, "")),
@@ -192,6 +239,7 @@ class TestRunPlaywrightCloseAsync:
 
         async def _navigate_side_effect(target_page, mva):
             target_page.url = f"https://avisbudget.palantirfoundry.com/workspace/fleet-operations-pwa/vehicle/{mva}"
+            return target_page
 
         monkeypatch.setattr("close_workitem.pw_navigate_to_mva", AsyncMock(side_effect=_navigate_side_effect))
 
@@ -209,7 +257,7 @@ class TestRunPlaywrightCloseAsync:
 
         results = asyncio.run(cw._run_playwright_close_async(self._args(), [{"mva": "12345678", "complaint_type": "Glass"}]))
 
-        assert results == [{"mva": "12345678", "result": cw.RESULT_TIMEOUT, "detail": ""}]
+        assert results == [{"mva": "12345678", "result": cw.RESULT_TIMEOUT, "detail": "navigation"}]
 
     def test_navigation_exception_maps_to_nav_failed(self, monkeypatch):
         _, async_pw_cm, context, page = _make_async_playwright_mocks()

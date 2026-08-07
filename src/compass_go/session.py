@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import subprocess
 import time
 from contextlib import contextmanager
@@ -111,6 +112,25 @@ def _should_use_persistent_context(user_data_dir: str) -> bool:
     if force in {"1", "true", "yes", "on"}:
         return True
     return not _is_default_user_data_dir(user_data_dir)
+
+
+def reset_automation_profile_dir() -> bool:
+    """Delete and recreate the automation profile directory for corruption recovery."""
+    user_data_dir = Path(_resolve_user_data_dir())
+    if _is_default_user_data_dir(str(user_data_dir)):
+        log.warning("Refusing to reset default Edge user data dir: %s", user_data_dir)
+        return False
+
+    try:
+        kill_running_edge()
+        if user_data_dir.exists():
+            shutil.rmtree(user_data_dir)
+        user_data_dir.mkdir(parents=True, exist_ok=True)
+        log.warning("Reset automation Edge profile dir: %s", user_data_dir)
+        return True
+    except Exception as exc:
+        log.error("Failed to reset automation profile dir %s: %s", user_data_dir, exc)
+        return False
 
 
 class CompassGoSession:
