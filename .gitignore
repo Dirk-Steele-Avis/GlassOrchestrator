@@ -44,5 +44,6 @@ CreateCompassComplaints.log
 artifacts/
 
 # Browser automation runtime artifacts
+outlook/browser_profile/
 outlook/browser_profile/GrShaderCache/
 outlook/browser_profile/Snapshots/
