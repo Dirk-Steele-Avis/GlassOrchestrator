@@ -18,6 +18,7 @@ from playwright_prototype.login import (
 
 log = logging.getLogger(__name__)
 BUTTON_PUSH_DELAY_MS = 2000
+WORKSHOP_VEHICLES_BUTTON_SELECTOR = "[data-test-id='workshop-inline-button']"
 
 
 def _credentials() -> tuple[str, str, str, str]:
@@ -130,6 +131,18 @@ async def _is_on_compass_app_page(page: Page) -> bool:
     return False
 
 
+async def _is_on_workshop_home(page: Page) -> bool:
+    """True when the configured Workshop homepage is ready for vehicle navigation."""
+    if not (page.url or "").lower().startswith(LOGIN_URL.lower()):
+        return False
+    try:
+        vehicles_button = page.locator(WORKSHOP_VEHICLES_BUTTON_SELECTOR).filter(has_text="Vehicles").first
+        await vehicles_button.wait_for(state="visible", timeout=8_000)
+        return True
+    except Exception:
+        return False
+
+
 async def _advance_existing_session_page(page: Page) -> Page:
     """Advance an existing trusted session page into the Compass app."""
     current_url = (page.url or "").lower()
@@ -141,6 +154,10 @@ async def _advance_existing_session_page(page: Page) -> Page:
     if current_url and not current_url.startswith(LOGIN_URL.lower()):
         log.info("[SESSION] Existing session page not on login URL — opening login URL: %s", LOGIN_URL)
         await page.goto(LOGIN_URL, wait_until="domcontentloaded")
+
+    if await _is_on_workshop_home(page):
+        log.info("[SESSION] Existing session page on Workshop Home — ready for vehicle search")
+        return page
 
     if await _is_on_login_page(page):
         log.info("[SESSION] Existing session page is on login form — running full login fallback")
