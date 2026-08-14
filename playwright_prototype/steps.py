@@ -24,6 +24,14 @@ log = logging.getLogger(__name__)
 DATA_ENTRY_SUBMIT_DELAY_MS = 2000
 BUTTON_PUSH_DELAY_MS = 2000
 UI_SETTLE_DELAY_MS = 1500
+OPEN_WORK_ITEMS_COUNT_WAIT_MS = 5_000
+OPEN_WORK_ITEMS_COUNT_POLL_MS = 250
+OPEN_WORK_ITEMS_ZERO_CONFIRM_DELAY_MS = 250
+OPEN_WORK_ITEMS_TAB_SELECTOR = (
+    "xpath=//div[@role='tab'][.//div[normalize-space()='Open Work Items']]"
+)
+OPEN_WORK_ITEMS_BADGE_SELECTOR = "span.bp6-tag span.bp6-fill"
+_OPEN_WORK_ITEMS_BADGE_TEXT_PATTERN = re.compile(r"^\d+$")
 
 COMPASS_VEHICLES_BUTTON_SELECTOR = "[data-test-id='workshop-inline-button']"
 COMPASS_SCAN_TAB_SELECTOR = 'button[role="tab"][data-key="scan"]'
@@ -32,6 +40,13 @@ COMPASS_MVA_VIN_SUBMIT_SELECTOR = "[data-testid='mva-vin-submit']"
 COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR = "input[type='search'][placeholder*='Keyword Search']"
 COMPASS_WORKSHOP_OBJECT_TABLE_SELECTOR = "[data-test-id='workshop-object-table']"
 COMPASS_WORKSHOP_OBJECT_TITLE_SELECTOR = "[data-test-id='workshop-object-title']"
+COMPASS_OVERVIEW_MVA_VALUE_SELECTOR = (
+    "xpath=//div[@role='listitem']"
+    "[.//div[contains(@class,'property-display-name')]"
+    "/div[normalize-space()='MVA']]"
+    "//div[contains(@class,'property-display-value')]"
+    "//span[contains(@class,'array-list-entry')]"
+)
 
 
 async def _has_visible_mva_input(page: Page) -> bool:
@@ -177,14 +192,11 @@ def _normalize_digits(value: str) -> str:
 
 async def _wait_for_vehicle_details_ready(page: Page, mva: str, timeout_ms: int = 20_000) -> None:
     """Wait until the vehicle details panel shows a populated MVA value for the target MVA."""
-    last8 = mva[-8:] if len(mva) >= 8 else mva
-    value_locator = page.locator(
-        "xpath="
-        "//div[contains(@class,'vehicle-properties-container')]"
-        "//div[contains(@class,'vehicle-property__')]"
-        "[div[contains(@class,'vehicle-property-name')][normalize-space()='MVA']]"
-        "/div[contains(@class,'vehicle-property-value')]"
-    ).first
+    target_digits = _normalize_digits(mva)
+    accepted_values = {target_digits}
+    if len(target_digits) == 9 and target_digits.startswith("0"):
+        accepted_values.add(target_digits[1:])
+    values = page.locator(COMPASS_OVERVIEW_MVA_VALUE_SELECTOR)
 
     deadline = time.monotonic() + (timeout_ms / 1000.0)
     last_seen = ""
@@ -192,12 +204,18 @@ async def _wait_for_vehicle_details_ready(page: Page, mva: str, timeout_ms: int 
 
     while time.monotonic() < deadline:
         try:
-            raw_value = (await value_locator.inner_text()).strip()
+            value_count = await values.count()
+            if value_count != 1:
+                last_seen = f"<MVA value count={value_count}>"
+                await page.wait_for_timeout(400)
+                continue
+
+            raw_value = (await values.first.inner_text(timeout=1_000)).strip()
             last_seen = raw_value
             last_error = None
             if not _is_unready_vehicle_value(raw_value):
                 digits = _normalize_digits(raw_value)
-                if last8 in raw_value or last8 in digits:
+                if digits in accepted_values:
                     log.info("[STEPS] %s — vehicle details ready (MVA=%s)", mva, raw_value)
                     return
         except Exception as exc:
@@ -275,18 +293,106 @@ async def _select_vehicle_search_result(page: Page, mva: str) -> None:
 
 async def _wait_for_open_work_items_tab_ready(page: Page, mva: str, timeout_ms: int = 30_000) -> None:
     """Wait for the exact Open Work Items tab to appear for the selected vehicle."""
-    tab = page.locator(
-        "xpath=//div[@role='tab'][.//div[normalize-space()='Open Work Items']]"
-    ).first
+    tab = page.locator(OPEN_WORK_ITEMS_TAB_SELECTOR).first
     await tab.wait_for(state="visible", timeout=timeout_ms)
     log.info("[STEPS] %s — Open Work Items tab is visible", mva)
 
 
+def _parse_open_work_items_badge_count(badge_text: str) -> int | None:
+    """Parse an exact nonnegative integer from the Open Work Items badge."""
+    normalized = badge_text.strip()
+    return int(normalized) if _OPEN_WORK_ITEMS_BADGE_TEXT_PATTERN.fullmatch(normalized) else None
+
+
+async def _read_open_work_items_badge_count(tab, mva: str) -> tuple[bool, int | None]:
+    """Return whether the finalized badge exists and its strictly parsed count."""
+    badges = tab.locator(OPEN_WORK_ITEMS_BADGE_SELECTOR)
+    badge_count = await badges.count()
+    if badge_count == 0:
+        return False, None
+    if badge_count != 1:
+        log.warning("[STEPS] %s — expected one Open Work Items badge, found %d", mva, badge_count)
+        return True, None
+
+    raw_value = await badges.first.inner_text(timeout=1_000)
+    count = _parse_open_work_items_badge_count(raw_value)
+    if count is None:
+        log.warning("[STEPS] %s — Open Work Items badge is unrecognized: %r", mva, raw_value.strip())
+    return True, count
+
+
+async def _wait_for_open_work_items_tab_count(page: Page, tab, mva: str) -> int | None:
+    """Wait at most five seconds for the Open Work Items badge to appear."""
+    max_waits = OPEN_WORK_ITEMS_COUNT_WAIT_MS // OPEN_WORK_ITEMS_COUNT_POLL_MS
+    for attempt in range(max_waits + 1):
+        badge_exists, count = await _read_open_work_items_badge_count(tab, mva)
+        if count is not None:
+            log.info("[STEPS] %s — Open Work Items finalized count=%d", mva, count)
+            return count
+        if badge_exists:
+            return None
+        if attempt < max_waits:
+            await page.wait_for_timeout(OPEN_WORK_ITEMS_COUNT_POLL_MS)
+    log.warning("[STEPS] %s — Open Work Items count did not finalize within 5s", mva)
+    return None
+
+
+async def _has_stable_zero_open_work_items_count(page: Page, mva: str) -> bool:
+    """Return True after an exact zero unless confirmation explicitly becomes nonzero."""
+    try:
+        tabs = page.locator(OPEN_WORK_ITEMS_TAB_SELECTOR)
+        if await tabs.count() != 1:
+            return False
+
+        tab = tabs.first
+        if not await tab.is_visible(timeout=1_000):
+            return False
+
+        first_count = await _wait_for_open_work_items_tab_count(page, tab, mva)
+        if first_count != 0:
+            return False
+    except Exception as exc:
+        log.debug("[STEPS] %s — Open Work Items count probe indeterminate: %s", mva, exc)
+        return False
+
+    try:
+        await page.wait_for_timeout(OPEN_WORK_ITEMS_ZERO_CONFIRM_DELAY_MS)
+        if not await tab.is_visible(timeout=1_000):
+            log.warning(
+                "[STEPS] %s — Open Work Items badge confirmation unavailable; preserving count=0",
+                mva,
+            )
+            return True
+
+        badge_exists, second_count = await _read_open_work_items_badge_count(tab, mva)
+        if second_count is not None and second_count > 0:
+            log.info(
+                "[STEPS] %s — Open Work Items count changed from 0 to %d; proceeding with lookup",
+                mva,
+                second_count,
+            )
+            return False
+        if not badge_exists or second_count is None:
+            log.warning(
+                "[STEPS] %s — Open Work Items badge confirmation indeterminate; preserving count=0",
+                mva,
+            )
+            return True
+
+        log.info("[STEPS] %s — Open Work Items count=0 confirmed before tab click", mva)
+        return True
+    except Exception as exc:
+        log.warning(
+            "[STEPS] %s — Open Work Items confirmation failed after count=0; skipping lookup: %s",
+            mva,
+            exc,
+        )
+        return True
+
+
 async def _open_open_work_items_row(page: Page, row_title: str) -> tuple[Page, str]:
     """Open the requested row from the Open Work Items table and return the detail page."""
-    open_tab = page.locator(
-        "xpath=//div[@role='tab'][.//div[normalize-space()='Open Work Items']]"
-    ).first
+    open_tab = page.locator(OPEN_WORK_ITEMS_TAB_SELECTOR).first
     await open_tab.wait_for(state="visible", timeout=15_000)
     await open_tab.scroll_into_view_if_needed(timeout=5_000)
     await page.wait_for_timeout(UI_SETTLE_DELAY_MS)
@@ -345,12 +451,17 @@ async def _confirm_mark_complete(page: Page, note: str = "Done") -> None:
     confirm = dialog.get_by_role("button", name=re.compile(r"^Mark Complete$", re.I)).first
     await confirm.wait_for(state="visible", timeout=10_000)
     await confirm.click(timeout=10_000)
+    await dialog.wait_for(state="hidden", timeout=20_000)
+    await page.wait_for_timeout(10_000)
 
 
 async def close_open_work_item(page: Page, mva: str, complaint_type: str = "Glass", note: str = "Done") -> str:
     """Open the live Open Work Items row and close it through the action menu."""
     row_title = "GLASS-GLASS" if complaint_type == "Glass" else f"{complaint_type}-{complaint_type}".upper()
     log.info("[STEPS] %s — opening open-work-items row %s", mva, row_title)
+
+    if await _has_stable_zero_open_work_items_count(page, mva):
+        raise LookupError(f"Open Work Items count is 0 for MVA {mva}")
 
     detail_page, detail_text = await _open_open_work_items_row(page, row_title)
     log.info("[STEPS] %s — work item details opened", mva)
@@ -435,6 +546,7 @@ async def navigate_to_mva(page: Page, mva: str) -> Page:
 
         await _enter_mva(page, mva)
         await _select_vehicle_search_result(page, mva)
+        await _wait_for_vehicle_details_ready(page, mva, timeout_ms=10_000)
         await _wait_for_open_work_items_tab_ready(page, mva, timeout_ms=30_000)
         log.info("[STEPS] %s — vehicle page loaded", mva)
         return page

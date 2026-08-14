@@ -46,7 +46,12 @@ def test_submit_clicks_begin_then_fills_input_and_clicks_enter(page):
             btn.addEventListener('click', () => {
                 const i = document.querySelector('input[aria-label="Or enter MVA/VIN"]');
                 document.title = 'SUBMITTED:' + i.value;
-                document.body.insertAdjacentHTML('beforeend', '<h1>Vehicle Details</h1>');
+                document.body.insertAdjacentHTML(
+                    'beforeend',
+                    `<h1>Vehicle Details</h1><table><tr>
+                    <td data-key="mvaNo.1" role="gridcell">${i.value}</td>
+                    </tr></table>`
+                );
             });
         }"""
     )
@@ -110,7 +115,9 @@ def test_submit_dismisses_stale_not_found_card_via_back_arrow(page, monkeypatch)
                     const i = document.querySelector('input[aria-label="Or enter MVA/VIN"]');
                     document.title = 'SUBMITTED:' + i.value;
                     document.body.insertAdjacentHTML(
-                        'beforeend', '<h1>Vehicle Details</h1>'
+                            'beforeend', `<h1>Vehicle Details</h1><table><tr>
+                            <td data-key="mvaNo.1" role="gridcell">${i.value}</td>
+                            </tr></table>`
                     );
                 });
             });
@@ -148,7 +155,9 @@ def test_submit_dismisses_stale_vehicle_details_via_back_arrow(page, monkeypatch
                     const i = document.querySelector('input[aria-label="Or enter MVA/VIN"]');
                     document.title = 'SUBMITTED:' + i.value;
                     document.body.insertAdjacentHTML(
-                        'beforeend', '<h1>Vehicle Details</h1>'
+                            'beforeend', `<h1>Vehicle Details</h1><table><tr>
+                            <td data-key="mvaNo.1" role="gridcell">${i.value}</td>
+                            </tr></table>`
                     );
                 });
             });
@@ -176,7 +185,11 @@ def test_submit_waits_for_slow_input_render_with_1s_poll(page, monkeypatch):
                 btn.addEventListener('click', () => {
                     const i = document.querySelector('input[aria-label="Or enter MVA/VIN"]');
                     document.title = 'SUBMITTED:' + i.value;
-                    document.body.insertAdjacentHTML('beforeend', '<h1>Vehicle Details</h1>');
+                        document.body.insertAdjacentHTML(
+                            'beforeend', `<h1>Vehicle Details</h1><table><tr>
+                            <td data-key="mvaNo.1" role="gridcell">${i.value}</td>
+                            </tr></table>`
+                        );
                 });
             }, 2200);
         }"""
@@ -204,7 +217,11 @@ def test_submit_uses_input_timeout_override(page, monkeypatch):
                 btn.addEventListener('click', () => {
                     const i = document.querySelector('input[aria-label="Or enter MVA/VIN"]');
                     document.title = 'SUBMITTED:' + i.value;
-                    document.body.insertAdjacentHTML('beforeend', '<h1>Vehicle Details</h1>');
+                        document.body.insertAdjacentHTML(
+                            'beforeend', `<h1>Vehicle Details</h1><table><tr>
+                            <td data-key="mvaNo.1" role="gridcell">${i.value}</td>
+                            </tr></table>`
+                        );
                 });
             }, 3200);
         }"""

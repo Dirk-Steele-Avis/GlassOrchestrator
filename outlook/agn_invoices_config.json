@@ -6,7 +6,7 @@
   "max_items_per_run": 20,
   "max_approvals_per_run": 20,
   "age_approval_days": 14,
-  "allowed_created_by": [
+  "allowed_work_order_created_by": [
     "Steele, Dirk"
   ]
 }

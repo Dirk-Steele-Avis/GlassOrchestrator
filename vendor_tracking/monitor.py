@@ -19,6 +19,7 @@ Workflow:
 """
 
 import email as email_module
+import csv
 import imaplib
 import json
 import logging
@@ -40,18 +41,21 @@ from vendor_tracking.email_parser import (
     EmailType,
     AppointmentEmailData,
     ApprovalNeededEmailData,
+    CompletionReceiptEmailData,
     TechnicianAssignedEmailData,
     classify_email,
     debug_extract_job_id_from_appointment_html,
     get_html_body,
     parse_appointment_email,
     parse_approval_needed_email,
+    parse_completion_receipt_email,
     parse_technician_assigned_email,
 )
 from vendor_tracking.idempotency_store import IdempotencyStore
 from vendor_tracking.sheet_updater import (
     VendorSheetUpdater,
     STATUS_APPROVAL_NEEDED,
+    STATUS_COMPLETED,
 )
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
@@ -119,6 +123,7 @@ class RunSummary:
     processed: int = 0
     needs_review: list[str] = field(default_factory=list)
     approval_needed: list[str] = field(default_factory=list)   # VINs waiting on our approval
+    close_candidates: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
 
@@ -154,7 +159,7 @@ def _search_vendor_emails(
                 seen.add(mid)
                 all_ids.append(mid)
 
-    return all_ids
+    return sorted(all_ids, key=lambda message_id: int(message_id))
 
 
 def _fetch_message(mail: imaplib.IMAP4_SSL, imap_id: bytes) -> Optional[email_module.message.Message]:
@@ -180,6 +185,7 @@ class VendorTrackingMonitor:
         ignore_idempotency: bool = False,
         decision_log_path: str | None = None,
         dry_run: bool = False,
+        replay_completion_receipts: bool = False,
     ) -> None:
         self._config = config
 
@@ -189,13 +195,23 @@ class VendorTrackingMonitor:
         self._email_password = os.getenv("GLASS_EMAIL_PASSWORD") or str(config.get("email_password", ""))
 
         # Vendor tracking config
-        self._spreadsheet_id = str(config.get("vendor_tracking_spreadsheet_id", ""))
-        self._sheet_name = str(config.get("vendor_tracking_sheet_name", "GlassClaims"))
+        self._spreadsheet_id = str(
+            config.get("vendor_tracking_spreadsheet_id") or config.get("spreadsheet_id", "")
+        )
+        self._sheet_name = str(
+            config.get("vendor_tracking_sheet_name") or config.get("sheet_name", "GlassClaims")
+        )
         self._senders: list[str] = list(config.get("vendor_tracking_senders", ["autoglassnow.com", "omegaedi.com"]))
         self._lookback_days = int(config.get("vendor_tracking_lookback_days", 30))
         self._since_date = since_date or str(config.get("vendor_tracking_since_date", "")).strip()
         self._ignore_idempotency = ignore_idempotency
         self._dry_run = dry_run
+        self._replay_completion_receipts = replay_completion_receipts
+        close_csv_rel = str(config.get("vendor_tracking_close_csv", "WorkItems/close_workitem.csv"))
+        close_csv_candidate = Path(close_csv_rel)
+        self._close_csv_path = (
+            close_csv_candidate if close_csv_candidate.is_absolute() else BASE_DIR / close_csv_candidate
+        )
         decision_log_rel = decision_log_path or str(
             config.get("vendor_tracking_decision_log", "data/vendor_tracking_decisions.jsonl")
         )
@@ -250,6 +266,27 @@ class VendorTrackingMonitor:
                 f.write(json.dumps(event, ensure_ascii=True) + "\n")
         except OSError as exc:
             log.warning("Decision log write failed (%s): %s", self._decision_log_path, exc)
+
+    def _append_close_candidate(self, mva: str, complaint_type: str) -> bool:
+        """Append a unique completion candidate while preserving the review queue."""
+        existing: set[tuple[str, str]] = set()
+        if self._close_csv_path.exists():
+            with self._close_csv_path.open(newline="", encoding="utf-8") as csv_file:
+                reader = csv.DictReader(line for line in csv_file if not line.startswith("#"))
+                for row in reader:
+                    existing.add((str(row.get("mva") or "").strip(), str(row.get("Type") or "").strip()))
+
+        if (mva, complaint_type) in existing:
+            return False
+
+        self._close_csv_path.parent.mkdir(parents=True, exist_ok=True)
+        needs_header = not self._close_csv_path.exists() or self._close_csv_path.stat().st_size == 0
+        with self._close_csv_path.open("a", newline="", encoding="utf-8") as csv_file:
+            writer = csv.DictWriter(csv_file, fieldnames=["mva", "Type"])
+            if needs_header:
+                writer.writeheader()
+            writer.writerow({"mva": mva, "Type": complaint_type})
+        return True
 
     def _service_account_path(self) -> Path:
         """Resolve the service account JSON path from config, relative to BASE_DIR."""
@@ -342,7 +379,11 @@ class VendorTrackingMonitor:
             # Synthesize a pseudo-ID from From + Subject + Date to allow idempotency
             message_id = f"synthetic|{msg.get('From','')}|{subject}|{msg.get('Date','')}"
 
-        if not self._skip_idempotency_gate and self._store.is_processed(message_id):
+        email_type = classify_email(msg)
+        replaying_completion = (
+            self._replay_completion_receipts and email_type == EmailType.COMPLETION_RECEIPT
+        )
+        if not self._skip_idempotency_gate and not replaying_completion and self._store.is_processed(message_id):
             log.debug("Skipping already-processed: %s", message_id)
             summary.skipped_idempotent += 1
             self._record_decision(
@@ -352,7 +393,6 @@ class VendorTrackingMonitor:
             )
             return
 
-        email_type = classify_email(msg)
         log.info("Email type: %-30s | Subject: %s", email_type.name, subject)
 
         if email_type == EmailType.UNKNOWN:
@@ -376,18 +416,8 @@ class VendorTrackingMonitor:
                 self._handle_approval_needed(html_body, message_id, subject, summary)
             elif email_type == EmailType.TECHNICIAN_ASSIGNED:
                 self._handle_technician_assigned(html_body, message_id, subject, summary)
-            # COMPLETION_RECEIPT is Phase 4 — log and skip for now
             elif email_type == EmailType.COMPLETION_RECEIPT:
-                log.info("Completion receipt email deferred to Phase 4 — skipping: %s", subject)
-                if not self._skip_idempotency_gate:
-                    self._store.mark_processed(message_id)
-                self._record_decision(
-                    message_id=message_id,
-                    subject=subject,
-                    email_type=email_type.name,
-                    decision="skip_phase4_deferred",
-                )
-                return
+                self._handle_completion_receipt(html_body, message_id, subject, summary)
         except Exception as exc:
             log.error("Error processing message '%s': %s", subject, exc, exc_info=True)
             summary.errors.append(f"{subject}: {exc}")
@@ -629,6 +659,84 @@ class VendorTrackingMonitor:
             tracker_url=data.tracker_url,
         )
 
+    def _handle_completion_receipt(
+        self,
+        html: str,
+        message_id: str,
+        subject: str,
+        summary: RunSummary,
+    ) -> None:
+        data: CompletionReceiptEmailData = parse_completion_receipt_email(subject, html)
+        if not data.vin:
+            summary.needs_review.append(f"[Completion receipt has no VIN] {subject}")
+            self._record_decision(
+                message_id=message_id,
+                subject=subject,
+                email_type=EmailType.COMPLETION_RECEIPT.name,
+                decision="needs_review_no_vin",
+                job_id=data.job_id or "",
+            )
+            return
+
+        assert self._updater is not None
+        match = self._updater.find_unique_row_by_vin(data.vin)
+        if not match.is_ok or match.row_index is None:
+            summary.needs_review.append(f"[{match.status}] VIN={data.vin} | {match.note}")
+            self._record_decision(
+                message_id=message_id,
+                subject=subject,
+                email_type=EmailType.COMPLETION_RECEIPT.name,
+                decision="needs_review_match_failure",
+                vin=data.vin,
+                match_status=match.status,
+                match_note=match.note,
+            )
+            return
+
+        row_fields = self._updater.get_row_fields(match.row_index, ["MVA", "Damage Type"])
+        raw_mva = row_fields.get("MVA", "")
+        mva = f"0{raw_mva}" if len(raw_mva) == 8 and raw_mva.isdigit() else raw_mva
+        damage_type = row_fields.get("Damage Type", "").strip().lower()
+        complaint_type = "Glass" if damage_type in {"glass", "repair", "replacement"} else "PM" if damage_type == "pm" else ""
+        if len(mva) != 9 or not mva.isdigit() or not complaint_type:
+            detail = f"MVA='{raw_mva}', Damage Type='{row_fields.get('Damage Type', '')}'"
+            summary.needs_review.append(f"[Invalid close fields] VIN={data.vin} | {detail}")
+            self._record_decision(
+                message_id=message_id,
+                subject=subject,
+                email_type=EmailType.COMPLETION_RECEIPT.name,
+                decision="needs_review_invalid_close_fields",
+                vin=data.vin,
+                detail=detail,
+            )
+            return
+
+        fields = {"Repair Status": STATUS_COMPLETED}
+        if data.job_id:
+            fields["Vendor Job Number"] = data.job_id
+        if data.total:
+            fields["Cost"] = data.total
+
+        if self._dry_run:
+            decision = "dry_run_would_queue_close_candidate"
+        else:
+            added = self._append_close_candidate(mva, complaint_type)
+            self._updater.update_vendor_fields(match.row_index, fields)
+            decision = "queued_close_candidate" if added else "close_candidate_already_queued"
+
+        summary.close_candidates.append(mva)
+        self._record_decision(
+            message_id=message_id,
+            subject=subject,
+            email_type=EmailType.COMPLETION_RECEIPT.name,
+            decision=decision,
+            vin=data.vin,
+            mva=mva,
+            complaint_type=complaint_type,
+            row_index=match.row_index,
+            job_id=data.job_id or "",
+        )
+
 
 # ─── Date helper ──────────────────────────────────────────────────────────────
 
@@ -670,6 +778,12 @@ def _print_summary(summary: RunSummary) -> None:
         for item in summary.needs_review:
             print(f"    - {item}")
 
+    if summary.close_candidates:
+        print()
+        print("  Completion Receipts Added for Review:")
+        for mva in summary.close_candidates:
+            print(f"    - MVA: {mva}")
+
     if summary.errors:
         print()
         print("  Errors:")
@@ -704,6 +818,11 @@ def main() -> int:
         "--decision-log",
         help="Path to JSONL decision log (default: data/vendor_tracking_decisions.jsonl)",
     )
+    parser.add_argument(
+        "--replay-completion-receipts",
+        action="store_true",
+        help="Reprocess completion receipts previously marked handled without replaying other email types",
+    )
     args = parser.parse_args()
 
     config = _load_config()
@@ -713,6 +832,7 @@ def main() -> int:
         ignore_idempotency=args.ignore_idempotency,
         decision_log_path=args.decision_log,
         dry_run=args.dry_run,
+        replay_completion_receipts=args.replay_completion_receipts,
     )
     summary = monitor.run()
     _print_summary(summary)

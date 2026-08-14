@@ -206,6 +206,13 @@ RUNTIME_CONFIG.update(_load_local_config_overrides(SHARED_LOCAL_CONFIG_PATH))
 SERVICE_ACCOUNT_JSON = _resolve_config_path(str(RUNTIME_CONFIG["service_account_json"]))
 SPREADSHEET_ID = os.getenv("GLASS_SPREADSHEET_ID", str(RUNTIME_CONFIG["spreadsheet_id"]))
 SHEET_NAME = str(RUNTIME_CONFIG["sheet_name"])
+SHEETS_CONNECT_TIMEOUT_SECONDS = float(
+    os.getenv("GLASS_SHEETS_CONNECT_TIMEOUT_SECONDS", "10")
+)
+SHEETS_READ_TIMEOUT_SECONDS = float(
+    os.getenv("GLASS_SHEETS_READ_TIMEOUT_SECONDS", "60")
+)
+SHEETS_TIMEOUT = (SHEETS_CONNECT_TIMEOUT_SECONDS, SHEETS_READ_TIMEOUT_SECONDS)
 
 # Gmail/SMTP infrastructure endpoints
 IMAP_SERVER = str(RUNTIME_CONFIG["imap_server"])
@@ -993,7 +1000,9 @@ def _get_worksheet():
             "or run 'Run-GlassOrchestrator.cmd'."
         )
 
+    log.info("Persistence: Connecting to Google Sheets …")
     gc = gspread.service_account(filename=str(SERVICE_ACCOUNT_JSON))
+    gc.set_timeout(SHEETS_TIMEOUT)
     sh = gc.open_by_key(SPREADSHEET_ID)
     return sh.worksheet(SHEET_NAME)
 
@@ -1016,6 +1025,7 @@ def persist_new_rows(df: pd.DataFrame) -> pd.DataFrame:
     log.info("Persistence: Appending to Google Sheet [%s] …", SHEET_NAME)
 
     ws = _get_worksheet()
+    log.info("Persistence: Reading existing sheet rows …")
     all_vals = ws.get_all_values()
 
     # No deduplication: all rows are always written
@@ -1031,6 +1041,7 @@ def persist_new_rows(df: pd.DataFrame) -> pd.DataFrame:
     # Insert rows above the summary section (pushes summary down automatically).
     # inherit_from_before=True: new rows inherit formatting from the data row above,
     # not the summary row below (which is orange/bold and would corrupt the inserted rows).
+    log.info("Persistence: Inserting %d rows at row %d …", len(rows_to_insert), insert_row)
     ws.insert_rows(rows_to_insert, row=insert_row, inherit_from_before=True)
 
     log.info("Persistence: Wrote %d new rows to Google Sheet at row %d", len(df), insert_row)

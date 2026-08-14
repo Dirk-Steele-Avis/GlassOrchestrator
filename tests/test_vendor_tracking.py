@@ -24,6 +24,7 @@ import vendor_tracking.email_parser as email_parser
 from vendor_tracking.email_parser import (
     AppointmentEmailData,
     ApprovalNeededEmailData,
+    CompletionReceiptEmailData,
     EmailType,
     TechnicianAssignedEmailData,
     _find_view_status_href,
@@ -32,6 +33,7 @@ from vendor_tracking.email_parser import (
     normalize_vin,
     parse_appointment_email,
     parse_approval_needed_email,
+    parse_completion_receipt_email,
     parse_technician_assigned_email,
 )
 from vendor_tracking.idempotency_store import IdempotencyStore
@@ -114,6 +116,16 @@ TECH_ASSIGNED_HTML = f"""
 <p>Your Certified Technician Has Been Assigned</p>
 <p>Assigned Date: 05/07/2026</p>
 <a href="{SAMPLE_ZETA_HREF}">VIEW STATUS</a>
+</body></html>
+"""
+
+COMPLETION_HTML = """
+<html><body>
+<p>Thank you for choosing Auto Glass Now.</p>
+<table>
+<tr><td>VIN</td><td>1HGBH41JXMN109186</td></tr>
+<tr><td>Total</td><td>$306.00</td></tr>
+</table>
 </body></html>
 """
 
@@ -259,6 +271,26 @@ class TestVT2_AppointmentParsing:
         assert result.appointment_ref == "05052026C1945616"
 
 
+class TestCompletionReceiptParsing:
+
+    def test_extracts_job_vin_and_total(self):
+        result: CompletionReceiptEmailData = parse_completion_receipt_email(
+            "[External] Receipt for Job #4946751",
+            COMPLETION_HTML,
+        )
+
+        assert result.job_id == "4946751"
+        assert result.vin == "1HGBH41JXMN109186"
+        assert result.total == "$306.00"
+
+    def test_missing_fields_remain_none(self):
+        result = parse_completion_receipt_email("Glass Receipt", "<p>Completed</p>")
+
+        assert result.job_id is None
+        assert result.vin is None
+        assert result.total is None
+
+
 # ─── VT-3: Approval-needed email parsing ─────────────────────────────────────
 
 class TestVT3_ApprovalNeededParsing:
@@ -340,6 +372,37 @@ class TestVT5_SheetRowMatching:
         result = self.updater.find_row("1HGBH41JXMN109186", "05/01/2026")
         assert result.status == "ambiguous"
 
+    def test_unique_vin_match_returns_row_and_fields(self):
+        headers = ["Inventory Date", "MVA", "VIN", "Damage Type"]
+        updater, _ = _make_sheet_updater_with_mock(
+            headers,
+            [["05/06/2026", "12345678", "1HGBH41JXMN109186", "Replacement"]],
+        )
+
+        result = updater.find_unique_row_by_vin("1HGBH41JXMN109186")
+
+        assert result.is_ok
+        assert result.row_index == 2
+        assert updater.get_row_fields(2, ["MVA", "Damage Type"]) == {
+            "MVA": "12345678",
+            "Damage Type": "Replacement",
+        }
+
+    def test_duplicate_vin_is_ambiguous(self):
+        headers = ["Inventory Date", "MVA", "VIN"]
+        updater, _ = _make_sheet_updater_with_mock(
+            headers,
+            [
+                ["05/06/2026", "12345678", "1HGBH41JXMN109186"],
+                ["06/06/2026", "87654321", "1HGBH41JXMN109186"],
+            ],
+        )
+
+        result = updater.find_unique_row_by_vin("1HGBH41JXMN109186")
+
+        assert result.status == "ambiguous"
+        assert result.row_index is None
+
     def test_invalid_vin_returns_not_found(self):
         result = self.updater.find_row("TOOSHORT", "05/01/2026")
         assert result.status == "not_found"
@@ -372,7 +435,9 @@ class TestVT6_UpdateVendorFields:
 
     def test_writes_repair_status(self):
         self.updater.update_vendor_fields(2, {"Repair Status": STATUS_APPROVAL_NEEDED})
-        self.mock_ws.update_cell.assert_any_call(2, 4, STATUS_APPROVAL_NEEDED)
+        self.mock_ws.batch_update.assert_called_once_with([
+            {"range": "D2", "values": [[STATUS_APPROVAL_NEEDED]]},
+        ])
 
     def test_status_precedence_blocks_downgrade(self):
         """Completed status must not be overwritten by a lower-precedence status."""
@@ -386,10 +451,7 @@ class TestVT6_UpdateVendorFields:
         updater, mock_ws = _make_sheet_updater_with_mock(headers, data_rows)
 
         updater.update_vendor_fields(2, {"Repair Status": STATUS_SCHEDULED})
-        # update_cell should NOT have been called with STATUS_SCHEDULED
-        for c in mock_ws.update_cell.call_args_list:
-            if c == call(2, 4, STATUS_SCHEDULED):
-                pytest.fail("Completed status was downgraded to Scheduled — precedence not enforced")
+        mock_ws.batch_update.assert_not_called()
 
     def test_writes_multiple_fields(self):
         self.updater.update_vendor_fields(2, {
@@ -397,16 +459,22 @@ class TestVT6_UpdateVendorFields:
             "Cost": "$450.00",
             "Repair Status Notes": "ETA: 5 days",
         })
-        self.mock_ws.update_cell.assert_any_call(2, 5, "Yes")
-        self.mock_ws.update_cell.assert_any_call(2, 6, "$450.00")
-        self.mock_ws.update_cell.assert_any_call(2, 7, "ETA: 5 days")
+        self.mock_ws.batch_update.assert_called_once_with([
+            {"range": "E2", "values": [["Yes"]]},
+            {"range": "F2", "values": [["$450.00"]]},
+            {"range": "G2", "values": [["ETA: 5 days"]]},
+        ])
+
+    def test_updates_local_cache_without_rereading_sheet(self):
+        self.updater.update_vendor_fields(2, {"Repair Status": STATUS_COMPLETED})
+
+        self.mock_ws.get_all_values.assert_not_called()
+        assert self.updater.is_row_resolved(2) is True
 
     def test_skips_unknown_column(self):
         """update_vendor_fields must not raise for unknown column names."""
         self.updater.update_vendor_fields(2, {"NonExistentColumn": "value"})
-        # No exception raised, and update_cell not called for that column
-        for c in self.mock_ws.update_cell.call_args_list:
-            assert c.args[2] != "value" or c.args[1] != 99
+        self.mock_ws.batch_update.assert_not_called()
 
     def test_is_row_resolved_true_for_completed(self):
         headers = ["Inventory Date", "MVA", "VIN", "Repair Status"]
@@ -452,6 +520,7 @@ class TestVT7_IntegrationMocked:
             "vendor_tracking_senders": ["autoglassnow.com"],
             "vendor_tracking_lookback_days": 7,
             "vendor_tracking_idempotency_store": str(tmp_path / "idem.json"),
+            "vendor_tracking_decision_log": str(tmp_path / "decisions.jsonl"),
         }
         monitor = VendorTrackingMonitor(config)
         # Inject idempotency store pointing to tmp
@@ -577,6 +646,115 @@ class TestVT8_Idempotency:
         assert len(store) == 1
 
 
+class TestCompletionReceiptQueue:
+
+    def _build_monitor(self, tmp_path, *, replay=False):
+        from vendor_tracking.monitor import VendorTrackingMonitor
+
+        return VendorTrackingMonitor(
+            {
+                "vendor_tracking_lookback_days": 30,
+                "vendor_tracking_idempotency_store": str(tmp_path / "idem.json"),
+                "vendor_tracking_close_csv": str(tmp_path / "close_workitem.csv"),
+                "vendor_tracking_decision_log": str(tmp_path / "decisions.jsonl"),
+            },
+            replay_completion_receipts=replay,
+        )
+
+    def test_unique_vin_queues_candidate_and_updates_sheet(self, tmp_path):
+        from vendor_tracking.monitor import RunSummary
+
+        monitor = self._build_monitor(tmp_path)
+        updater = MagicMock()
+        updater.find_unique_row_by_vin.return_value = type(
+            "Match", (), {"is_ok": True, "row_index": 7, "status": "ok", "note": ""}
+        )()
+        updater.get_row_fields.return_value = {"MVA": "12345678", "Damage Type": "Replacement"}
+        monitor._updater = updater
+        summary = RunSummary()
+
+        monitor._handle_completion_receipt(
+            COMPLETION_HTML,
+            "<completion-001@autoglassnow.com>",
+            "Receipt for Job #4946751",
+            summary,
+        )
+
+        assert (tmp_path / "close_workitem.csv").read_text(encoding="utf-8").splitlines() == [
+            "mva,Type",
+            "012345678,Glass",
+        ]
+        updater.update_vendor_fields.assert_called_once_with(
+            7,
+            {
+                "Repair Status": STATUS_COMPLETED,
+                "Vendor Job Number": "4946751",
+                "Cost": "$306.00",
+            },
+        )
+        assert summary.close_candidates == ["012345678"]
+
+    def test_duplicate_candidate_is_not_appended_twice(self, tmp_path):
+        from vendor_tracking.monitor import RunSummary
+
+        monitor = self._build_monitor(tmp_path)
+        updater = MagicMock()
+        updater.find_unique_row_by_vin.return_value = type(
+            "Match", (), {"is_ok": True, "row_index": 7, "status": "ok", "note": ""}
+        )()
+        updater.get_row_fields.return_value = {"MVA": "12345678", "Damage Type": "Repair"}
+        monitor._updater = updater
+
+        monitor._handle_completion_receipt(COMPLETION_HTML, "<one>", "Receipt for Job #4946751", RunSummary())
+        monitor._handle_completion_receipt(COMPLETION_HTML, "<two>", "Receipt for Job #4946751", RunSummary())
+
+        assert (tmp_path / "close_workitem.csv").read_text(encoding="utf-8").count("012345678,Glass") == 1
+
+    def test_ambiguous_vin_never_queues_or_updates(self, tmp_path):
+        from vendor_tracking.monitor import RunSummary
+
+        monitor = self._build_monitor(tmp_path)
+        updater = MagicMock()
+        updater.find_unique_row_by_vin.return_value = type(
+            "Match",
+            (),
+            {"is_ok": False, "row_index": None, "status": "ambiguous", "note": "VIN matched 2 rows"},
+        )()
+        monitor._updater = updater
+        summary = RunSummary()
+
+        monitor._handle_completion_receipt(
+            COMPLETION_HTML,
+            "<completion-ambiguous>",
+            "Receipt for Job #4946751",
+            summary,
+        )
+
+        assert not (tmp_path / "close_workitem.csv").exists()
+        updater.update_vendor_fields.assert_not_called()
+        assert summary.close_candidates == []
+        assert "ambiguous" in summary.needs_review[0]
+
+    def test_completion_replay_bypasses_processed_gate_only_for_receipt(self, tmp_path):
+        from vendor_tracking.monitor import RunSummary
+
+        monitor = self._build_monitor(tmp_path, replay=True)
+        message_id = "<completion-replay@autoglassnow.com>"
+        monitor._store._ids.add(message_id)
+        monitor._handle_completion_receipt = MagicMock()
+        msg = _make_message(
+            subject="Receipt for Job #4946751",
+            body=COMPLETION_HTML,
+            message_id=message_id,
+        )
+        summary = RunSummary()
+
+        monitor._process_message(msg, summary)
+
+        monitor._handle_completion_receipt.assert_called_once()
+        assert summary.skipped_idempotent == 0
+
+
 # ─── VT-9: Approval Needed blocker in run summary ─────────────────────────────
 
 class TestVT9_ApprovalNeededSummary:
@@ -627,6 +805,21 @@ class TestVT10_ReplayControls:
             ignore_idempotency=False,
         )
         assert monitor._resolve_imap_since_date() == "04-May-2026"
+
+    def test_blank_vendor_sheet_override_uses_main_sheet_config(self):
+        from vendor_tracking.monitor import VendorTrackingMonitor
+
+        monitor = VendorTrackingMonitor(
+            {
+                "vendor_tracking_spreadsheet_id": "",
+                "spreadsheet_id": "main-sheet-id",
+                "vendor_tracking_sheet_name": "",
+                "sheet_name": "GlassClaims",
+            }
+        )
+
+        assert monitor._spreadsheet_id == "main-sheet-id"
+        assert monitor._sheet_name == "GlassClaims"
 
     def test_since_date_iso_format_is_converted_to_imap(self):
         from vendor_tracking.monitor import VendorTrackingMonitor
@@ -751,13 +944,14 @@ class TestVT10_ReplayControls:
 
         assert monitor._store.is_processed("<replay-003@autoglassnow.com>") is False
 
-    def test_dry_run_would_update_row_without_write(self):
+    def test_dry_run_would_update_row_without_write(self, tmp_path):
         from vendor_tracking.monitor import VendorTrackingMonitor, RunSummary
 
         monitor = VendorTrackingMonitor(
             {
                 "vendor_tracking_lookback_days": 30,
                 "vendor_tracking_idempotency_store": "data/test_idem.json",
+                "vendor_tracking_decision_log": str(tmp_path / "decisions.jsonl"),
             },
             dry_run=True,
         )

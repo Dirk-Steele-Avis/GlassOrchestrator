@@ -38,6 +38,31 @@ python agn_invoices.py --check-only
 python agn_invoices.py --approve
 ```
 
+Cap each selected stage to one invoice for a controlled trial run:
+```
+python agn_invoices.py --max-invoices 1
+```
+
+The command still requires approval confirmation unless `--yes` is also supplied.
+
+Run the complete extraction and FieldPO review path without pressing Approve:
+```
+python agn_invoices.py --dry-run --max-invoices 1 --silent
+```
+
+Dry run returns to FieldPO Home after each invoice and writes each `WOULD_CLOSE`
+or `SKIPPED` result to `closure_decisions.jsonl`. It updates normal extraction and
+check queue state, but it never clicks Approve or Close.
+
+Invoices are processed oldest first by Outlook `ReceivedTime`; the run cap is
+applied after that ordering.
+
+A `WOULD_CLOSE` decision requires all of the following:
+- the invoice and FieldPO authorized amounts match exactly
+- the invoice date is at least `age_approval_days` old (14 days by default)
+- FieldPO resolves a valid MVA
+- the Work Order `Created By` value exactly matches `allowed_work_order_created_by` (`Steele, Dirk`)
+
 Trace one or many VINs across queue history and Outlook invoice emails:
 ```
 python agn_invoices.py --trace-vin 1GKENKKSXTJ197778

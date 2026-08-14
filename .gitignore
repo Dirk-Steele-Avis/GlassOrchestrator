@@ -11,6 +11,7 @@ venv/
 data/GlassDataParser.csv
 data/mva_cycle_tracker.json
 data/vendor_tracking_decisions.jsonl
+data/close_workitem_processed.json
 GlassResults.txt
 MasterLog.xlsx
 GlassOrchestrator.log
@@ -37,13 +38,18 @@ Thumbs.db
 log/*.log
 log/*.png
 log/failures/
+log/fieldpo_nextaction_backups/
 !log/.gitkeep
 CreateCompassComplaints.log
 
 # Runtime diagnostics artifacts
 artifacts/
 
+# Outlook invoice and receipt downloads
+outlook/pdfs/
+
 # Browser automation runtime artifacts
+.edge-playwright-profile/
 outlook/browser_profile/
 outlook/browser_profile/GrShaderCache/
 outlook/browser_profile/Snapshots/

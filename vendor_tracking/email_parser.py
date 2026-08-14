@@ -1,9 +1,10 @@
 """AutoGlassNow email parsing for vendor lifecycle tracking.
 
-Handles three inbound email types:
+Handles four inbound email types:
   1. Appointment confirmation — seeds JobId via Zeta VIEW STATUS href
   2. Approval-needed quote   — vendor blocked; extracts VIN, cost, ETA
   3. Technician-assigned     — status update only; no VIN expected
+    4. Completion receipt      — extracts JobId, VIN, and final cost
 
 Classification is done by sender + subject + body keyword heuristics.
 All parsing is best-effort; missing fields are returned as None.
@@ -141,6 +142,14 @@ class TechnicianAssignedEmailData:
     """Fields extracted from a technician-assigned notice."""
     assigned_date: Optional[str]    # e.g. "05/06/2026"
     tracker_url: Optional[str]
+
+
+@dataclass
+class CompletionReceiptEmailData:
+    """Fields extracted from an AutoGlassNow completion receipt."""
+    job_id: Optional[str]
+    vin: Optional[str]
+    total: Optional[str]
 
 
 # ─── JobId / Zeta href extraction ────────────────────────────────────────────
@@ -466,6 +475,22 @@ def _extract_work_order_ref(text: str) -> Optional[str]:
     if m:
         return m.group(1).strip()
     return None
+
+
+def parse_completion_receipt_email(subject: str, html: str) -> CompletionReceiptEmailData:
+    """Parse the identifiers required to create a reviewed close candidate."""
+    if _HAS_BS4:
+        soup = BeautifulSoup(html, "html.parser")
+        text = soup.get_text(separator="\n")
+    else:
+        text = re.sub(r"<[^>]+>", " ", html)
+
+    job_match = re.search(r"receipt\s+for\s+job\s*#\s*(\d+)", subject, re.IGNORECASE)
+    return CompletionReceiptEmailData(
+        job_id=job_match.group(1) if job_match else None,
+        vin=_extract_vin_from_text(text),
+        total=_extract_cost_from_text(text),
+    )
 
 
 def parse_approval_needed_email(html: str) -> ApprovalNeededEmailData:

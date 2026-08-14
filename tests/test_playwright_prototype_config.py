@@ -149,6 +149,13 @@ class TestResolveEdgeUserDataDir:
         cfg.write_text(json.dumps({"edge_user_data_dir": str(expected)}), encoding="utf-8")
         assert resolve_edge_user_data_dir(config_path=cfg) == expected
 
+    def test_default_uses_dedicated_automation_profile(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("PLAYWRIGHT_EDGE_USER_DATA_DIR", raising=False)
+        cfg = tmp_path / "missing.json"
+        result = resolve_edge_user_data_dir(config_path=cfg)
+        assert result.name == ".edge-playwright-profile"
+        assert result.parent.name == "GlassOrchestrator"
+
 
 class TestResolveEdgeProfileDirectory:
     def test_env_overrides_config(self, monkeypatch, tmp_path):

@@ -49,10 +49,32 @@ def test_detect_mva_not_found_returns_none_on_details(page):
     assert detect_mva_not_found(page) is None
 
 
+def test_app_not_installed_status_does_not_mean_mva_not_found(page):
+    page.set_content(
+        VEHICLE_DETAILS_EXPANDED_HTML.replace(
+            "<body>",
+            "<body><button><span>App not installed.</span></button>",
+        )
+    )
+
+    assert detect_mva_not_found(page) is None
+    assert detect_details_ready(page) is Outcome.DETAILS_READY
+
+
 def test_detect_details_ready_fires_on_details_heading(page):
     page.set_content(VEHICLE_DETAILS_EXPANDED_HTML)
 
     assert detect_details_ready(page) is Outcome.DETAILS_READY
+
+
+def test_detect_details_ready_waits_for_loaded_mva_cell(page):
+    page.set_content(
+        """<h2>Vehicle Details</h2><table><tr>
+        <td data-key="mvaNo.1" role="gridcell"><div class="skeleton"></div></td>
+        </tr></table>"""
+    )
+
+    assert detect_details_ready(page) is None
 
 
 def test_default_detectors_priority_error_before_success(page):

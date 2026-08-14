@@ -27,6 +27,7 @@ from GlassOrchestrator import (
     DATA_DIR,
     IMAP_SERVER,
     SERVICE_ACCOUNT_JSON,
+    SHEETS_TIMEOUT,
     SPREADSHEET_ID,
     SHEET_NAME,
     TARGET_SENDER,
@@ -177,6 +178,15 @@ class TestIT3_MergeReconciliation:
 
 class TestIT4_SpreadsheetPersistence:
     """Verify data is appended to Google Sheet without overwriting."""
+
+    @patch("GlassOrchestrator.gspread")
+    def test_sheet_client_sets_request_timeout(self, mock_gspread):
+        client = mock_gspread.service_account.return_value
+        worksheet = client.open_by_key.return_value.worksheet.return_value
+
+        assert _get_worksheet() is worksheet
+        client.set_timeout.assert_called_once_with(SHEETS_TIMEOUT)
+        client.open_by_key.assert_called_once_with(SPREADSHEET_ID)
 
     def _make_test_df(self, mvas, date="03/05/2026"):
         rows = []

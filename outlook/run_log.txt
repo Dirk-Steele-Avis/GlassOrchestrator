@@ -2764,3 +2764,237 @@ Trace summary: approved=0, failed=0, skipped=0, processed=0, missing=1
 All done.
 
 Press Enter to close...
+
+======================================================================
+RUN STARTED: 2026-08-09 17:41:35
+======================================================================
+
+============================================================
+STEP 1: EXTRACT - reading Outlook AGN\Invoice folder
+============================================================
+WARNING: Could not parse '[External] Receipt for Job #5075943' (VIN=None, amount=None). Leaving email in place for manual review.
+Skipping duplicate queue key for '[External] Invoice #5075940' -> VIN KMHL64JA4SA465139, $340.00
+Skipping duplicate queue key for '[External] Invoice #5075941' -> VIN 4T1DAACK4SU602117, $340.00
+Skipping duplicate queue key for '[External] Invoice #5075971' -> VIN 1FMJK1M81SEA27374, $340.00
+Skipping duplicate queue key for '[External] Invoice #5084141' -> VIN 1GNERGKS9TJ214283, $340.00
+Skipping duplicate queue key for '[External] Invoice #5084142' -> VIN 3GKALMEG8TL417614, $340.00
+Skipping duplicate queue key for '[External] Invoice #5084143' -> VIN 1FMCU9MN1SUA99382, $340.00
+Skipping duplicate queue key for '[External] Invoice #5084144' -> VIN 5YJ3E1EA9PF436475, $340.00
+Skipping duplicate queue key for '[External] Invoice #5084145' -> VIN 3C4NJDBN3ST548874, $340.00
+Skipping duplicate queue key for '[External] Invoice #5084148' -> VIN 5TDAAAB54TS131661, $340.00
+WARNING: Could not parse '[External] Receipt for Job #5075999' (VIN=None, amount=None). Leaving email in place for manual review.
+Skipping duplicate queue key for '[External] Invoice #5084304' -> VIN JM3KKCHD7T1354678, $340.00
+Skipping duplicate queue key for '[External] Invoice #5084317' -> VIN 5XYP64GC5SG653439, $340.00
+Skipping duplicate queue key for '[External] Invoice #5084326' -> VIN 7MMVABBL8TN463467, $340.00
+Skipping duplicate queue key for '[External] Invoice #5084338' -> VIN 5YFB4MDE8TP431206, $340.00
+Processed: [External] Invoice #5075943 -> VIN 1HGCY1F29SA085956, $340.00 (categorized: Green Category)
+Reached invoice limit (1). Stopping extraction for this run.
+
+1 invoice(s) added to queue: C:\Users\steeldir\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 2: CHECK - looking up each queued VIN in FieldPO
+============================================================
+Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN 1HGCY1F29SA085956 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Queue updated: C:\Users\steeldir\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 3: DRY RUN - review only; APPROVE will not be pressed
+============================================================
+  WOULD_CLOSE: VIN 1HGCY1F29SA085956 | MVA 059941420 | all closure requirements met
+
+DRY RUN COMPLETE: no Approve or Close action was performed.
+
+All done.
+
+======================================================================
+RUN STARTED: 2026-08-09 17:50:18
+======================================================================
+
+============================================================
+STEP 1: EXTRACT - reading Outlook AGN\Invoice folder
+============================================================
+WARNING: Could not parse '[External] Receipt for Job #5075943' (VIN=None, amount=None). Leaving email in place for manual review.
+WARNING: Could not parse '[External] Receipt for Job #5075999' (VIN=None, amount=None). Leaving email in place for manual review.
+Processed: [External] Invoice #5075999 -> VIN KMHRC8A37SU397610, $340.00 (categorized: Green Category)
+Reached invoice limit (1). Stopping extraction for this run.
+
+1 invoice(s) added to queue: C:\Users\steeldir\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 2: CHECK - looking up each queued VIN in FieldPO
+============================================================
+Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN KMHRC8A37SU397610 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Queue updated: C:\Users\steeldir\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 3: DRY RUN - review only; APPROVE will not be pressed
+============================================================
+  WOULD_CLOSE: VIN KMHRC8A37SU397610 | MVA 057838384 | all closure requirements met
+
+DRY RUN COMPLETE: no Approve or Close action was performed.
+
+All done.
+
+======================================================================
+RUN STARTED: 2026-08-09 17:52:49
+======================================================================
+
+============================================================
+STEP 1: EXTRACT - reading Outlook AGN\Invoice folder
+============================================================
+WARNING: Could not parse '[External] Receipt for Job #5075943' (VIN=None, amount=None). Leaving email in place for manual review.
+WARNING: Could not parse '[External] Receipt for Job #5075999' (VIN=None, amount=None). Leaving email in place for manual review.
+WARNING: Could not parse '[External] Receipt for Job #5084150' (VIN=None, amount=None). Leaving email in place for manual review.
+Processed: [External] Invoice #5084150 -> VIN 1V2HC2CA2TC219439, $315.00 (categorized: Green Category)
+WARNING: Could not parse '[External] Receipt for Job #5090859' (VIN=None, amount=None). Leaving email in place for manual review.
+WARNING: Could not parse '[External] Receipt for Job #5090850' (VIN=None, amount=None). Leaving email in place for manual review.
+WARNING: Could not parse '[External] Receipt for Job #5090842' (VIN=None, amount=None). Leaving email in place for manual review.
+WARNING: Could not parse '[External] Receipt for Job #5090830' (VIN=None, amount=None). Leaving email in place for manual review.
+WARNING: Could not parse '[External] Receipt for Job #5090837' (VIN=None, amount=None). Leaving email in place for manual review.
+Processed: [External] Invoice #5090830 -> VIN 3GTPHBEK2TG319851, $340.00 (categorized: Green Category)
+Processed: [External] Invoice #5090837 -> VIN 1C4RDJDG5TC204580, $340.00 (categorized: Green Category)
+WARNING: Could not parse '[External] Receipt for Job #5097086' (VIN=None, amount=None). Leaving email in place for manual review.
+WARNING: Could not parse '[External] Receipt for Job #5097376' (VIN=None, amount=None). Leaving email in place for manual review.
+WARNING: Could not parse '[External] Receipt for Job #5097363' (VIN=None, amount=None). Leaving email in place for manual review.
+Processed: [External] Invoice #5097086 -> VIN 3GKALMEG6TL426800, $340.00 (categorized: Green Category)
+Processed: [External] Invoice #5097376 -> VIN 7MMVABBL3TN456930, $340.00 (categorized: Green Category)
+Reached invoice limit (5). Stopping extraction for this run.
+
+5 invoice(s) added to queue: C:\Users\steeldir\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 2: CHECK - looking up each queued VIN in FieldPO
+============================================================
+Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN 1V2HC2CA2TC219439 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $315.00  |  Auth: $124.00  |  Match: False
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN 3GTPHBEK2TG319851 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN 1C4RDJDG5TC204580 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN 3GKALMEG6TL426800 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN 7MMVABBL3TN456930 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Queue updated: C:\Users\steeldir\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 3: DRY RUN - review only; APPROVE will not be pressed
+============================================================
+  SKIPPED: VIN 1V2HC2CA2TC219439 | MVA 061063833 | price_mismatch
+  WOULD_CLOSE: VIN 3GTPHBEK2TG319851 | MVA 061305834 | all closure requirements met
+  WOULD_CLOSE: VIN 1C4RDJDG5TC204580 | MVA 060053066 | all closure requirements met
+  WOULD_CLOSE: VIN 3GKALMEG6TL426800 | MVA 060725431 | all closure requirements met
+  WOULD_CLOSE: VIN 7MMVABBL3TN456930 | MVA 059430523 | all closure requirements met
+
+DRY RUN COMPLETE: no Approve or Close action was performed.
+
+All done.
+
+======================================================================
+RUN STARTED: 2026-08-09 18:00:15
+======================================================================
+
+============================================================
+STEP 1: EXTRACT - reading Outlook AGN\Invoice folder
+============================================================
+WARNING: Could not parse '[External] Receipt for Job #5075943' (VIN=None, amount=None). Leaving email in place for manual review.
+WARNING: Could not parse '[External] Receipt for Job #5075999' (VIN=None, amount=None). Leaving email in place for manual review.
+WARNING: Could not parse '[External] Receipt for Job #5084150' (VIN=None, amount=None). Leaving email in place for manual review.
+WARNING: Could not parse '[External] Receipt for Job #5090859' (VIN=None, amount=None). Leaving email in place for manual review.
+WARNING: Could not parse '[External] Receipt for Job #5090850' (VIN=None, amount=None). Leaving email in place for manual review.
+WARNING: Could not parse '[External] Receipt for Job #5090842' (VIN=None, amount=None). Leaving email in place for manual review.
+WARNING: Could not parse '[External] Receipt for Job #5090830' (VIN=None, amount=None). Leaving email in place for manual review.
+WARNING: Could not parse '[External] Receipt for Job #5090837' (VIN=None, amount=None). Leaving email in place for manual review.
+WARNING: Could not parse '[External] Receipt for Job #5097086' (VIN=None, amount=None). Leaving email in place for manual review.
+WARNING: Could not parse '[External] Receipt for Job #5097376' (VIN=None, amount=None). Leaving email in place for manual review.
+WARNING: Could not parse '[External] Receipt for Job #5097363' (VIN=None, amount=None). Leaving email in place for manual review.
+Skipping duplicate queue key for '[External] Invoice #5097376' -> VIN 7MMVABBL3TN456930, $340.00
+WARNING: Could not parse '[External] Receipt for Job #5097337' (VIN=None, amount=None). Leaving email in place for manual review.
+WARNING: Could not parse '[External] Receipt for Job #5096929' (VIN=None, amount=None). Leaving email in place for manual review.
+WARNING: Could not parse '[External] Receipt for Job #5096901' (VIN=None, amount=None). Leaving email in place for manual review.
+WARNING: Could not parse '[External] Receipt for Job #5096818' (VIN=None, amount=None). Leaving email in place for manual review.
+Processed: [External] Invoice #5096818 -> VIN 1V2BR2CA1SC575920, $340.00 (categorized: Green Category)
+Processed: [External] Invoice #5096901 -> VIN 1GKENKKS0TJ206603, $340.00 (categorized: Green Category)
+Processed: [External] Invoice #5097363 -> VIN 1HGCY1F46TA019349, $340.00 (categorized: Green Category)
+Processed: [External] Invoice #5075993 -> VIN JM3KFBBL1S0645261, $340.00 (categorized: Green Category)
+Processed: [External] Invoice #5096929 -> VIN KL77LHEP8TC062689, $340.00 (categorized: Green Category)
+Reached invoice limit (5). Stopping extraction for this run.
+
+5 invoice(s) added to queue: C:\Users\steeldir\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 2: CHECK - looking up each queued VIN in FieldPO
+============================================================
+Reached FieldPO dashboard.
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN 1V2BR2CA1SC575920 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN 1GKENKKS0TJ206603 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN 1HGCY1F46TA019349 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Checking VIN JM3KFBBL1S0645261 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+
+Checking VIN KL77LHEP8TC062689 ...
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+  Invoice: $340.00  |  Auth: $340.00  |  Match: True
+  'ATTENTION PLEASE' popup detected -- clicking Resume Work.
+
+Queue updated: C:\Users\steeldir\GlassOrchestrator\outlook\invoices_queue.csv
+
+============================================================
+STEP 3: DRY RUN - review only; APPROVE will not be pressed
+============================================================
+  WOULD_CLOSE: VIN 1V2BR2CA1SC575920 | MVA 058858494 | all closure requirements met
+  WOULD_CLOSE: VIN 1GKENKKS0TJ206603 | MVA 059517474 | all closure requirements met
+  WOULD_CLOSE: VIN 1HGCY1F46TA019349 | MVA 061319753 | all closure requirements met
+  WOULD_CLOSE: VIN JM3KFBBL1S0645261 | MVA 070440112 | all closure requirements met
+  WOULD_CLOSE: VIN KL77LHEP8TC062689 | MVA 060333475 | all closure requirements met
+
+DRY RUN COMPLETE: no Approve or Close action was performed.
+
+All done.

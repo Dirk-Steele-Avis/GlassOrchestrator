@@ -22,6 +22,7 @@ from typing import Any, Optional
 
 try:
     import gspread  # pyright: ignore[reportMissingImports]
+    from gspread.utils import rowcol_to_a1  # pyright: ignore[reportMissingImports]
     _HAS_GSPREAD = True
 except ModuleNotFoundError:
     gspread = None  # type: ignore[assignment]
@@ -218,6 +219,40 @@ class VendorSheetUpdater:
             f"VIN {norm_vin} + {norm_date} matched {len(matching_rows)} rows"
         )
 
+    def find_unique_row_by_vin(self, vin: str) -> MatchResult:
+        """Find exactly one sheet row by VIN when an event has no arrival date."""
+        norm_vin = normalize_vin_for_match(vin)
+        if not norm_vin:
+            return MatchResult(None, "not_found", f"Invalid VIN: '{vin}'")
+
+        vin_col = self._col_index("VIN")
+        if vin_col is None:
+            return MatchResult(None, "not_found", "Sheet missing required column: VIN")
+
+        matching_rows = [
+            row_idx
+            for row_idx, row in enumerate(self._all_values[1:], start=2)
+            if len(row) >= vin_col and normalize_vin_for_match(row[vin_col - 1]) == norm_vin
+        ]
+        if len(matching_rows) == 1:
+            return MatchResult(matching_rows[0], "ok")
+        if not matching_rows:
+            return MatchResult(None, "not_found", f"VIN {norm_vin} not found")
+        return MatchResult(None, "ambiguous", f"VIN {norm_vin} matched {len(matching_rows)} rows")
+
+    def get_row_fields(self, row_index: int, column_names: list[str]) -> dict[str, str]:
+        """Return named values from one cached sheet row."""
+        if row_index < 2 or row_index > len(self._all_values):
+            return {}
+
+        row = self._all_values[row_index - 1]
+        values: dict[str, str] = {}
+        for column_name in column_names:
+            col_index = self._col_index(column_name)
+            if col_index is not None:
+                values[column_name] = row[col_index - 1].strip() if len(row) >= col_index else ""
+        return values
+
     def has_unique_resolved_vin(self, vin: str) -> bool:
         """Return True when VIN maps to exactly one row and that row is resolved."""
         norm_vin = normalize_vin_for_match(vin)
@@ -288,16 +323,32 @@ class VendorSheetUpdater:
                     )
                     fields = {k: v for k, v in fields.items() if k != "Repair Status"}
 
+        pending_updates: list[tuple[int, str, str]] = []
         for col_name, value in fields.items():
             col_idx = self._col_index(col_name)
             if col_idx is None:
                 log.warning("Column '%s' not found in sheet — skipping", col_name)
                 continue
-            self._ws.update_cell(row_index, col_idx, str(value) if value is not None else "")
-            log.debug("Row %d col '%s' ← '%s'", row_index, col_name, value)
+            serialized_value = str(value) if value is not None else ""
+            pending_updates.append((col_idx, col_name, serialized_value))
 
-        # Refresh cache after writes so subsequent lookups are accurate
-        self._refresh_cache()
+        if not pending_updates:
+            return
+
+        self._ws.batch_update([
+            {
+                "range": rowcol_to_a1(row_index, col_idx),
+                "values": [[serialized_value]],
+            }
+            for col_idx, _col_name, serialized_value in pending_updates
+        ])
+
+        for col_idx, col_name, serialized_value in pending_updates:
+            row_data = self._all_values[row_index - 1]
+            if len(row_data) < col_idx:
+                row_data.extend([""] * (col_idx - len(row_data)))
+            row_data[col_idx - 1] = serialized_value
+            log.debug("Row %d col '%s' ← '%s'", row_index, col_name, serialized_value)
 
     def write_needs_review(self, vin: str, note: str) -> None:
         """Attempt a best-effort Repair Status Notes write when a row can be found by VIN only.

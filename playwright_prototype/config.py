@@ -16,7 +16,7 @@ STORAGE_STATE_PATH: Path = BASE_DIR / "storage_state.json"
 DEFAULT_DEBUGGER_ADDRESS = "127.0.0.1:9222"
 DEFAULT_BROWSER_MODE = "profile"
 DEFAULT_EDGE_PROFILE_DIRECTORY = "Default"
-DEFAULT_EDGE_USER_DATA_DIR = Path(os.getenv("LOCALAPPDATA", "")) / "Microsoft" / "Edge" / "User Data"
+DEFAULT_EDGE_USER_DATA_DIR = BASE_DIR / ".edge-playwright-profile"
 
 
 def resolve_headless(config_path: Path | None = None) -> bool:

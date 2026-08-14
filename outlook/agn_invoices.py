@@ -42,7 +42,8 @@ import sys
 import json
 import getpass
 import argparse
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 from email.utils import parsedate_to_datetime
 
 import win32com.client
@@ -78,6 +79,7 @@ BROWSER_PROFILE_DIR = os.path.join(BASE_DIR, "browser_profile")
 CONFIG_FILE = os.path.join(BASE_DIR, "agn_invoices_config.json")
 
 LOG_FILE = os.path.join(BASE_DIR, "run_log.txt")
+DECISION_LOG_FILE = os.path.join(BASE_DIR, "closure_decisions.jsonl")
 
 
 def _load_runtime_config():
@@ -124,18 +126,24 @@ MAX_APPROVALS_PER_RUN = _int_or_default(RUNTIME_CONFIG.get("max_approvals_per_ru
 # If an invoice is this old (or older), allow approval even if amount match is False.
 AGE_APPROVAL_DAYS = _int_or_default(RUNTIME_CONFIG.get("age_approval_days", 21), 21)
 
-# Only approve when the page's Created By field matches one of these names.
-# Leave empty to disable the Created By approval gate.
-_allowed_created_by_raw = RUNTIME_CONFIG.get("allowed_created_by", [])
-if isinstance(_allowed_created_by_raw, str):
-    _allowed_created_by_raw = [_allowed_created_by_raw]
-ALLOWED_CREATED_BY = [str(v).strip() for v in _allowed_created_by_raw if str(v).strip()]
+# Only approve/close when the Work Order's Created By field matches one of these names.
+_allowed_work_order_created_by_raw = RUNTIME_CONFIG.get(
+    "allowed_work_order_created_by",
+    RUNTIME_CONFIG.get("allowed_created_by", []),
+)
+if isinstance(_allowed_work_order_created_by_raw, str):
+    _allowed_work_order_created_by_raw = [_allowed_work_order_created_by_raw]
+ALLOWED_WORK_ORDER_CREATED_BY = [
+    str(value).strip()
+    for value in _allowed_work_order_created_by_raw
+    if str(value).strip()
+]
 
 # Backward compatibility: legacy single-name setting.
-if not ALLOWED_CREATED_BY:
+if not ALLOWED_WORK_ORDER_CREATED_BY:
     _required_created_by = str(RUNTIME_CONFIG.get("required_created_by", "")).strip()
     if _required_created_by:
-        ALLOWED_CREATED_BY = [_required_created_by]
+        ALLOWED_WORK_ORDER_CREATED_BY = [_required_created_by]
 
 FIELDPO_URL = "https://supply-chain.east.prod.sdp.abg.cloud/fieldpo/dashboard"
 
@@ -234,15 +242,19 @@ def mark_processed_category(mail):
     mail.Save()
 
 
-def extract_vin_and_amount(pdf_path):
-    """
-    Based on the sample invoice format:
-        VIN                1FMJK1M83SEA26775
-        ...
-        Subtotal           $340.00
-    """
+def extract_invoice_data(pdf_path):
+    """Extract the invoice date, VIN, and subtotal from an AGN invoice PDF."""
     with pdfplumber.open(pdf_path) as pdf:
         full_text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+
+    if not re.search(r"(?im)^Invoice\s+#\d+\s*$", full_text):
+        return None, None, None
+
+    date_match = re.search(r"(?m)^\s*(\d{4}-\d{2}-\d{2})\s*$", full_text)
+    try:
+        invoice_date = datetime.strptime(date_match.group(1), "%Y-%m-%d").date() if date_match else None
+    except ValueError:
+        invoice_date = None
 
     vin_match = re.search(r"\b([A-HJ-NPR-Z0-9]{17})\b", full_text)
     vin = vin_match.group(1) if vin_match else None
@@ -250,7 +262,74 @@ def extract_vin_and_amount(pdf_path):
     amount_match = re.search(r"Subtotal\s*\$?([\d,]+\.\d{2})", full_text)
     amount = amount_match.group(1).replace(",", "") if amount_match else None
 
+    return invoice_date, vin, amount
+
+
+def extract_vin_and_amount(pdf_path):
+    """Backward-compatible VIN and subtotal extraction."""
+    _, vin, amount = extract_invoice_data(pdf_path)
     return vin, amount
+
+
+def extract_receipt_vin_and_amount(pdf_path):
+    """Extract VIN and final total from an AGN Job receipt PDF."""
+    with pdfplumber.open(pdf_path) as pdf:
+        full_text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+
+    if not re.search(r"(?im)^Job\s+#\d+\s*$", full_text):
+        return None, None
+    vin_match = re.search(r"\bVIN\s+([A-HJ-NPR-Z0-9]{17})\b", full_text, re.IGNORECASE)
+    total_matches = re.findall(r"(?im)^Total\s+\$?([\d,]+\.\d{2})\s*$", full_text)
+    vin = vin_match.group(1).upper() if vin_match else None
+    amount = total_matches[-1].replace(",", "") if total_matches else None
+    return vin, amount
+
+
+def _parse_amount(value):
+    try:
+        return Decimal(str(value or "").replace("$", "").replace(",", "").strip())
+    except InvalidOperation:
+        return None
+
+
+def evaluate_closure(
+    invoice_date,
+    invoice_amount,
+    auth_amount,
+    mva,
+    work_order_created_by="",
+    system_date=None,
+):
+    """Return a read-only closure decision and all failed gate reasons."""
+    today = system_date or date.today()
+    normalized_mva = normalize_mva(mva)
+    invoice_price = _parse_amount(invoice_amount)
+    fieldpo_price = _parse_amount(auth_amount)
+    age_days = (today - invoice_date).days if isinstance(invoice_date, date) else None
+    reasons = []
+
+    if not normalized_mva:
+        reasons.append("invalid_or_missing_mva")
+    if not str(work_order_created_by or "").strip():
+        reasons.append("missing_work_order_created_by")
+    elif not is_allowed_work_order_creator(work_order_created_by):
+        reasons.append("work_order_created_by_mismatch")
+    if invoice_date is None:
+        reasons.append("missing_invoice_date")
+    elif age_days < AGE_APPROVAL_DAYS:
+        reasons.append("invoice_too_new")
+    if invoice_price is None or fieldpo_price is None:
+        reasons.append("invalid_or_missing_price")
+    elif invoice_price != fieldpo_price:
+        reasons.append("price_mismatch")
+
+    return {
+        "decision": "WOULD_CLOSE" if not reasons else "SKIPPED",
+        "reasons": reasons,
+        "mva": normalized_mva,
+        "invoice_age_days": age_days,
+        "price_match": invoice_price is not None and invoice_price == fieldpo_price,
+    }
 
 
 def parse_received_timestamp(value):
@@ -276,6 +355,19 @@ def parse_received_timestamp(value):
 
 def normalize_vin(value):
     return re.sub(r"[^A-Z0-9]", "", (value or "").upper())
+
+
+def is_valid_vin(value):
+    return re.fullmatch(r"[A-HJ-NPR-Z0-9]{17}", normalize_vin(value)) is not None
+
+
+def normalize_mva(value):
+    normalized = re.sub(r"\s+", "", str(value or ""))
+    if len(normalized) == 8 and normalized.isdigit():
+        return f"0{normalized}"
+    if len(normalized) == 9 and normalized.isdigit():
+        return normalized
+    return ""
 
 
 def parse_trace_vins(raw_values):
@@ -485,7 +577,7 @@ def write_queue(rows):
         writer.writerows(rows)
 
 
-def step_extract():
+def step_extract(max_invoices=None):
     print("\n" + "=" * 60)
     print("STEP 1: EXTRACT - reading Outlook AGN\\Invoice folder")
     print("=" * 60)
@@ -499,6 +591,9 @@ def step_extract():
     items = invoice_folder.Items
     items.Sort("[ReceivedTime]", False)  # oldest first
     all_items = list(items)  # copy before moving anything
+    all_items.sort(
+        key=lambda mail: parse_received_timestamp(str(getattr(mail, "ReceivedTime", "")))
+    )
 
     existing_rows = read_queue()
     existing_keys = {
@@ -506,16 +601,20 @@ def step_extract():
         for r in existing_rows
     }
 
+    invoice_limit = MAX_ITEMS_PER_RUN if max_invoices is None else max_invoices
     rows = []
     for mail in all_items:
-        if MAX_ITEMS_PER_RUN is not None and len(rows) >= MAX_ITEMS_PER_RUN:
-            print(f"Reached MAX_ITEMS_PER_RUN limit ({MAX_ITEMS_PER_RUN}). Stopping for this run.")
+        if invoice_limit is not None and len(rows) >= invoice_limit:
+            print(f"Reached invoice limit ({invoice_limit}). Stopping extraction for this run.")
             break
         try:
             if mail.Class != 43:  # olMail only
                 continue
 
             if has_processed_category(mail):
+                continue
+
+            if re.search(r"receipt\s+for\s+job\s*#", str(mail.Subject or ""), re.IGNORECASE):
                 continue
 
             pdf_attachments = [a for a in mail.Attachments if a.FileName.lower().endswith(".pdf")]
@@ -626,13 +725,19 @@ def go_to_active_work_order_tab(page, vin):
     dismiss_attention_popup(page)
     page.wait_for_timeout(1500)
 
-    page.locator("text=MVA#").first.click()
+    mva_locator = page.locator("text=MVA#").first
+    mva_text = mva_locator.locator("xpath=..").inner_text()
+    mva_match = re.search(r"MVA#\s*:?\s*(\d{8,9})", mva_text, re.IGNORECASE)
+    mva = normalize_mva(mva_match.group(1)) if mva_match else ""
+
+    mva_locator.click()
     dismiss_attention_popup(page)
     page.wait_for_timeout(1000)
 
     page.get_by_text("Active Work Order", exact=False).click()
     dismiss_attention_popup(page)
     page.wait_for_timeout(1000)
+    return mva
 
 
 def click_into_po(page):
@@ -673,27 +778,36 @@ def read_po_status_and_amount(page):
     return status_text, auth_amount
 
 
+def return_to_fieldpo_home(page):
+    """Return to the FieldPO dashboard using the verified top-header Home icon."""
+    page.locator("mat-icon[aria-label='home']").click()
+    page.wait_for_url("**/fieldpo/dashboard**", timeout=30000)
+    dismiss_attention_popup(page)
+
+
 def _normalize_person_name(value):
-    return re.sub(r"[^a-z0-9]", "", (value or "").lower())
+    return str(value or "").strip().casefold()
 
 
-def read_created_by(page):
-    """Best-effort extract of Created By value from the active work order page."""
-    body_text = page.locator("body").inner_text()
-    match = re.search(r"Created\s*By\s*:\s*([^\r\n]+)", body_text, re.IGNORECASE)
-    if not match:
-        return ""
-    return match.group(1).strip()
+def read_work_order_created_by(page):
+    """Read Created By from the active Work Order data section."""
+    value = page.locator(
+        "div.dataSection > div:has(> span:text-is('Created By:')) > span:nth-child(2)"
+    )
+    return value.inner_text().strip()
 
 
-def should_approve_for_creator(created_by_value):
-    if not ALLOWED_CREATED_BY:
+def is_allowed_work_order_creator(created_by_value):
+    if not ALLOWED_WORK_ORDER_CREATED_BY:
         return True
     created_key = _normalize_person_name(created_by_value)
-    return any(created_key == _normalize_person_name(name) for name in ALLOWED_CREATED_BY)
+    return any(
+        created_key == _normalize_person_name(name)
+        for name in ALLOWED_WORK_ORDER_CREATED_BY
+    )
 
 
-def step_check():
+def step_check(max_invoices=None, return_home_after_each=False):
     print("\n" + "=" * 60)
     print("STEP 2: CHECK - looking up each queued VIN in FieldPO")
     print("=" * 60)
@@ -702,29 +816,56 @@ def step_check():
     new_rows = [r for r in rows if r["status"] == "new"]
     if not new_rows:
         print("No rows with status 'new' to check.")
-        return
+        return []
 
     new_rows_sorted = sorted(new_rows, key=lambda r: parse_received_timestamp(r.get("received", "")))
+    if max_invoices is not None:
+        new_rows_sorted = new_rows_sorted[:max_invoices]
+
+    check_results = []
+    valid_rows = []
+    for row in new_rows_sorted:
+        raw_vin = row.get("vin", "")
+        if not is_valid_vin(raw_vin):
+            print(
+                f"Skipping invoice '{row.get('subject', '')}' for this run "
+                f"-- invalid VIN: {raw_vin or 'missing'}."
+            )
+            check_results.append({**row, "check_status": "invalid_vin", "mva": ""})
+            continue
+        valid_rows.append(row)
+
+    if not valid_rows:
+        print("No valid queued VINs to check.")
+        return check_results
 
     with sync_playwright() as p:
         context, page = connect_to_fieldpo(p)
 
-        for row in new_rows_sorted:
-            vin = row["vin"]
+        for row in valid_rows:
+            vin = normalize_vin(row["vin"])
             print(f"\nChecking VIN {vin} ...")
             try:
-                go_to_active_work_order_tab(page, vin)
+                mva = go_to_active_work_order_tab(page, vin)
 
                 if not po_exists(page):
                     row["status"] = "no_po"
+                    check_results.append({**row, "check_status": "no_po", "mva": mva})
                     print("  No PO found for this VIN -- flagging for manual review.")
                     continue
 
+                work_order_created_by = read_work_order_created_by(page)
                 click_into_po(page)
                 status_text, auth_amount = read_po_status_and_amount(page)
 
                 if status_text == "APPROVED":
                     row["status"] = "already_paid"
+                    check_results.append({
+                        **row,
+                        "check_status": "already_paid",
+                        "mva": mva,
+                        "work_order_created_by": work_order_created_by,
+                    })
                     print(f"  Already APPROVED -- skipping, moving to next invoice.")
                     continue
 
@@ -733,6 +874,12 @@ def step_check():
                 row["auth_amount"] = auth_amount
                 row["match"] = str(match)
                 row["status"] = "checked"
+                check_results.append({
+                    **row,
+                    "check_status": "checked",
+                    "mva": mva,
+                    "work_order_created_by": work_order_created_by,
+                })
                 print(f"  Invoice: ${invoice_amount}  |  Auth: ${auth_amount}  |  Match: {match}")
 
             except Exception as e:
@@ -750,11 +897,91 @@ def step_check():
                 print(f"    URL: {current_url}")
                 print(f"    Title: {current_title}")
                 row["status"] = "error"
+                check_results.append({**row, "check_status": "error", "mva": ""})
+            finally:
+                if return_home_after_each:
+                    try:
+                        return_to_fieldpo_home(page)
+                    except Exception as exc:
+                        print(f"  Could not return to FieldPO Home: {type(exc).__name__}: {exc}")
 
         context.close()
 
     write_queue(rows)
     print(f"\nQueue updated: {QUEUE_CSV}")
+    return check_results
+
+
+def append_closure_decision(record):
+    """Append one structured dry-run closure decision."""
+    with open(DECISION_LOG_FILE, "a", encoding="utf-8") as decision_log:
+        decision_log.write(json.dumps(record, sort_keys=True) + "\n")
+
+
+def step_dry_run_review(check_results):
+    """Evaluate checked invoices and log decisions without pressing Approve."""
+    print("\n" + "=" * 60)
+    print("STEP 3: DRY RUN - review only; APPROVE will not be pressed")
+    print("=" * 60)
+    decisions = []
+
+    for result in check_results:
+        invoice_date = None
+        extracted_vin = None
+        extracted_amount = None
+        parse_error = ""
+        try:
+            invoice_date, extracted_vin, extracted_amount = extract_invoice_data(result.get("pdf_path", ""))
+        except (OSError, ValueError) as exc:
+            parse_error = type(exc).__name__
+
+        check_status = result.get("check_status", "")
+        reasons = []
+        if check_status != "checked":
+            reasons.append(check_status or "fieldpo_check_incomplete")
+        if parse_error:
+            reasons.append("invoice_pdf_unavailable")
+        if extracted_vin and normalize_vin(extracted_vin) != normalize_vin(result.get("vin", "")):
+            reasons.append("invoice_vin_mismatch")
+        if extracted_amount and extracted_amount != result.get("invoice_amount", ""):
+            reasons.append("invoice_amount_mismatch")
+
+        evaluation = evaluate_closure(
+            invoice_date=invoice_date,
+            invoice_amount=extracted_amount or result.get("invoice_amount", ""),
+            auth_amount=result.get("auth_amount", ""),
+            mva=result.get("mva", ""),
+            work_order_created_by=result.get("work_order_created_by", ""),
+        )
+        reasons.extend(reason for reason in evaluation["reasons"] if reason not in reasons)
+        decision = "WOULD_CLOSE" if not reasons else "SKIPPED"
+        record = {
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+            "mode": "dry_run",
+            "subject": result.get("subject", ""),
+            "vin": result.get("vin", ""),
+            "mva": evaluation["mva"],
+            "invoice_date": invoice_date.isoformat() if invoice_date else "",
+            "invoice_age_days": evaluation["invoice_age_days"],
+            "invoice_amount": extracted_amount or result.get("invoice_amount", ""),
+            "fieldpo_amount": result.get("auth_amount", ""),
+            "work_order_created_by": result.get("work_order_created_by", ""),
+            "price_match": evaluation["price_match"],
+            "decision": decision,
+            "reasons": reasons,
+        }
+        append_closure_decision(record)
+        decisions.append(record)
+        reason_text = ", ".join(reasons) if reasons else "all closure requirements met"
+        print(
+            f"  {decision}: VIN {record['vin']} | MVA {record['mva'] or 'UNKNOWN'} "
+            f"| {reason_text}"
+        )
+
+    if not decisions:
+        print("No invoices were available for dry-run review.")
+    print("\nDRY RUN COMPLETE: no Approve or Close action was performed.")
+    return decisions
 
 
 # ============================================================
@@ -763,9 +990,9 @@ def step_check():
 
 def approve_one_vin(page, vin):
     go_to_active_work_order_tab(page, vin)
-    created_by_value = read_created_by(page)
-    if not should_approve_for_creator(created_by_value):
-        return False, created_by_value
+    work_order_created_by = read_work_order_created_by(page)
+    if not is_allowed_work_order_creator(work_order_created_by):
+        return False, work_order_created_by
 
     click_into_po(page)
 
@@ -787,10 +1014,10 @@ def approve_one_vin(page, vin):
 
     page.get_by_role("button", name="Confirm").click()
     page.wait_for_timeout(1000)
-    return True, created_by_value
+    return True, work_order_created_by
 
 
-def step_approve(auto_confirm=False):
+def step_approve(auto_confirm=False, max_invoices=None):
     print("\n" + "=" * 60)
     print("STEP 3: APPROVE - review and confirm")
     print("=" * 60)
@@ -812,11 +1039,12 @@ def step_approve(auto_confirm=False):
     matches = strict_matches + age_override_candidates
     matches.sort(key=lambda r: parse_received_timestamp(r.get("received", "")))
 
-    if MAX_APPROVALS_PER_RUN is not None and len(matches) > MAX_APPROVALS_PER_RUN:
-        print(f"NOTE: {len(matches)} matched invoices found, but MAX_APPROVALS_PER_RUN "
-              f"is {MAX_APPROVALS_PER_RUN}. Only the first {MAX_APPROVALS_PER_RUN} will "
+    approval_limit = MAX_APPROVALS_PER_RUN if max_invoices is None else max_invoices
+    if approval_limit is not None and len(matches) > approval_limit:
+        print(f"NOTE: {len(matches)} matched invoices found, but the approval limit "
+              f"is {approval_limit}. Only the first {approval_limit} will "
               "be shown/approved this run. Re-run to process the rest.")
-        matches = matches[:MAX_APPROVALS_PER_RUN]
+        matches = matches[:approval_limit]
 
     mismatches = [
         r for r in rows
@@ -868,8 +1096,11 @@ def step_approve(auto_confirm=False):
         for r in errors:
             print(f"  VIN {r['vin']}  |  {r['subject']}")
 
-    if ALLOWED_CREATED_BY:
-        print("\nApproval gate: Created By must be one of: " + ", ".join(ALLOWED_CREATED_BY))
+    if ALLOWED_WORK_ORDER_CREATED_BY:
+        print(
+            "\nApproval gate: Work Order Created By must be one of: "
+            + ", ".join(ALLOWED_WORK_ORDER_CREATED_BY)
+        )
 
     if not matches:
         print("\nNo matched invoices to approve right now.")
@@ -892,12 +1123,13 @@ def step_approve(auto_confirm=False):
             vin = row["vin"]
             print(f"\nApproving VIN {vin} ...")
             try:
-                should_approve, created_by_value = approve_one_vin(page, vin)
+                should_approve, work_order_created_by = approve_one_vin(page, vin)
                 if not should_approve:
                     row["status"] = "creator_mismatch"
                     print(
-                        f"  Skipped. Created By is '{created_by_value or 'UNKNOWN'}' "
-                        f"(allowed: {', '.join(ALLOWED_CREATED_BY)})."
+                        f"  Skipped. Work Order Created By is "
+                        f"'{work_order_created_by or 'UNKNOWN'}' "
+                        f"(allowed: {', '.join(ALLOWED_WORK_ORDER_CREATED_BY)})."
                     )
                     continue
                 row["status"] = "approved"
@@ -939,6 +1171,11 @@ def main():
                          help="Store your FieldPO username/password securely and exit.")
     parser.add_argument("--extract-only", action="store_true", help="Run only the extract step.")
     parser.add_argument("--check-only", action="store_true", help="Run only the check step.")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Extract, check, and log closure decisions without pressing Approve.",
+    )
     parser.add_argument("--approve", dest="approve", action="store_true",
                         help="Run only the approve step.")
     parser.add_argument("--approve-only", dest="approve", action="store_true",
@@ -949,6 +1186,12 @@ def main():
     parser.add_argument("--yes", action="store_true",
                         help="Auto-confirm approval prompt in step 3 (use with caution).")
     parser.add_argument(
+        "--max-invoices",
+        type=int,
+        default=None,
+        help="Cap invoices processed by each selected stage for this run.",
+    )
+    parser.add_argument(
         "--trace-vin",
         action="append",
         help=(
@@ -957,6 +1200,9 @@ def main():
         ),
     )
     args = parser.parse_args()
+
+    if args.max_invoices is not None and args.max_invoices <= 0:
+        parser.error("--max-invoices must be greater than 0")
 
     if args.setup_credentials:
         set_fieldpo_credentials()
@@ -973,16 +1219,23 @@ def main():
         print("\nAll done.")
         return
 
-    if args.extract_only:
-        step_extract()
+    if args.dry_run:
+        step_extract(max_invoices=args.max_invoices)
+        check_results = step_check(
+            max_invoices=args.max_invoices,
+            return_home_after_each=True,
+        )
+        step_dry_run_review(check_results)
+    elif args.extract_only:
+        step_extract(max_invoices=args.max_invoices)
     elif args.check_only:
-        step_check()
+        step_check(max_invoices=args.max_invoices)
     elif args.approve:
-        step_approve(auto_confirm=args.yes)
+        step_approve(auto_confirm=args.yes, max_invoices=args.max_invoices)
     else:
-        step_extract()
-        step_check()
-        step_approve(auto_confirm=args.yes)
+        step_extract(max_invoices=args.max_invoices)
+        step_check(max_invoices=args.max_invoices)
+        step_approve(auto_confirm=args.yes, max_invoices=args.max_invoices)
 
     print("\nAll done.")
 

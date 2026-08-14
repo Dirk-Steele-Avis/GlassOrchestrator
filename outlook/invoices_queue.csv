@@ -174,3 +174,15 @@ subject,received,vin,invoice_amount,pdf_path,status,auth_amount,match
 [External] Receipt for Job #5084326,2026-07-21 14:41:16.724000+00:00,7MMVABBL8TN463467,340.00,C:\Users\steeldir\Code\GlassOrchestrator\outlook\pdfs\_External__Receipt_for_Job__5084326_29A40000.pdf,approved,340.00,True
 [External] Receipt for Job #5084317,2026-07-21 14:58:32.500000+00:00,5XYP64GC5SG653439,340.00,C:\Users\steeldir\Code\GlassOrchestrator\outlook\pdfs\_External__Receipt_for_Job__5084317_29A50000.pdf,approved,340.00,True
 [External] Receipt for Job #5081712,2026-07-21 15:15:05.682000+00:00,1V2HC2CAXTC219110,0.00,C:\Users\steeldir\Code\GlassOrchestrator\outlook\pdfs\_External__Receipt_for_Job__5081712_29A60000.pdf,already_paid,,
+[External] Invoice #5075943,2026-07-22 10:18:10.012000+00:00,1HGCY1F29SA085956,340.00,C:\Users\steeldir\GlassOrchestrator\outlook\pdfs\_External__Invoice__5075943_FFBC0000.pdf,checked,340.00,True
+[External] Invoice #5075999,2026-07-22 10:19:04.316000+00:00,KMHRC8A37SU397610,340.00,C:\Users\steeldir\GlassOrchestrator\outlook\pdfs\_External__Invoice__5075999_FFBD0000.pdf,checked,340.00,True
+[External] Invoice #5084150,2026-07-22 13:11:02.858000+00:00,1V2HC2CA2TC219439,315.00,C:\Users\steeldir\GlassOrchestrator\outlook\pdfs\_External__Invoice__5084150_FFBF0000.pdf,checked,124.00,False
+[External] Invoice #5090830,2026-07-22 17:18:50.715000+00:00,3GTPHBEK2TG319851,340.00,C:\Users\steeldir\GlassOrchestrator\outlook\pdfs\_External__Invoice__5090830_FFC50000.pdf,checked,340.00,True
+[External] Invoice #5090837,2026-07-22 17:18:54.644000+00:00,1C4RDJDG5TC204580,340.00,C:\Users\steeldir\GlassOrchestrator\outlook\pdfs\_External__Invoice__5090837_FFC60000.pdf,checked,340.00,True
+[External] Invoice #5097086,2026-07-23 13:45:39.598000+00:00,3GKALMEG6TL426800,340.00,C:\Users\steeldir\GlassOrchestrator\outlook\pdfs\_External__Invoice__5097086_FFCD0000.pdf,checked,340.00,True
+[External] Invoice #5097376,2026-07-23 13:46:01.217000+00:00,7MMVABBL3TN456930,340.00,C:\Users\steeldir\GlassOrchestrator\outlook\pdfs\_External__Invoice__5097376_FFCE0000.pdf,checked,340.00,True
+[External] Invoice #5096818,2026-07-23 16:07:12.584000+00:00,1V2BR2CA1SC575920,340.00,C:\Users\steeldir\GlassOrchestrator\outlook\pdfs\_External__Invoice__5096818_FFD40000.pdf,checked,340.00,True
+[External] Invoice #5096901,2026-07-23 16:07:16.723000+00:00,1GKENKKS0TJ206603,340.00,C:\Users\steeldir\GlassOrchestrator\outlook\pdfs\_External__Invoice__5096901_FFD50000.pdf,checked,340.00,True
+[External] Invoice #5097363,2026-07-23 16:07:38.514000+00:00,1HGCY1F46TA019349,340.00,C:\Users\steeldir\GlassOrchestrator\outlook\pdfs\_External__Invoice__5097363_FFD60000.pdf,checked,340.00,True
+[External] Invoice #5075993,2026-07-24 10:09:50.142000+00:00,JM3KFBBL1S0645261,340.00,C:\Users\steeldir\GlassOrchestrator\outlook\pdfs\_External__Invoice__5075993_EA270000.pdf,checked,340.00,True
+[External] Invoice #5096929,2026-07-24 10:10:39.439000+00:00,KL77LHEP8TC062689,340.00,C:\Users\steeldir\GlassOrchestrator\outlook\pdfs\_External__Invoice__5096929_EA280000.pdf,checked,340.00,True

@@ -15,10 +15,8 @@ if not exist "%VENV_PY%" (
     echo [WARNING] py -3.13 failed, trying py -3 ...
     py -3 -m venv .venv
   )
-
   if not exist "%VENV_PY%" (
     echo [ERROR] Failed to create virtual environment at %VENV_PY%.
-    echo [INFO] Try deleting .venv folder and running this script again.
     exit /b 1
   )
   set "CREATED_VENV=1"
@@ -50,6 +48,12 @@ if "%SYNC_DEPS%"=="1" (
     echo [ERROR] Failed to install requirements from %REQ_FILE%
     exit /b 1
   )
+  echo [BOOTSTRAP] Installing Playwright browsers ...
+  "%VENV_PY%" -m playwright install
+  if errorlevel 1 (
+    echo [ERROR] Failed to install Playwright browsers
+    exit /b 1
+  )
   if defined REQ_HASH (
     > "%REQ_STAMP%" echo !REQ_HASH!
   )
@@ -57,8 +61,15 @@ if "%SYNC_DEPS%"=="1" (
   echo [BOOTSTRAP] Requirements unchanged. Skipping dependency install.
 )
 
-echo Running VendorTrackingMonitor with venv Python...
-"%VENV_PY%" "vendor_tracking\monitor.py" %*
+rem AGN invoice proof of concept. Extracts and checks invoices, then returns
+rem Home after each FieldPO review. It never presses Approve or Close.
+rem Usage: Run-PayCompletedInvoices.cmd [max_invoices]
+
+set "MAX_INVOICES=1"
+if not "%~1"=="" set "MAX_INVOICES=%~1"
+
+echo Running AGN invoice dry run (max_invoices=%MAX_INVOICES%).
+"%VENV_PY%" outlook\agn_invoices.py --dry-run --silent --max-invoices %MAX_INVOICES%
 
 echo.
 echo Exit code: %errorlevel%

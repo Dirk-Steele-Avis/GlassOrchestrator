@@ -37,10 +37,11 @@ class MVANotFoundError(Exception):
 # Selectors / accessible-name fragments for the "Vehicle Not Found" card.
 NOT_FOUND_HEADING_TEXT = "Vehicle Not Found"
 DETAILS_HEADING_TEXT = "Vehicle Details"
+DETAILS_MVA_CELL_SELECTOR = 'td[data-key="mvaNo.1"][role="gridcell"]'
 
 
 def detect_mva_not_found(page: "Page") -> Outcome | None:
-    """Return MVA_NOT_FOUND if the 'Vehicle Not Found' card is visible."""
+    """Return MVA_NOT_FOUND if Compass GO shows an invalid-MVA response."""
     try:
         locator = page.get_by_text(NOT_FOUND_HEADING_TEXT, exact=True).first
         if locator.is_visible():
@@ -51,10 +52,11 @@ def detect_mva_not_found(page: "Page") -> Outcome | None:
 
 
 def detect_details_ready(page: "Page") -> Outcome | None:
-    """Return DETAILS_READY if the 'Vehicle Details' heading is visible."""
+    """Return DETAILS_READY once the details shell contains loaded MVA data."""
     try:
-        locator = page.get_by_role("heading", name=DETAILS_HEADING_TEXT).first
-        if locator.is_visible():
+        heading = page.get_by_role("heading", name=DETAILS_HEADING_TEXT).first
+        mva_cell = page.locator(DETAILS_MVA_CELL_SELECTOR).first
+        if heading.is_visible() and mva_cell.is_visible() and mva_cell.inner_text().strip():
             return Outcome.DETAILS_READY
     except Exception:
         pass

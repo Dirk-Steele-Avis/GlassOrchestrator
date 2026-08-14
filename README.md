@@ -148,4 +148,6 @@ GlassResults.txt         # Phase 3 output (worker-produced)
 
 - Each phase is wrapped in its own `try/except` block.
 - **Phase 3 failure aborts the entire pipeline** — no data is persisted or notified.
+- An individual MVA reported as not found is not a Phase 3 failure. Phase 3 writes
+  `VIN=N/A` and `Desc=MVA Not Found`, then continues with the next MVA.
 - Phase 6 (notification) failure is logged but does not lose persisted data.

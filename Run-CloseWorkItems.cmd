@@ -62,37 +62,32 @@ if "%SYNC_DEPS%"=="1" (
 )
 
 rem ---------------------------------------------------------------------------
-rem  Close/resolve open glass work items for MVAs loaded from GlassClaims sheet.
+rem  Close open glass work items.
 rem
 rem  Usage:
 rem    Run-CloseWorkItems.cmd
-rem    Run-CloseWorkItems.cmd 180
-rem    Run-CloseWorkItems.cmd 180 45
-rem    Run-CloseWorkItems.cmd 180 45 1
-rem    Run-CloseWorkItems.cmd 180 0 2 59179595,61103092
+rem      Uses the operator-reviewed WorkItems\close_workitem.csv file.
 rem
-rem  Exit code:
-rem    0 = all MVAs had their glass work item successfully closed
-rem    1 = one or more MVAs had no open work item or failed
+rem    Run-CloseWorkItems.cmd --csv "WorkItems\close_workitem.csv"
+rem      Uses a specific reviewed CSV with required mva and Type columns.
+rem
+rem    Run-CloseWorkItems.cmd --mvas "012345678,087654321"
+rem      Closes work items for an explicit comma- or space-separated MVA list.
+rem
+rem    Run-CloseWorkItems.cmd --max-rows 1
+rem      Limits processing to the first reviewed CSV row.
+rem
+rem  Common switches passed through to close_workitem.py:
+rem    --timeout-seconds N       Per-phase timeout (default: 120)
+rem    --debug-hold-seconds N    Keep the browser open after a failure
+rem    --pause                   Wait for Enter before closing the browser
+rem    --no-pause                Deprecated compatibility switch
+rem    --help                    Show all available options
 rem ---------------------------------------------------------------------------
 
-set "TIMEOUT_SECONDS=120"
-set "DEBUG_HOLD_SECONDS=60"
-set "MAX_ROWS=1"
-set "EXPLICIT_MVAS="
+echo Closing work items...
 
-if not "%~1"=="" set "TIMEOUT_SECONDS=%~1"
-if not "%~2"=="" set "DEBUG_HOLD_SECONDS=%~2"
-if not "%~3"=="" set "MAX_ROWS=%~3"
-if not "%~4"=="" set "EXPLICIT_MVAS=%~4"
-
-echo Closing work items from GlassClaims sheet (timeout=%TIMEOUT_SECONDS%s, debug_hold=%DEBUG_HOLD_SECONDS%s, max_rows=%MAX_ROWS%)
-echo Tip: set 2nd arg to 0 to disable debug hold.
-
-set "GLASS_AGENTIC=1"
-set "MVAS_ARG="
-if defined EXPLICIT_MVAS set "MVAS_ARG=--mvas %EXPLICIT_MVAS%"
-"%VENV_PY%" WorkItems\close_workitem.py --no-pause --timeout-seconds %TIMEOUT_SECONDS% --debug-hold-seconds %DEBUG_HOLD_SECONDS% --max-rows %MAX_ROWS% %MVAS_ARG%
+"%VENV_PY%" WorkItems\close_workitem.py %*
 
 echo.
 echo Exit code: %errorlevel%

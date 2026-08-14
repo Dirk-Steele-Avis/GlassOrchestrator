@@ -9,6 +9,7 @@ import asyncio
 import csv
 from datetime import date, datetime
 import inspect
+import json
 import os
 import re
 import subprocess
@@ -25,12 +26,12 @@ from playwright_prototype.config import (
     resolve_edge_profile_directory,
     resolve_edge_user_data_dir,
     resolve_headless,
-    resolve_initial_delay,
     resolve_step_delay,
 )
 from playwright_prototype.session import ensure_profile_context
-from playwright_prototype.steps import close_open_work_item, warmup_compass as pw_warmup_compass
+from playwright_prototype.steps import COMPLAINT_TYPE_PATTERNS, close_open_work_item
 from playwright_prototype.steps import navigate_to_mva as pw_navigate_to_mva
+from vendor_tracking.sheet_updater import RESOLVED_STATUSES
 
 if TYPE_CHECKING:
     from playwright.async_api import Page
@@ -41,6 +42,9 @@ RESULT_NOT_FOUND = "not_found"
 RESULT_NAV_FAILED = "nav_failed"
 RESULT_ERROR = "error"
 RESULT_TIMEOUT = "timeout"
+PROCESSED_STATE_PATH = Path(__file__).resolve().parent.parent / "data" / "close_workitem_processed.json"
+DEFAULT_CLOSE_CSV = Path(__file__).resolve().parent / "close_workitem.csv"
+DEFAULT_CLOSE_HISTORY = Path(__file__).resolve().parent.parent / "data" / "close_workitem_history.csv"
 
 
 async def _debug_hold_if_configured(page: "Page", args: argparse.Namespace, mva: str, reason: str) -> None:
@@ -182,13 +186,144 @@ def _parse_inventory_date(value: str) -> date | None:
         return None
 
 
+def _load_processed_keys(processing_date: date) -> set[tuple[str, str]]:
+    """Return successfully handled MVA/type keys for the requested date."""
+    try:
+        with open(PROCESSED_STATE_PATH, encoding="utf-8") as state_file:
+            state = json.load(state_file)
+    except FileNotFoundError:
+        return set()
+    except (OSError, json.JSONDecodeError) as exc:
+        log.warning("[CLOSE] Could not read processed-state file %s: %s", PROCESSED_STATE_PATH, exc)
+        return set()
+
+    if state.get("date") != processing_date.isoformat():
+        return set()
+
+    return {
+        (str(item.get("mva", "")), str(item.get("complaint_type", "")))
+        for item in state.get("processed", [])
+        if item.get("mva") and item.get("complaint_type")
+    }
+
+
+def _record_processed_targets(targets: list[dict], results: list[dict]) -> None:
+    """Persist closed and already-closed targets so later sheet runs advance."""
+    processing_date = date.today()
+    processed = _load_processed_keys(processing_date)
+    changed = False
+
+    for target, result in zip(targets, results):
+        if result.get("result") not in {RESULT_CLOSED, RESULT_NOT_FOUND}:
+            continue
+        key = (target["mva"], target["complaint_type"])
+        if key not in processed:
+            processed.add(key)
+            changed = True
+
+    if not changed:
+        return
+
+    payload = {
+        "date": processing_date.isoformat(),
+        "processed": [
+            {"mva": mva, "complaint_type": complaint_type}
+            for mva, complaint_type in sorted(processed)
+        ],
+    }
+    PROCESSED_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = PROCESSED_STATE_PATH.with_suffix(".tmp")
+    with open(temporary_path, "w", encoding="utf-8") as state_file:
+        json.dump(payload, state_file, indent=2)
+        state_file.write("\n")
+    temporary_path.replace(PROCESSED_STATE_PATH)
+
+
+def _retire_handled_csv_targets(
+    csv_path: Path,
+    targets: list[dict],
+    results: list[dict],
+    history_path: Path = DEFAULT_CLOSE_HISTORY,
+) -> int:
+    """Archive and remove CSV targets conclusively handled by Compass."""
+    handled = {
+        (target["mva"], target["complaint_type"]): result["result"]
+        for target, result in zip(targets, results)
+        if result.get("result") in {RESULT_CLOSED, RESULT_NOT_FOUND}
+    }
+    if not handled or not csv_path.exists():
+        return 0
+
+    comments: list[str] = []
+    with csv_path.open(encoding="utf-8") as csv_file:
+        for line in csv_file:
+            if line.startswith("#") or not line.strip():
+                comments.append(line)
+            else:
+                break
+    with csv_path.open(newline="", encoding="utf-8") as csv_file:
+        reader = csv.DictReader(line for line in csv_file if not line.startswith("#"))
+        fieldnames = reader.fieldnames or ["mva", "Type"]
+        rows = list(reader)
+
+    retired: list[tuple[dict, str]] = []
+    remaining: list[dict] = []
+    for row in rows:
+        raw_mva = str(row.get("mva") or "").strip()
+        mva = _normalize_sheet_mva(raw_mva)
+        complaint_type = str(row.get("Type") or "").strip()
+        result = handled.get((mva, complaint_type))
+        if result:
+            retired.append((row, result))
+        else:
+            remaining.append(row)
+
+    if not retired:
+        return 0
+
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    existing_history = _load_csv(str(history_path)) if history_path.exists() else []
+    existing_keys = {
+        (_normalize_sheet_mva(str(row.get("mva") or "")), str(row.get("Type") or "").strip())
+        for row in existing_history
+    }
+    history_exists = history_path.exists() and history_path.stat().st_size > 0
+    with history_path.open("a", newline="", encoding="utf-8") as history_file:
+        writer = csv.DictWriter(
+            history_file,
+            fieldnames=["mva", "Type", "processed_date", "result"],
+        )
+        if not history_exists:
+            writer.writeheader()
+        for row, result in retired:
+            key = (_normalize_sheet_mva(str(row.get("mva") or "")), str(row.get("Type") or "").strip())
+            if key in existing_keys:
+                continue
+            writer.writerow({
+                "mva": key[0],
+                "Type": key[1],
+                "processed_date": date.today().isoformat(),
+                "result": result,
+            })
+
+    temporary_path = csv_path.with_suffix(".tmp")
+    with temporary_path.open("w", newline="", encoding="utf-8") as csv_file:
+        csv_file.writelines(comments)
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(remaining)
+    temporary_path.replace(csv_path)
+    return len(retired)
+
+
 def _build_targets_from_sheet(max_rows: int | None = None) -> list[dict]:
-    """Build close targets from the configured Glass sheet tab."""
+    """Build oldest-first close targets from resolved Glass sheet rows."""
     rows = _load_sheet_rows()
     valid_types = _get_valid_complaint_types()
-    targets: list[dict] = []
+    candidates: list[tuple[date, dict]] = []
     seen: set[tuple[str, str]] = set()
     today = date.today()
+    processed = _load_processed_keys(today)
 
     for row in rows:
         inventory_raw = str(row.get("Inventory Date") or "").strip()
@@ -196,7 +331,11 @@ def _build_targets_from_sheet(max_rows: int | None = None) -> list[dict]:
         if inventory_raw and inventory_date is None:
             log.error("[CLOSE] Invalid Inventory Date format for MVA %s: %s (expected MM/DD/YYYY)", row.get("MVA") or row.get("mva") or "", inventory_raw)
             sys.exit(1)
-        if inventory_date != today:
+        if inventory_date is None:
+            continue
+
+        repair_status = str(row.get("Repair Status") or "").strip().lower()
+        if repair_status not in RESOLVED_STATUSES:
             continue
 
         raw_mva = str(row.get("MVA") or row.get("mva") or "").strip()
@@ -215,16 +354,19 @@ def _build_targets_from_sheet(max_rows: int | None = None) -> list[dict]:
             continue
 
         key = (mva, complaint_type)
-        if key in seen:
+        if key in seen or key in processed:
             continue
         seen.add(key)
-        targets.append({"mva": mva, "complaint_type": complaint_type})
-        if max_rows is not None and len(targets) >= max_rows:
-            break
+        candidates.append((inventory_date, {"mva": mva, "complaint_type": complaint_type}))
+
+    candidates.sort(key=lambda candidate: candidate[0])
+    targets = [target for _, target in candidates]
+    if max_rows is not None:
+        targets = targets[:max_rows]
 
     if not targets:
-        log.error("[CLOSE] No valid MVA targets found in configured sheet.")
-        sys.exit(1)
+        log.info("[CLOSE] No unprocessed completed MVA targets found in configured sheet.")
+        return []
 
     if max_rows is None:
         log.info("[CLOSE] Loaded %d MVA(s) from sheet source", len(targets))
@@ -256,14 +398,50 @@ def _build_targets_from_mvas(raw_mvas: str) -> list[dict]:
     return targets
 
 
+def _build_targets_from_csv(path: str, max_rows: int | None = None) -> list[dict]:
+    """Build reviewed close targets from the operator-approved CSV."""
+    rows = _load_csv(path)
+    valid_types = _get_valid_complaint_types()
+    targets: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+
+    for row_number, row in enumerate(rows, start=2):
+        raw_mva = str(row.get("mva") or "").strip()
+        mva = _normalize_sheet_mva(raw_mva)
+        if not mva:
+            log.error("[CLOSE] CSV row %d has invalid MVA '%s' (expected 8 or 9 digits)", row_number, raw_mva)
+            sys.exit(1)
+
+        raw_type = str(row.get("Type") or "").strip()
+        if not raw_type:
+            log.error("[CLOSE] CSV row %d is missing required Type", row_number)
+            sys.exit(1)
+        complaint_type = _normalize_sheet_type(raw_type, valid_types)
+        if not complaint_type:
+            log.error("[CLOSE] CSV row %d has unsupported Type '%s'", row_number, raw_type)
+            sys.exit(1)
+
+        key = (mva, complaint_type)
+        if key in seen:
+            continue
+        seen.add(key)
+        targets.append({"mva": mva, "complaint_type": complaint_type})
+
+    if max_rows is not None:
+        targets = targets[:max_rows]
+    log.info("[CLOSE] Loaded %d reviewed MVA(s) from %s", len(targets), path)
+    return targets
+
+
 def _build_targets(args: argparse.Namespace) -> list[dict]:
-    """Build list of targets from explicit MVAs or configured Glass sheet."""
+    """Build targets from explicit MVAs or the reviewed close CSV."""
     explicit_mvas = str(getattr(args, "mvas", "") or "").strip()
     if explicit_mvas:
         return _build_targets_from_mvas(explicit_mvas)
 
     max_rows = getattr(args, "max_rows", None)
-    return _build_targets_from_sheet(max_rows=max_rows)
+    csv_path = str(getattr(args, "csv_path", "") or DEFAULT_CLOSE_CSV)
+    return _build_targets_from_csv(csv_path, max_rows=max_rows)
 
 
 async def _capture_playwright_screenshot(page: "Page", label: str, mva: str) -> None:
@@ -328,11 +506,11 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
         args: argparse.Namespace with timeout_seconds
         targets: list of dicts with 'mva' and 'complaint_type' keys
     """
+    workflow_started = time.monotonic()
     results: list[dict] = []
     headless = resolve_headless()
     edge_user_data_dir = resolve_edge_user_data_dir()
     edge_profile_directory = resolve_edge_profile_directory()
-    initial_delay_ms = resolve_initial_delay()
     step_delay_ms = resolve_step_delay()
 
     log.info("[CLOSE] %s", "=" * 50)
@@ -340,10 +518,9 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
     log.info("[CLOSE] Runtime config | login_url=%s", LOGIN_URL)
     debug_hold_seconds = int(getattr(args, "debug_hold_seconds", 0) or 0)
     log.info(
-        "[CLOSE] Runtime config | profile=%s | headless=%s | initial_delay_ms=%s | step_delay_ms=%s | timeout_seconds=%s | debug_hold_seconds=%s",
+        "[CLOSE] Runtime config | profile=%s | headless=%s | step_delay_ms=%s | timeout_seconds=%s | debug_hold_seconds=%s",
         edge_profile_directory,
         headless,
-        initial_delay_ms,
         step_delay_ms,
         args.timeout_seconds,
         debug_hold_seconds,
@@ -368,6 +545,7 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
         log.info("[CLOSE] Edge processes cleared — proceeding with launch.")
 
     async with async_playwright() as pw:
+        phase_started = time.monotonic()
         context = await pw.chromium.launch_persistent_context(
             user_data_dir=str(edge_user_data_dir),
             channel="msedge",
@@ -380,25 +558,29 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
             ],
             no_viewport=True,
         )
+        log.info("[PERF] Browser launch completed in %.2fs", time.monotonic() - phase_started)
 
         try:
+            phase_started = time.monotonic()
             _, page = await ensure_profile_context(context)
+            log.info("[PERF] Compass session ready in %.2fs", time.monotonic() - phase_started)
 
-            if initial_delay_ms > 0:
-                await page.wait_for_timeout(initial_delay_ms)
-
-            await asyncio.wait_for(pw_warmup_compass(page), timeout=args.timeout_seconds)
-
-            for target in targets:
+            for target_index, target in enumerate(targets):
                 mva = target["mva"]
                 complaint_type = target["complaint_type"]
-                page = await _ensure_live_page(context, page, mva)
+                try:
+                    page = await _ensure_live_page(context, page, mva)
+                except Exception as exc:
+                    log.error("[CLOSE] %s - browser unavailable before processing: %s", mva, exc)
+                    results.append({"mva": mva, "result": RESULT_ERROR, "detail": "browser unavailable"})
+                    break
 
                 log.info("[CLOSE] %s", "-" * 40)
                 log.info("[CLOSE] MVA %s  |  type=%s", mva, complaint_type)
                 log.info("[CLOSE] Settling UI (polling every 1s, 10s timeout)...")
                 settle_start = time.monotonic()
                 settle_timeout = 10.0
+                browser_unavailable = False
                 while (time.monotonic() - settle_start) < settle_timeout:
                     try:
                         page = await _ensure_live_page(context, page, mva)
@@ -413,6 +595,16 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
                         else:
                             log.warning("[CLOSE] %s - UI settle timeout after %.1fs, proceeding", mva, elapsed)
                             break
+                    except Exception as exc:
+                        log.error("[CLOSE] %s - browser unavailable while settling UI: %s", mva, exc)
+                        results.append({"mva": mva, "result": RESULT_ERROR, "detail": "browser unavailable"})
+                        browser_unavailable = True
+                        break
+
+                if browser_unavailable:
+                    break
+
+                log.info("[PERF] %s - pre-search UI settle completed in %.2fs", mva, time.monotonic() - settle_start)
 
                 if step_delay_ms > 0:
                     await page.wait_for_timeout(step_delay_ms)
@@ -430,9 +622,17 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
                         await page.wait_for_timeout(step_delay_ms or 1000)
 
                     log.info("[CLOSE] %s - navigating to MVA", mva)
+                    navigation_started = time.monotonic()
                     page = await asyncio.wait_for(pw_navigate_to_mva(page, mva), timeout=args.timeout_seconds)
+                    navigation_elapsed = time.monotonic() - navigation_started
                     landing_url = page.url
                     log.info("[CLOSE] %s - navigation landed at URL: %s", mva, landing_url)
+                    log.info("[PERF] %s - MVA navigation completed in %.2fs", mva, navigation_elapsed)
+                    if target_index == 0:
+                        log.info(
+                            "[PERF] Time from workflow start to first MVA search completion: %.2fs",
+                            time.monotonic() - workflow_started,
+                        )
                     _validate_post_navigation_url(landing_url, mva)
                     if step_delay_ms > 0:
                         await page.wait_for_timeout(step_delay_ms)
@@ -477,8 +677,11 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
                     await _debug_hold_if_configured(page, args, mva, "close error")
                     results.append({"mva": mva, "result": RESULT_ERROR, "detail": ""})
         finally:
-            await context.close()
-            log.info("[CLOSE] Browser closed.")
+            try:
+                await context.close()
+                log.info("[CLOSE] Browser closed.")
+            except Exception as exc:
+                log.warning("[CLOSE] Browser context was already unavailable during cleanup: %s", exc)
 
     return results
 
@@ -532,14 +735,15 @@ def _log_summary(results: list[dict]) -> tuple[int, int]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Close open glass work items for MVAs loaded from the configured Glass sheet."
+        description="Close open glass work items from an operator-reviewed CSV."
     )
     parser.add_argument("--no-pause", action="store_true", help="Deprecated: no-op kept for backward compatibility")
     parser.add_argument("--pause", action="store_true", help="Prompt for Enter before closing the browser (opt-in)")
     parser.add_argument("--timeout-seconds", type=int, default=120, help="Per-phase timeout in seconds for navigation and close (default: 120)")
     parser.add_argument("--debug-hold-seconds", type=int, default=0, help="Keep browser open this many seconds after failures/timeouts for manual debugging")
-    parser.add_argument("--max-rows", type=int, default=None, help="Cap sheet-sourced targets to the first N eligible rows")
-    parser.add_argument("--mvas", type=str, default="", help="Comma/space-separated MVA list to process explicitly (overrides sheet source)")
+    parser.add_argument("--max-rows", type=int, default=None, help="Cap reviewed CSV targets to the first N rows")
+    parser.add_argument("--csv", dest="csv_path", default=str(DEFAULT_CLOSE_CSV), help="Reviewed CSV with required mva and Type columns")
+    parser.add_argument("--mvas", type=str, default="", help="Comma/space-separated MVA list to process explicitly (overrides CSV source)")
 
     args = parser.parse_args()
 
@@ -553,15 +757,22 @@ def main() -> None:
     agentic_env = os.getenv("GLASS_AGENTIC", "").strip().lower() in {"1", "true", "yes"}
     should_pause = sys.stdin.isatty() and args.pause and not agentic_env
     targets = _build_targets(args)
+    if not targets:
+        return
 
     log.info("[CLOSE] %s", "=" * 50)
     log.info("[CLOSE] Glass work item close — %d MVA(s)", len(targets))
     log.info("[CLOSE] %s", "=" * 50)
 
     results = _run_playwright_close(args, targets, should_pause)
+    _record_processed_targets(targets, results)
+    if not str(args.mvas or "").strip():
+        retired_count = _retire_handled_csv_targets(Path(args.csv_path), targets, results)
+        if retired_count:
+            log.info("[CLOSE] Retired %d handled target(s) from the review CSV", retired_count)
 
-    not_found_count, failed_count = _log_summary(results)
-    if not_found_count > 0 or failed_count > 0:
+    _, failed_count = _log_summary(results)
+    if failed_count > 0:
         sys.exit(1)
 
 
