@@ -1,8 +1,7 @@
 """
-Unit tests — CSV location validation in create_workitem._build_create_targets().
+Unit tests — CSV location validation in WorkItems.create_workitem._build_create_targets().
 
-Valid location values are glass area codes that map to a Compass UI button
-(WS/WINDSHIELD/FRONT for windshield, all others for side/back windows).
+Valid location values are glass area codes configured in orchestrator_config.json.
 Lot codes such as BB and APO are not valid and must be rejected before
 any browser automation starts.
 """
@@ -33,7 +32,7 @@ class TestLocationValidation:
 
     def test_lot_code_bb_is_rejected(self, tmp_path):
         """BB is a lot location code, not a glass area — must be caught before browser launch."""
-        from create_workitem import _build_create_targets
+        from WorkItems.create_workitem import _build_create_targets
 
         csv = _write_csv(tmp_path, ["59000001,BB,Replace"])
         with pytest.raises(SystemExit):
@@ -41,38 +40,52 @@ class TestLocationValidation:
 
     def test_lot_code_apo_is_rejected(self, tmp_path):
         """APO is a request location code, not a glass area."""
-        from create_workitem import _build_create_targets
+        from WorkItems.create_workitem import _build_create_targets
 
         csv = _write_csv(tmp_path, ["59000001,APO,Replace"])
         with pytest.raises(SystemExit):
             _build_create_targets(_make_args(csv))
 
     def test_ws_is_accepted(self, tmp_path):
-        from create_workitem import _build_create_targets
+        from WorkItems.create_workitem import _build_create_targets
 
         csv = _write_csv(tmp_path, ["59000001,WS,Replace"])
         targets = _build_create_targets(_make_args(csv))
         assert len(targets) == 1
 
     def test_side_window_codes_are_accepted(self, tmp_path):
-        """FLD, FRD, RLD, RRD, FLV, FRV, BW, SR, RLQ, RRQ, FRW are valid glass areas."""
-        from create_workitem import _build_create_targets
+        """Directional codes use side + orientation + area order."""
+        from WorkItems.create_workitem import _build_create_targets
 
-        side_codes = ["FLD", "FRD", "RLD", "RRD", "FLV", "FRV", "BW", "SR", "RLQ", "RRQ", "FRW"]
+        side_codes = ["LFD", "RFD", "LRD", "RRD", "LFV", "RFV", "LRQ", "RRQ", "RFW"]
         rows = [f"5900000{i},{code},Replace" for i, code in enumerate(side_codes)]
         csv = _write_csv(tmp_path, rows)
         targets = _build_create_targets(_make_args(csv))
         assert len(targets) == len(side_codes)
 
-    def test_windshield_alias_accepted(self, tmp_path):
-        from create_workitem import _build_create_targets
+    def test_legacy_orientation_first_code_is_normalized(self, tmp_path):
+        from WorkItems.create_workitem import _build_create_targets
 
-        csv = _write_csv(tmp_path, ["59000001,WINDSHIELD,Repair"])
+        csv = _write_csv(tmp_path, ["59000001,FLD,Replace"])
         targets = _build_create_targets(_make_args(csv))
-        assert len(targets) == 1
+        assert targets[0]["location"] == "LFD"
+
+    def test_camera_is_accepted_from_config(self, tmp_path):
+        from WorkItems.create_workitem import _build_create_targets
+
+        csv = _write_csv(tmp_path, ["59000001,cam,Replace"])
+        targets = _build_create_targets(_make_args(csv))
+        assert targets[0]["location"] == "CAM"
+
+    def test_rvm_is_accepted(self, tmp_path):
+        from WorkItems.create_workitem import _build_create_targets
+
+        csv = _write_csv(tmp_path, ["59000001,RVM,Replace"])
+        targets = _build_create_targets(_make_args(csv))
+        assert targets[0]["location"] == "RVM"
 
     def test_location_check_is_case_insensitive(self, tmp_path):
-        from create_workitem import _build_create_targets
+        from WorkItems.create_workitem import _build_create_targets
 
         csv = _write_csv(tmp_path, ["59000001,ws,Replace"])
         targets = _build_create_targets(_make_args(csv))
@@ -81,7 +94,7 @@ class TestLocationValidation:
     def test_invalid_location_error_message_names_the_bad_value(self, tmp_path, caplog):
         """The error log must name the invalid location so the user knows what to fix."""
         import logging
-        from create_workitem import _build_create_targets
+        from WorkItems.create_workitem import _build_create_targets
 
         csv = _write_csv(tmp_path, ["59000001,BB,Replace"])
         with caplog.at_level(logging.ERROR):

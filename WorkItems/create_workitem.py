@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import csv
+import json
 import subprocess
 import sys
 import time
@@ -23,17 +24,25 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from utils.logger import log
 
-VALID_GLASS_LOCATIONS = {
-    "WS", "WINDSHIELD", "FRONT",
-    "FLD", "FRD", "RLD", "RRD",
-    "FLV", "FRV",
-    "BW",
-    "SR",
-    "RLQ", "RRQ", "FRW",
-}
+
+def _load_glass_location_codes() -> dict[str, str]:
+    config_path = Path(__file__).resolve().parent.parent / "orchestrator_config.json"
+    with open(config_path, encoding="utf-8") as config_file:
+        config = json.load(config_file)
+    areas = config.get("areas")
+    if not isinstance(areas, dict) or not areas:
+        raise RuntimeError(f"No glass areas configured in {config_path}")
+    codes = {str(code).upper(): str(code).upper() for code in areas}
+    aliases = config.get("legacy_area_aliases", {})
+    if not isinstance(aliases, dict):
+        raise RuntimeError(f"Invalid legacy_area_aliases in {config_path}")
+    codes.update({str(alias).upper(): str(canonical).upper() for alias, canonical in aliases.items()})
+    return codes
+
+
+GLASS_LOCATION_CODES = _load_glass_location_codes()
 
 from playwright.async_api import async_playwright
-from config.config_loader import get_config
 from playwright_prototype.config import (
     resolve_edge_profile_directory,
     resolve_edge_user_data_dir,
@@ -82,7 +91,7 @@ def _build_create_targets(args) -> list[dict]:
             log.error("[CREATE] CSV file not found: %s", csv_path)
             sys.exit(1)
 
-        valid_types = get_config("valid_complaint_types", ["Glass", "PM"])
+        valid_types = ["Glass"]
 
         with open(csv_path, newline="", encoding="utf-8") as f:
             reader = csv.DictReader(line for line in f if not line.startswith("#"))
@@ -110,13 +119,15 @@ def _build_create_targets(args) -> list[dict]:
                     if not location:
                         log.error("[CREATE] Row %d: Glass row for MVA %s is missing location", i, mva)
                         sys.exit(1)
-                    if location.upper() not in VALID_GLASS_LOCATIONS:
+                    normalized_location = GLASS_LOCATION_CODES.get(location.upper())
+                    if normalized_location is None:
                         log.error(
                             "[CREATE] Row %d: invalid location '%s' for MVA %s — "
-                            "must be a glass area code (e.g. WS, BW, FLD).",
+                            "must be a configured glass area code (e.g. WS, BW, LFD).",
                             i, location, mva,
                         )
                         sys.exit(1)
+                    location = normalized_location
                     action = _resolve_row_work_item_action(row, default_action)
                 else:
                     location = ""

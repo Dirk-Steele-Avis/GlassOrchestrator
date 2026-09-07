@@ -1,5 +1,5 @@
 """
-Unit tests — create_workitem.py always uses launch_persistent_context with the
+Unit tests — WorkItems/create_workitem.py always uses launch_persistent_context with the
 Edge profile directory, matching the pattern used by close_workitem.py and
 verify_workitem.py.
 
@@ -35,17 +35,19 @@ class TestBrowserLaunchMode:
     """_run_playwright_creation_async always uses launch_persistent_context with a profile."""
 
     def _run_async(self, monkeypatch, pw, async_pw_cm, context, page, env_no_profile: str | None = None):
-        import create_workitem as cw
+        from WorkItems import create_workitem as cw
 
         if env_no_profile is not None:
             monkeypatch.setenv("GLASS_EDGE_NO_PROFILE", env_no_profile)
         else:
             monkeypatch.delenv("GLASS_EDGE_NO_PROFILE", raising=False)
 
-        monkeypatch.setattr("create_workitem.async_playwright", lambda: async_pw_cm)
-        monkeypatch.setattr("create_workitem.pw_warmup_compass", AsyncMock())
+        monkeypatch.setattr(cw, "_is_edge_running", lambda: False)
+        monkeypatch.setattr(cw, "async_playwright", lambda: async_pw_cm)
+        monkeypatch.setattr(cw, "pw_warmup_compass", AsyncMock())
         monkeypatch.setattr(
-            "create_workitem.ensure_profile_context",
+            cw,
+            "ensure_profile_context",
             AsyncMock(return_value=(context, page)),
         )
 
@@ -91,13 +93,14 @@ class TestBrowserLaunchMode:
 
     def test_ensure_profile_context_called(self, monkeypatch):
         """ensure_profile_context() is called to advance session after launch."""
-        import create_workitem as cw
+        from WorkItems import create_workitem as cw
         pw, async_pw_cm, context, page = _make_pw_mock()
 
         ensure_profile = AsyncMock(return_value=(context, page))
-        monkeypatch.setattr("create_workitem.async_playwright", lambda: async_pw_cm)
-        monkeypatch.setattr("create_workitem.pw_warmup_compass", AsyncMock())
-        monkeypatch.setattr("create_workitem.ensure_profile_context", ensure_profile)
+        monkeypatch.setattr(cw, "_is_edge_running", lambda: False)
+        monkeypatch.setattr(cw, "async_playwright", lambda: async_pw_cm)
+        monkeypatch.setattr(cw, "pw_warmup_compass", AsyncMock())
+        monkeypatch.setattr(cw, "ensure_profile_context", ensure_profile)
 
         with pytest.raises(SystemExit):
             asyncio.run(cw._run_playwright_creation_async([]))

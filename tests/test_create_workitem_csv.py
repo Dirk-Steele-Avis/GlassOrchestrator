@@ -31,10 +31,9 @@ class TestBuildCreateTargets:
         assert len(targets) == 1
         assert targets[0] == {"mva": "12345", "type": "Glass", "location": "WS", "action": "Replace"}
 
-    def test_pm_row_no_location_action(self, tmp_path):
-        targets = self._run(tmp_path, "mva,Type,location,action\n67890,PM,,\n")
-        assert len(targets) == 1
-        assert targets[0] == {"mva": "67890", "type": "PM", "location": "", "action": ""}
+    def test_pm_row_is_rejected_by_glass_workflow(self, tmp_path):
+        with pytest.raises(SystemExit):
+            self._run(tmp_path, "mva,Type,location,action\n67890,PM,,\n")
 
     def test_missing_type_defaults_to_glass(self, tmp_path):
         targets = self._run(tmp_path, "mva,Type,location,action\n11111,,WS,Replace\n")

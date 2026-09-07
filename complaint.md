@@ -13,37 +13,43 @@ Create a batch process that reads MVAs from the Gmail spreadsheet for the curren
 - Read values from the `MVA` column.
 - Process only rows for the current day (local system date on the machine running the script).
 - Current-day filtering uses `Inventory Date`.
-- Process every row occurrence (no row-level dedupe).
+- Process the first occurrence of each valid MVA for the current day.
+- Log and skip later same-day duplicate occurrences without failing the run.
 
 ## High-Level Workflow
 1. Read spreadsheet rows.
 2. Keep rows where Inventory Date matches the run day (following existing FPO date-handling pattern).
 3. Validate MVA.
 4. Use MVA to look up the vehicle in Compass.
-5. Check for an existing complaint.
-6. If matching complaint exists, skip.
-7. If no matching complaint exists, create complaint and work item in one pass.
-8. Continue until all qualifying rows are processed.
-9. Print and log end-of-run summary counts.
+5. Check for an existing complaint and work item.
+6. If both exist, skip.
+7. If the complaint is missing, create it.
+8. If the work item is missing, create it against the complaint.
+9. Continue until all qualifying MVAs are processed.
+10. Print and log end-of-run summary counts.
 
 ## Existing Complaint Rule
 Skip creation when all are true:
 - Same MVA
 - Complaint type is Glass Repair/Replace
 - Complaint is open (current assumption: status OPEN)
+- The `Glass Damage` complaint row shows one or more `Attached Work Items`.
+
+The attached count is evaluated on the `Glass Damage` row, not as a vehicle-wide total. A count of `0` means the Glass complaint needs a work item even when another complaint has an attached work item.
 
 ## Create Rule
-If no matching open glass complaint exists:
-- Create a new complaint
-- (Next phase) create a work item after complaint creation is verified stable
+Ensure both records exist:
+- Create a new complaint when no matching open glass complaint exists.
+- Create a work item when the matching complaint has no open Glass work item.
 
 Complaint create fields (confirmed):
 - Click `Create Complaint`
 - `Is Vehicle Drivable?` -> `Yes`
 - `Category` -> `Glass Damage`
+- `Sub-Category` -> `Glass Damage`
 - `Complaint Description` -> `Glass Damage`
 - Click `Submit Complaint`
-- If `Submit Complaint` remains disabled, select a glass sub-category (default fallback: `Windshield Crack`) and submit.
+- Confirm a new exact `Glass Damage` complaint row appears after submission.
 
 Latest validation status:
 - Complaint creation flow has succeeded in LIVE mode for test MVA `058524185`.
@@ -91,8 +97,10 @@ Latest validation status:
   - skipped invalid
 
 ## Run Modes
-- Normal run: performs create actions (complaint creation first).
-- Dry run: performs checks and logs what would be created, without creating complaints/work items.
+- `Run-EnsureGlassWorkItems.cmd`: process today's spreadsheet rows in live mode.
+- `Run-EnsureGlassWorkItems.cmd --dry-run`: inspect today's spreadsheet rows without creating records.
+- `Run-EnsureGlassWorkItems.cmd --mva MVA`: process one MVA directly.
+- `Run-EnsureGlassWorkItems.cmd --csv PATH`: process an explicit Glass CSV queue.
 
 ## Thin Prototype Boundary
 - Lookup/skip behavior is validated and running against the sheet-driven flow.
@@ -107,9 +115,9 @@ Latest validation status:
 - For now, track outcomes in local log only.
 - Potential future enhancement: write results back to spreadsheet.
 
-## New Entrypoint (Approved)
+## Entrypoint
 - Python script: create_compass_complaints.py
-- CMD wrapper: Run-CreateCompassComplaints.cmd
+- CMD wrapper: Run-EnsureGlassWorkItems.cmd
 
 ## Deferred to Implementation
 - Final status mapping for what counts as open vs closed beyond current OPEN assumption.
@@ -117,9 +125,9 @@ Latest validation status:
 - Final selector-level details and navigation reliability tuning.
 
 ## Implementation Checklist (V1)
-1. Scaffold files
-- Create create_compass_complaints.py using the same structure pattern as FillNextAction flow scripts.
-- Create Run-CreateCompassComplaints.cmd using existing run-batch wrapper conventions.
+1. Entrypoint files
+- Keep create_compass_complaints.py as the spreadsheet workflow implementation.
+- Use Run-EnsureGlassWorkItems.cmd as the single operator-facing creation launcher.
 
 2. Load input data
 - Reuse existing spreadsheet access/config pattern used by the current FPO process.
@@ -128,7 +136,7 @@ Latest validation status:
 
 3. Filter rows for run day
 - Apply Inventory Date-only filtering using the same date handling pattern as current FPO code.
-- Keep all matching rows for the day (including repeated MVAs).
+- Keep the first matching row per MVA and warn when later duplicate rows are skipped.
 
 4. Validate row-level prerequisites
 - If Inventory Date missing/invalid, log and skip.

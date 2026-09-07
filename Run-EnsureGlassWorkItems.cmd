@@ -57,9 +57,39 @@ if "%SYNC_DEPS%"=="1" (
   echo [BOOTSTRAP] Requirements unchanged. Skipping dependency install.
 )
 
-echo Running Compass complaints batch with venv Python...
-"%VENV_PY%" ".\create_compass_complaints.py" %*
+rem No arguments: process valid MVAs from today's spreadsheet rows.
+rem Manual modes:
+rem   Run-EnsureGlassWorkItems.cmd --mva 058524185
+rem   Run-EnsureGlassWorkItems.cmd --mva 058524185 --dry-run
+rem   Run-EnsureGlassWorkItems.cmd --csv WorkItems\create_workitem.csv
 
+if /i "%~1"=="--csv" goto :run_csv
+
+echo Ensuring Glass complaints and work items from today's spreadsheet...
+"%VENV_PY%" ".\create_compass_complaints.py" %*
+goto :complete
+
+:run_csv
+if "%~2"=="" (
+  echo [ERROR] --csv requires a CSV path.
+  echo Usage: Run-EnsureGlassWorkItems.cmd --csv path\to\file.csv
+  exit /b 2
+)
+if not "%~3"=="" (
+  echo [ERROR] CSV mode accepts only --csv and a path.
+  exit /b 2
+)
+if not exist "%~2" (
+  echo [ERROR] CSV file not found: %~2
+  exit /b 1
+)
+
+echo Ensuring Glass complaints and work items from CSV: %~2
+set "GLASS_AGENTIC=1"
+"%VENV_PY%" WorkItems\create_workitem.py --csv "%~2" --backend playwright
+
+:complete
+set "RUN_EXIT=%errorlevel%"
 echo.
-echo Exit code: %errorlevel%
-exit /b %errorlevel%
+echo Exit code: %RUN_EXIT%
+exit /b %RUN_EXIT%

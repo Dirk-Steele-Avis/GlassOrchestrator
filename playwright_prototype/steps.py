@@ -177,6 +177,43 @@ def _map_damage_type(location: str, action: str) -> str:
     return "Side/Rear Window Damage"
 
 
+def _is_rear_view_mirror(location: str) -> bool:
+    return (location or "").strip().upper() in {"RVM", "REAR VIEW MIRROR"}
+
+
+async def _fill_rvm_complaint_form(page: Page, mva: str) -> None:
+    heading = page.get_by_role(
+        "heading", name=re.compile(r"^\s*Create complaint for MVA:", re.I)
+    ).first
+    await heading.wait_for(state="visible", timeout=10_000)
+    scope = heading.locator("xpath=ancestor::div[contains(@class,'workshop-section')][1]")
+
+    yes_label = scope.locator("label", has_text=re.compile(r"^\s*Yes\s*$", re.I)).first
+    await yes_label.click(timeout=10_000)
+
+    for section, value in (("Category", "Glass Damage"), ("Sub-Category", "Mechanical Issue")):
+        section_heading = scope.get_by_role(
+            "heading", name=re.compile(rf"^\s*{re.escape(section)}\s*$", re.I)
+        ).first
+        await section_heading.wait_for(state="visible", timeout=10_000)
+        region = section_heading.locator("xpath=ancestor::*[@role='region'][1]")
+        label = region.locator(
+            "label", has_text=re.compile(rf"^\s*{re.escape(value)}\s*$", re.I)
+        ).first
+        await label.click(timeout=10_000)
+        radio = region.locator(f"input[type='radio'][value='{value}']").first
+        if not await radio.is_checked():
+            await radio.check(force=True)
+        if not await radio.is_checked():
+            raise RuntimeError(f"Could not set {section} to {value}")
+
+    description = scope.locator("textarea.bp6-text-area").first
+    await description.fill("RVM", timeout=8_000)
+    if (await description.input_value()).strip() != "RVM":
+        raise RuntimeError("Complaint Description did not retain RVM")
+    log.info("[STEPS] %s — RVM complaint form completed", mva)
+
+
 def _is_unready_vehicle_value(value: str | None) -> bool:
     """Return True when a vehicle-property value is not yet populated."""
     stripped = (value or "").strip()
@@ -485,6 +522,8 @@ async def close_open_work_item(page: Page, mva: str, complaint_type: str = "Glas
     await detail_page.wait_for_timeout(UI_SETTLE_DELAY_MS)
 
     await _confirm_mark_complete(detail_page, note=note)
+    await detail_page.close()
+    await page.bring_to_front()
     log.info("[STEPS] %s — %s work item marked complete", mva, complaint_type)
     return detail_text
 
@@ -772,6 +811,15 @@ async def handle_complaint_dialog(page: Page, mva: str, complaint_type: str, loc
         ).first
         await page.wait_for_timeout(BUTTON_PUSH_DELAY_MS)
         await add_btn.click(timeout=10_000);  await delay()
+
+        if complaint_type == "Glass" and _is_rear_view_mirror(location):
+            await _fill_rvm_complaint_form(page, mva)
+            pre_submit_url = page.url
+            await _click_submit_complaint(page, mva)
+            log.info("[STEPS] %s — new RVM complaint submitted", mva)
+            if not await _wait_for_post_submit_progress(page, pre_submit_url):
+                raise RuntimeError(f"[STEPS] {mva} — RVM submit did not advance to mileage dialog")
+            return
 
         drivability = str(get_config("default_drivability", "Yes"))
         await page.wait_for_timeout(BUTTON_PUSH_DELAY_MS)

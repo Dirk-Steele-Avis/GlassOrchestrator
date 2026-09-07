@@ -116,6 +116,20 @@ class TestGLAS2_ReadGlassClaims:
         result = read_glass_claims(ws)
         assert result[0]["location"] == "Side"
 
+    def test_uses_rear_view_mirror_area_when_location_is_blank(self):
+        from flows.glass_work_item_phase import read_glass_claims
+        ws = self._make_ws([
+            {
+                "MVA": "11111111",
+                "Damage Type": "Replacement",
+                "WorkItemCreated": "",
+                "Location": "",
+                "Area": "Rear View Mirror",
+            },
+        ])
+        result = read_glass_claims(ws)
+        assert result[0]["location"] == "Rear View Mirror"
+
     def test_returns_correct_keys(self):
         """Each result dict has exactly mva, damage_type, location keys."""
         from flows.glass_work_item_phase import read_glass_claims
