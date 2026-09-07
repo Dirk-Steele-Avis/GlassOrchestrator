@@ -6,12 +6,22 @@ dist/
 build/
 .venv/
 venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
 
 # Data artifacts (generated at runtime)
 data/GlassDataParser.csv
 data/mva_cycle_tracker.json
 data/vendor_tracking_decisions.jsonl
 data/close_workitem_processed.json
+data/invoice_workflow.sqlite3
+data/invoice_workflow.sqlite3-wal
+data/invoice_workflow.sqlite3-shm
+data/invoice_workflow.lock
 GlassResults.txt
 MasterLog.xlsx
 GlassOrchestrator.log
@@ -35,18 +45,44 @@ Thumbs.db
 .DS_Store
 
 # Logs
+*.log
 log/*.log
+log/baseline-*/
 log/*.png
 log/failures/
 log/fieldpo_nextaction_backups/
+log/completed_invoices/
 !log/.gitkeep
 CreateCompassComplaints.log
+AllPurposeAutoVend.log
+EnsureGlassWorkItems.log
+FieldPOFillNextAction.log
+playwright_prototype.log
+outlook/run_log.txt
 
 # Runtime diagnostics artifacts
 artifacts/
 
 # Outlook invoice and receipt downloads
 outlook/pdfs/
+outlook/invoice_attachments/
+outlook/direct_approval_results.jsonl
+outlook/po_numbers.txt
+
+# Local invoice workflow runtime artifacts
+data/completed_invoices.db
+data/completed_invoices.lock
+data/*.db
+data/*.lock
+
+# Local CSV overrides and per-machine working copies
+*.local.csv
+
+# Local INI overrides and per-machine working copies
+*.local.ini
+
+# Local JSON overrides and per-machine working copies
+*.local.json
 
 # Browser automation runtime artifacts
 .edge-playwright-profile/
