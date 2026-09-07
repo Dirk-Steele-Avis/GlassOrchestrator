@@ -2,6 +2,9 @@
 
 A modular Python pipeline for vehicle glass procurement, built on a **6-phase architecture**.
 
+Canonical behavioral requirements are maintained in
+[Docs/GlassOrchestratorRequirements.md](Docs/GlassOrchestratorRequirements.md).
+
 ## Architecture
 
 | Phase | Name | Description |
@@ -11,7 +14,7 @@ A modular Python pipeline for vehicle glass procurement, built on a **6-phase ar
 | 3 | **Worker** | Write MVAs to CSV, invoke `GlassDataParser.py` subprocess |
 | 4 | **Data Merge** | Left-join manifest with scraper results; missing VIN → `N/A` |
 | 5 | **Persistence** | Append all parsed rows to Google Sheet (`GlassClaims` tab); carry forward Original Date within incident window |
-| 6 | **Notification** | HTML email for Replacement items; red-flagged rows for missing VINs |
+| 6 | **Notification** | Optional HTML email for Replacement items; disabled by default with `notifications_enabled` |
 
 ## Suffix Rules
 
@@ -19,20 +22,34 @@ A modular Python pipeline for vehicle glass procurement, built on a **6-phase ar
 |--------|-------|-------|---------------------|
 | `r` | Damage Type | Repair | Replacement |
 | `c` | Claim# | Listed | Missing |
+| ` OEM` | Vendor routing | Replace(AVIS) | Replace(AGN) |
+
+Directional area codes use `<side><orientation><area>` order, such as `LFD` for
+Left Front Door. OEM is terminal and must follow a configured glass area after one
+space: `WS OEM`, `WSc OEM`, `LFD OEM`, or `LFDc OEM`. A bare scan such as
+`62155822OEM` is invalid.
+The Google Sheet appends `(OEM)` to the physical Area, such as `Windshield(OEM)`.
+If an OEM scan includes `r`, it is logged and normalized to `Replace(AVIS)`.
+
+Temporary aliases in `legacy_area_aliases` accept orientation-first scans from
+older emails and normalize them to canonical codes. Remove those configured aliases
+after all legacy emails have been processed.
 
 ## Data Contract — `ATL_Data 2026 : GlassClaims`
 
 The pipeline output maps 1-to-1 with the `GlassClaims` tab in the master workbook.
 Phase 5 inserts rows above the summary section and always appends rows (no deduplication).
 
-For returning MVAs, `Original Date` is carried forward from existing sheet rows only when
-the prior row's `Inventory Date` is within `incident_window_days` (default: 3 days) of the
-new row's `Inventory Date`.
+For returning MVAs, `Original Date` is the earliest sighting in the latest episode. Starting
+from the new row, the pipeline walks backward through sightings whose adjacent `Inventory Date`
+gaps are at most `incident_window_days` (default: 7 calendar days). A larger gap starts a new
+episode: an 8-day difference means seven full intervening days had no sighting, so the search
+stops before older damage history can be carried forward.
 
 | # | Column | Source | Phase | Notes |
 |---|--------|--------|-------|-------|
 | 1 | **Inventory Date** | Email Type/date parsing | 2 | `MM/DD/YYYY` |
-| 2 | **Original Date** | Inventory Date at first sighting; carried forward for same incident | 2/5 | Uses earliest qualifying prior value within incident window |
+| 2 | **Original Date** | Inventory Date at first sighting; carried forward for same incident | 2/5 | Earliest sighting in the latest contiguous episode |
 | 3 | **MVA** | Orca Scan Description | 2 | 8-digit, suffixes stripped |
 | 4 | **FPO#** | Manual workflow | 2 | Pipeline writes blank |
 | 5 | **VIN** | CGI scraper (`GlassResults.txt`) | 4 | `N/A` if scraper miss |
@@ -74,6 +91,9 @@ The orchestrator loads config files in this order, with later files overriding e
 4. `orchestrator_config.local.json` — legacy local override, still supported (gitignored)
 5. `config/config.local.json` — shared local override for cross-module machine settings (gitignored)
 
+Outbound notification email is retained as a rollback option. Set the JSON boolean
+`"notifications_enabled": true` to enable it; the default is `false`.
+
 The UI/login config loader merges files separately in this order:
 
 1. `config/config.json` — shared UI/login defaults
@@ -109,6 +129,24 @@ Or run directly with the virtual environment interpreter:
 ```bash
 .venv\Scripts\python.exe GlassOrchestrator.py
 ```
+
+### Ensure Glass Complaints and Work Items
+
+The consolidated launcher defaults to valid rows whose `Inventory Date` is today:
+
+```bash
+Run-EnsureGlassWorkItems.cmd
+```
+
+Optional modes:
+
+```bash
+Run-EnsureGlassWorkItems.cmd --dry-run
+Run-EnsureGlassWorkItems.cmd --mva 058524185
+Run-EnsureGlassWorkItems.cmd --csv WorkItems\create_workitem.csv
+```
+
+The workflow creates a missing Glass complaint before creating its work item and skips an MVA only when both already exist. CSV mode is Glass-only and uses the existing `mva,Type,location,action` schema.
 
 ### Run All Tests (1-click)
 
@@ -150,4 +188,4 @@ GlassResults.txt         # Phase 3 output (worker-produced)
 - **Phase 3 failure aborts the entire pipeline** — no data is persisted or notified.
 - An individual MVA reported as not found is not a Phase 3 failure. Phase 3 writes
   `VIN=N/A` and `Desc=MVA Not Found`, then continues with the next MVA.
-- Phase 6 (notification) failure is logged but does not lose persisted data.
+- When enabled, Phase 6 notification failure is logged but does not lose persisted data.

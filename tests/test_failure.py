@@ -221,6 +221,7 @@ class TestFT3_NotificationConsistency:
 
     def test_pipeline_notifies_only_persisted_rows(self, monkeypatch):
         email_date = datetime(2026, 3, 9)
+        monkeypatch.setattr("GlassOrchestrator.NOTIFICATIONS_ENABLED", True)
 
         df_merged = pd.DataFrame([
             {

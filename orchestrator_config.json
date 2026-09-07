@@ -26,32 +26,42 @@
   
   "smtp_port_comment": "SMTP port. Typically 587 for TLS or 465 for SSL.",
   "smtp_port": 587,
+
+  "notifications_enabled_comment": "Send replacement notification emails after successful persistence. Must be a JSON boolean. Defaults to false so notifications can be restored cautiously if needed.",
+  "notifications_enabled": false,
   
-  "mva_pattern_comment": "Fallback regex for Orca Scan parsing (compiled case-insensitively). When 'areas' is populated, the runtime parser derives AREA_ID alternation from those keys to avoid ambiguity; this pattern is used when 'areas' is empty. Groups: 1=MVA (8 digits), 2=AREA_ID, 3=repair flag (r or empty), 4=claim flag (c or empty).",
-  "mva_pattern": "^(\\d{8})([A-Z]+?)([r]?)([c]?)$",
+  "mva_pattern_comment": "Fallback regex for Orca Scan parsing (compiled case-insensitively). When 'areas' is populated, the runtime parser derives AREA_ID alternation from those keys to avoid ambiguity; this pattern is used when 'areas' is empty. Directional AREA_ID values use side + orientation + area (for example, LFD = Left Front Door). Format: MVA + required AREA_ID + optional r + optional c + one space + terminal OEM. Groups: 1=MVA, 2=AREA_ID, 3=repair, 4=claim, 5=OEM. Examples: WS OEM, WSc OEM, LFD OEM, LFDc OEM. Bare MVA+OEM without an area is invalid. OEM scans are routed as AVIS replacements; an r on an OEM scan is normalized to replacement with a warning.",
+  "mva_pattern": "^(\\d{8})([A-Z]+?)([r]?)([c]?)( OEM)?$",
 
   "areas_comment": "Map of valid AREA_ID codes to human-readable labels. Used by the parser to validate and label the Area column.",
   "areas": {
     "WS":  "Windshield",
-    "FLD": "Front Left Door",
-    "LFD": "Front Left Door",
-    "FRD": "Front Right Door",
-    "RFD": "Front Right Door",
-    "RLD": "Rear Left Door",
-    "LRD": "Rear Left Door",
-    "RRD": "Rear Right Door",
-    "FLV": "Front Left Vent",
-    "LFV": "Front Left Vent",
-    "FRV": "Front Right Vent",
-    "RFV": "Front Right Vent",
+    "LFD": "Left Front Door",
+    "RFD": "Right Front Door",
+    "LRD": "Left Rear Door",
+    "RRD": "Right Rear Door",
+    "LFV": "Left Front Vent",
+    "RFV": "Right Front Vent",
     "BW":  "Back Window",
     "SR":  "Sunroof",
     "TFS": "Sunroof",
     "TRS": "Sunroof",
-    "RLQ": "Rear Left Quarter",
-    "LRQ": "Rear Left Quarter",
-    "RRQ": "Rear Right Quarter",
-    "FRW": "Front Right Window"
+    "LRQ": "Left Rear Quarter",
+    "RRQ": "Right Rear Quarter",
+    "RFW": "Right Front Window",
+    "RVM": "Rear View Mirror",
+    "CAM": "Camera"
+  },
+
+  "legacy_area_aliases_comment": "Temporary compatibility for scans created before side + orientation + area ordering. Remove these entries after legacy emails are processed.",
+  "legacy_area_aliases": {
+    "FLD": "LFD",
+    "FRD": "RFD",
+    "RLD": "LRD",
+    "FLV": "LFV",
+    "FRV": "RFV",
+    "RLQ": "LRQ",
+    "FRW": "RFW"
   },
 
   "repair_eligible_areas_comment": "AREA_ID codes on which the repair flag (r) is valid. All other areas with an r flag are an INVALID_REPAIR error.",
@@ -73,10 +83,19 @@
   "cycle_completed_retention": 1000,
 
   "incident_window_days_comment": "Same-incident window in days for MVA sightings. Within this window, Inventory Date is updated on the existing row.",
-  "incident_window_days": 3,
+  "incident_window_days": 7,
   
   "work_item_default_flag_comment": "Default status flag for work items. Typically 'verified' or 'pending'.",
   "work_item_default_flag": "verified",
+
+  "compass_complaint_api_precheck_enabled_comment": "Feature flag for batch complaint detection. false uses the legacy UI table check; true tries the Compass complaint API first and falls back to UI on API errors.",
+  "compass_complaint_api_precheck_enabled": false,
+
+  "compass_complaint_api_shadow_ui_comment": "Optional rollout logging. When true and the API precheck is enabled, also run the legacy UI lookup for comparison logging only.",
+  "compass_complaint_api_shadow_ui": false,
+
+  "compass_complaint_api_base_url_comment": "Base URL for the Compass Go complaint-read endpoints used by the batch precheck.",
+  "compass_complaint_api_base_url": "https://go.avisbudget.palantirfoundry.com",
   
   "warmup_mva_comment": "Dummy MVA used for Selenium warmup/initialization. Any valid 8-digit number works.",
   "warmup_mva": "50227203",

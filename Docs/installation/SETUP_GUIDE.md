@@ -46,6 +46,7 @@ Create or edit with values for your machine:
 	"service_account_json": "C:\\path\\to\\Service_account.json",
 	"spreadsheet_id": "your_google_sheet_id",
 	"location": "APO",
+	"notifications_enabled": false,
 	"sender_address": "",
 	"notify_recipients": []
 }
@@ -53,7 +54,8 @@ Create or edit with values for your machine:
 
 Notes:
 
-- `email_account` and `email_password` are required for IMAP/SMTP auth paths.
+- `email_account` and `email_password` are required for IMAP and enabled SMTP notification paths.
+- `notifications_enabled` must be a JSON boolean and defaults to `false`.
 - `service_account_json` must point to a real local file path.
 - `orchestrator_project.local.json` is ignored by git.
 
