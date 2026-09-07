@@ -64,12 +64,19 @@ if "%SYNC_DEPS%"=="1" (
 rem AGN invoice proof of concept. Extracts and checks invoices, then returns
 rem Home after each FieldPO review. It never presses Approve or Close.
 rem Usage: Run-PayCompletedInvoices.cmd [max_invoices]
+rem Reads exact target PO numbers from outlook\po_numbers.txt.
 
 set "MAX_INVOICES=1"
 if not "%~1"=="" set "MAX_INVOICES=%~1"
+set "PO_FILE=outlook\po_numbers.txt"
 
-echo Running AGN invoice dry run (max_invoices=%MAX_INVOICES%).
-"%VENV_PY%" outlook\agn_invoices.py --dry-run --silent --max-invoices %MAX_INVOICES%
+if not exist "%PO_FILE%" (
+  echo [ERROR] Missing %PO_FILE%. Add one FPO number per line.
+  exit /b 1
+)
+
+echo Running AGN invoice dry run from %PO_FILE% (max_invoices=%MAX_INVOICES%).
+"%VENV_PY%" outlook\agn_invoices.py --dry-run --silent --po-file "%PO_FILE%" --max-invoices %MAX_INVOICES%
 
 echo.
 echo Exit code: %errorlevel%

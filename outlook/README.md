@@ -25,11 +25,11 @@ or just double-click `Run AGN Invoices.bat`. This runs, in order:
 
 1. **Extract** - reads new invoices from Outlook (`Inbox\AGN\Invoice`),
    saves PDFs, pulls VIN + amount, moves handled emails to `...\Invoice\Processed`
-2. **Check** - opens FieldPO, looks up each VIN, skips anything already
-   marked APPROVED, compares auth amount to invoice amount for the rest
-3. **Approve** - shows a review list, waits for you to type `yes` once,
-   then clicks APPROVE on everything that matched. Mismatches and errors
-   are always left for you to handle manually.
+2. **Check and act** - opens each VIN once in FieldPO, skips anything already
+   marked APPROVED, and applies the same strict gates used by dry run
+3. **Approve and close** - automatically approves the eligible PO and closes
+   the Work Order after every strict gate passes.
+   Mismatches, failed gates, declines, and errors remain for manual review.
 
 You can also run any single step on its own:
 ```
@@ -43,19 +43,21 @@ Cap each selected stage to one invoice for a controlled trial run:
 python agn_invoices.py --max-invoices 1
 ```
 
-The command still requires approval confirmation unless `--yes` is also supplied.
+For a controlled development run, add `--confirm-each`. The eligible PO remains
+visible while the terminal requests permission before any approval action.
 
 Run the complete extraction and FieldPO review path without pressing Approve:
 ```
-python agn_invoices.py --dry-run --max-invoices 1 --silent
+python agn_invoices.py --dry-run --max-invoices 1
 ```
 
 Dry run returns to FieldPO Home after each invoice and writes each `WOULD_CLOSE`
 or `SKIPPED` result to `closure_decisions.jsonl`. It updates normal extraction and
 check queue state, but it never clicks Approve or Close.
 
-Invoices are processed oldest first by Outlook `ReceivedTime`; the run cap is
-applied after that ordering.
+Uncategorized invoices are processed first, oldest by Outlook `ReceivedTime`.
+When categorized backlog rechecking is enabled, those invoices follow in
+oldest-first order. The run cap is applied after that ordering.
 
 A `WOULD_CLOSE` decision requires all of the following:
 - the invoice and FieldPO authorized amounts match exactly
@@ -73,16 +75,10 @@ python agn_invoices.py --trace-vin 1GKENKKSXTJ197778 --trace-vin KL79MPSPXTB1936
 The trace report returns where each VIN appears and a summary status:
 `processed`, `skipped`, `approved`, `failed`, or `missing`.
 
-For non-interactive runs (no close prompt), add `--silent`:
+To request permission for each approval during development:
 ```
-python agn_invoices.py --extract-only --silent
-python agn_invoices.py --check-only --silent
-```
-
-To run approvals unattended, add `--yes` (use with care):
-```
-python agn_invoices.py --approve --silent --yes
-python agn_invoices.py --silent --yes
+python agn_invoices.py --approve --confirm-each
+python agn_invoices.py --max-invoices 1 --confirm-each
 ```
 
 `--approve-only` is still supported as an alias for backward compatibility.
@@ -91,10 +87,11 @@ python agn_invoices.py --silent --yes
 
 Runtime settings are in `agn_invoices_config.json`:
 - `account_name` - must match your Outlook account name exactly
-- `processed_category_name` - Outlook category that marks an email as already processed
+- `processed_category_name` - legacy Outlook category used to identify migration candidates
+- `process_categorized_invoices` - recheck legacy categorized invoices still in Invoice before moving them
 - `max_items_per_run` - safety limit on extract step (set to null for no limit)
 - `max_approvals_per_run` - safety limit on approve step (set to null for no limit)
-- `age_approval_days` - allow age-based approvals for checked invoices at or above this age
+- `age_approval_days` - minimum invoice age required for dry-run and live closure eligibility
 
 ## Selectors still need verification
 
@@ -113,7 +110,8 @@ Everything lives right in this same folder, alongside the script:
 
 ## Safety notes
 
-- Processed marker is Outlook category (`processed_category_name` in config)
+- Membership in the `Processed` folder is the sole finalized-invoice marker
+- Legacy categorized invoices are rechecked because green did not guarantee closure
 - Nothing is deleted
-- Nothing gets approved without you typing `yes` to the review list, unless `--yes` is provided
+- Production mode automatically approves only invoices that pass every strict closure gate
 - Anything that doesn't match, or errors out, is never auto-approved
