@@ -63,28 +63,32 @@ def _load_runtime_config(config_path: Path) -> dict:
         "smtp_server": "smtp.gmail.com",
         "smtp_port": 587,
         "target_sender": "export@orcascan.com",
-        "mva_pattern": r"^(\d{8})([A-Z]+)([r]?)([c]?)$",
+        "mva_pattern": r"^(\d{8})([A-Z]+)([r]?)([c]?)( OEM)?$",
         "areas": {
             "WS":  "Windshield",
-            "FLD": "Front Left Door",
-            "LFD": "Front Left Door",
-            "FRD": "Front Right Door",
-            "RFD": "Front Right Door",
-            "RLD": "Rear Left Door",
-            "LRD": "Rear Left Door",
-            "RRD": "Rear Right Door",
-            "FLV": "Front Left Vent",
-            "LFV": "Front Left Vent",
-            "FRV": "Front Right Vent",
-            "RFV": "Front Right Vent",
+            "LFD": "Left Front Door",
+            "RFD": "Right Front Door",
+            "LRD": "Left Rear Door",
+            "RRD": "Right Rear Door",
+            "LFV": "Left Front Vent",
+            "RFV": "Right Front Vent",
             "BW":  "Back Window",
             "SR":  "Sunroof",
             "TFS": "Sunroof",
             "TRS": "Sunroof",
-            "RLQ": "Rear Left Quarter",
-            "LRQ": "Rear Left Quarter",
-            "RRQ": "Rear Right Quarter",
-            "FRW": "Front Right Window",
+            "LRQ": "Left Rear Quarter",
+            "RRQ": "Right Rear Quarter",
+            "RFW": "Right Front Window",
+            "RVM": "Rear View Mirror",
+        },
+        "legacy_area_aliases": {
+            "FLD": "LFD",
+            "FRD": "RFD",
+            "RLD": "LRD",
+            "FLV": "LFV",
+            "FRV": "RFV",
+            "RLQ": "LRQ",
+            "FRW": "RFW",
         },
         "repair_eligible_areas": ["WS"],
         "vendor_labels": {
@@ -94,7 +98,7 @@ def _load_runtime_config(config_path: Path) -> dict:
         "cycle_tracker_store": "data/mva_cycle_tracker.json",
         "cycle_gap_grace_days": 1,
         "cycle_completed_retention": 1000,
-        "incident_window_days": 3,
+        "incident_window_days": 7,
         "location": "APO",
         "columns": [
             "Inventory Date",
@@ -109,6 +113,7 @@ def _load_runtime_config(config_path: Path) -> dict:
             "Claim#",
             "WorkItem",
         ],
+        "notifications_enabled": False,
         "notify_recipients": [],
     }
 
@@ -186,14 +191,14 @@ def _compile_scan_pattern(
         area_alternation = "|".join(
             sorted((re.escape(code) for code in area_codes), key=len, reverse=True)
         )
-        generated_pattern = rf"^(\d{{8}})({area_alternation})([r]?)([c]?)$"
+        generated_pattern = rf"^(\d{{8}})({area_alternation})([r]?)([c]?)( OEM)?$"
         return _compile_regex_with_fallback(generated_pattern, safe_fallback_text)
 
     return _compile_regex_with_fallback(configured_pattern_text, safe_fallback_text)
 
 
 RUNTIME_CONFIG = _load_runtime_config(ORCHESTRATOR_CONFIG_PATH)
-RUNTIME_CONFIG.update(_load_runtime_config(ORCHESTRATOR_PROJECT_CONFIG_PATH))
+RUNTIME_CONFIG.update(_load_local_config_overrides(ORCHESTRATOR_PROJECT_CONFIG_PATH))
 RUNTIME_CONFIG.update(_load_local_config_overrides(ORCHESTRATOR_PROJECT_LOCAL_CONFIG_PATH))
 
 # Legacy local overrides kept for backward compatibility.
@@ -233,11 +238,20 @@ else:
         x.strip() for x in RUNTIME_CONFIG.get("notify_recipients", []) if isinstance(x, str) and x.strip()
     ]
 
+notifications_enabled = RUNTIME_CONFIG.get("notifications_enabled", False)
+if not isinstance(notifications_enabled, bool):
+    raise ValueError("notifications_enabled must be a JSON boolean")
+NOTIFICATIONS_ENABLED = notifications_enabled
+
 TARGET_SENDER = str(RUNTIME_CONFIG["target_sender"])
 AREAS: dict[str, str] = dict(RUNTIME_CONFIG.get("areas", {}))
-DEFAULT_MVA_PATTERN = r"^(\d{8})([A-Z]+?)([r]?)([c]?)$"
+LEGACY_AREA_ALIASES: dict[str, str] = {
+    str(alias).upper(): str(canonical).upper()
+    for alias, canonical in RUNTIME_CONFIG.get("legacy_area_aliases", {}).items()
+}
+DEFAULT_MVA_PATTERN = r"^(\d{8})([A-Z]+?)([r]?)([c]?)( OEM)?$"
 MVA_PATTERN = _compile_scan_pattern(
-    list(AREAS.keys()),
+    list(AREAS.keys()) + list(LEGACY_AREA_ALIASES.keys()),
     str(RUNTIME_CONFIG.get("mva_pattern", DEFAULT_MVA_PATTERN)),
     DEFAULT_MVA_PATTERN,
 )
@@ -251,7 +265,7 @@ COLUMNS = list(RUNTIME_CONFIG["columns"])
 CYCLE_TRACKER_STORE = _resolve_config_path(str(RUNTIME_CONFIG.get("cycle_tracker_store", "data/mva_cycle_tracker.json")))
 CYCLE_GAP_GRACE_DAYS = int(RUNTIME_CONFIG.get("cycle_gap_grace_days", 1))
 CYCLE_COMPLETED_RETENTION = int(RUNTIME_CONFIG.get("cycle_completed_retention", 1000))
-INCIDENT_WINDOW_DAYS = int(RUNTIME_CONFIG.get("incident_window_days", 3))
+INCIDENT_WINDOW_DAYS = int(RUNTIME_CONFIG.get("incident_window_days", 7))
 
 
 # The phase terminalogy should be seen as a design process but not an archetetual method
@@ -775,6 +789,18 @@ def _extract_scan_tokens(raw_text: str) -> list[str]:
     return [part.strip() for part in parts if part and MVA_PATTERN.match(part.strip())]
 
 
+def _normalize_scan_text(raw_text: str) -> str:
+    """Canonicalize scanner text before applying the strict scan regex."""
+    collapsed = " ".join(str(raw_text).strip().split())
+    if not collapsed:
+        return ""
+
+    upper = collapsed.upper()
+    if upper.endswith(" OEM"):
+        return f"{re.sub(r'\s+', '', upper[:-4])} OEM"
+    return re.sub(r"\s+", "", upper)
+
+
 # ─── Parsing & Normalization ─────────────────────────────────────────────────
 
 # not phase based
@@ -782,9 +808,10 @@ def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_da
     """
     Apply regex to each description string and build a session manifest.
 
-    Scan format: <MVA:8 digits><AREA_ID:uppercase>[r][c]
+        Scan format: <MVA:8 digits><AREA_ID:uppercase>[r][c][ OEM]
       r = repair flag (only valid on repair-eligible areas, e.g. WS)
       c = claim listed flag
+            " OEM" = AVIS-sourced OEM replacement
 
     On parse error (MALFORMED_SCAN, AMBIGUOUS_LOCATION, INVALID_REPAIR) the
     entry is logged as a warning and skipped entirely.  No error rows are
@@ -809,32 +836,36 @@ def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_da
 
     for type_value, desc in descriptions:
         raw = desc.strip()
+        normalized_scan = _normalize_scan_text(raw)
         location = _extract_location_from_type(type_value)
         inventory_date = _extract_arrival_date_from_type(type_value, email_date)
         if not type_value:
             missing_type_count += 1
 
-        match = MVA_PATTERN.match(raw)
+        match = MVA_PATTERN.match(normalized_scan)
         if not match:
             log.warning("Parsing: MALFORMED_SCAN — scan='%s'", raw)
             continue
 
         mva = match.group(1)
-        area_code = match.group(2).upper()
-        repair_flag = match.group(3).lower()   # "r" or ""
-        claim_flag = match.group(4).lower()    # "c" or ""
+        scanned_area_code = match.group(2).upper()
+        area_code = LEGACY_AREA_ALIASES.get(scanned_area_code, scanned_area_code)
+        repair_flag = match.group(3).lower()
+        claim_flag = match.group(4).lower()
+        is_oem = bool(match.group(5))
 
         # Validate area code against config
         if area_code not in AREAS:
             log.warning("Parsing: AMBIGUOUS_LOCATION — scan='%s'", raw)
             continue
 
-        # Repair flag only valid on repair-eligible areas
-        if repair_flag and area_code not in REPAIR_ELIGIBLE_AREAS:
+        if is_oem and repair_flag:
+            log.warning("Parsing: OEM_REPAIR_NORMALIZED — scan='%s'", raw)
+        elif repair_flag and area_code not in REPAIR_ELIGIBLE_AREAS:
             log.warning("Parsing: INVALID_REPAIR — scan='%s'", raw)
             continue
 
-        damage_type = "Repair" if repair_flag else "Replacement"
+        damage_type = "Repair" if repair_flag and not is_oem else "Replacement"
         damage_area = AREAS[area_code]
         # Claim status values must match allowed UI options.
         claim = "Listed" if claim_flag else "Missing"
@@ -851,6 +882,7 @@ def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_da
             "Area": damage_area,
             "Claim#": claim,
             "WorkItem": default_work_item,
+            "_OEM": is_oem,
         }
         mva_list.append(mva)
 
@@ -942,6 +974,8 @@ def merge_manifest_with_results(manifest: dict) -> pd.DataFrame:
 
     # Build manifest DataFrame
     df_manifest = pd.DataFrame(list(manifest.values()))
+    if "_OEM" not in df_manifest.columns:
+        df_manifest["_OEM"] = False
 
     # Read scraper results (headerless: MVA,VIN,Desc per writer contract)
     if RESULTS_PATH.exists():
@@ -980,8 +1014,8 @@ def merge_manifest_with_results(manifest: dict) -> pd.DataFrame:
         df_merged["Make"] = df_merged["Make_scraped"].fillna(df_merged["Make"])
         df_merged.drop(columns=["Make_scraped"], inplace=True)
 
-    # Ensure column order
-    df_merged = df_merged[COLUMNS]
+    # Keep internal routing metadata after the canonical sheet columns.
+    df_merged = df_merged[COLUMNS + ["_OEM"]]
 
     n_missing = (df_merged["VIN"] == "N/A").sum()
     log.info("Merge: Complete — %d rows, %d missing VINs", len(df_merged), n_missing)
@@ -1038,14 +1072,37 @@ def persist_new_rows(df: pd.DataFrame) -> pd.DataFrame:
     # Build rows as lists matching the configured sheet column contract (COLUMNS)
     rows_to_insert = _rows_from_dataframe(df)
 
-    # Insert rows above the summary section (pushes summary down automatically).
-    # inherit_from_before=True: new rows inherit formatting from the data row above,
-    # not the summary row below (which is orange/bold and would corrupt the inserted rows).
+    # Insert rows above the summary section and write to that exact range.
     log.info("Persistence: Inserting %d rows at row %d …", len(rows_to_insert), insert_row)
-    ws.insert_rows(rows_to_insert, row=insert_row, inherit_from_before=True)
+    _insert_rows_at(ws, rows_to_insert, insert_row)
 
     log.info("Persistence: Wrote %d new rows to Google Sheet at row %d", len(df), insert_row)
     return df
+
+
+def _insert_rows_at(ws, rows: list[list[str]], insert_row: int) -> None:
+    """Insert row dimensions and write values to the exact inserted range."""
+    row_count = len(rows)
+    ws.spreadsheet.batch_update(
+        {
+            "requests": [
+                {
+                    "insertDimension": {
+                        "range": {
+                            "sheetId": ws.id,
+                            "dimension": "ROWS",
+                            "startIndex": insert_row - 1,
+                            "endIndex": insert_row - 1 + row_count,
+                        },
+                        "inheritFromBefore": True,
+                    }
+                }
+            ]
+        }
+    )
+    end_row = insert_row + row_count - 1
+    end_cell = gspread.utils.rowcol_to_a1(end_row, len(COLUMNS))
+    ws.update(rows, range_name=f"A{insert_row}:{end_cell}", raw=True)
 
 
 def _normalize_arrival_date_key(value: object) -> str:
@@ -1159,18 +1216,56 @@ def _sheet_date_index(headers: list[str]) -> int | None:
     return None
 
 
-def _find_insert_row(all_vals: list[list[str]]) -> int:
-    """Return the first row after existing data where new rows should be inserted."""
-    if not all_vals:
-        return 2
+_SUMMARY_MARKERS = {
+    1: "Avg Repair Days",
+    7: "Repairs",
+    9: "Claims",
+    10: "Total",
+}
 
-    headers = all_vals[0]
-    mva_idx = headers.index("MVA") if "MVA" in headers else 1
-    insert_row = 2  # default: right after header
-    for i, row in enumerate(all_vals[1:], start=1):
+
+def _find_summary_row(all_vals: list[list[str]]) -> int:
+    """Return the unique 1-based row containing the GlassClaims summary."""
+    matches = []
+    for row_number, row in enumerate(all_vals[1:], start=2):
+        if all(
+            len(row) > column_index and row[column_index].strip() == marker
+            for column_index, marker in _SUMMARY_MARKERS.items()
+        ):
+            matches.append(row_number)
+
+    if len(matches) != 1:
+        raise RuntimeError(
+            "GlassClaims summary boundary must occur exactly once; "
+            f"found {len(matches)} matching rows"
+        )
+    return matches[0]
+
+
+def _find_insert_row(all_vals: list[list[str]]) -> int:
+    """Return the row after the last MVA above the GlassClaims summary."""
+    if not all_vals:
+        raise RuntimeError("GlassClaims sheet is empty; expected a summary boundary")
+
+    mva_idx = COLUMNS.index("MVA")
+    summary_row = _find_summary_row(all_vals)
+    for row_number in range(summary_row - 1, 1, -1):
+        row = all_vals[row_number - 1]
         if len(row) > mva_idx and row[mva_idx].strip():
-            insert_row = i + 2  # next row (1-indexed)
-    return insert_row
+            insert_row = row_number + 1
+            log.info(
+                "Persistence: Summary row=%d, last data row=%d, insertion row=%d",
+                summary_row,
+                row_number,
+                insert_row,
+            )
+            return insert_row
+
+    log.info(
+        "Persistence: Summary row=%d, no data rows found, insertion row=2",
+        summary_row,
+    )
+    return 2
 
 
 def _rows_from_dataframe(df: pd.DataFrame) -> list[list[str]]:
@@ -1187,19 +1282,24 @@ def _rows_from_dataframe(df: pd.DataFrame) -> list[list[str]]:
         for col in COLUMNS:
             val = row[col]
             if col == "Action":
-                val = VENDOR_LABELS.get(str(val), val)
+                if str(val) == "Replacement" and row.get("_OEM", False) is True:
+                    val = "Replace(AVIS)"
+                else:
+                    val = VENDOR_LABELS.get(str(val), val)
+            elif col == "Area" and row.get("_OEM", False) is True:
+                val = f"{val}(OEM)"
             values.append(val)
         rows.append(values)
     return rows
 
 
 def _resolve_original_dates(all_vals: list[list[str]], df: pd.DataFrame) -> pd.DataFrame:
-    """Carry forward the earliest Original Date from the sheet for returning MVAs.
+    """Resolve Original Date from the latest contiguous episode for each MVA.
 
-    Only sheet rows whose Inventory Date falls within INCIDENT_WINDOW_DAYS of
-    the new row's Inventory Date are considered.  This keeps the Original Date
-    scoped to the current repair incident — rows from weeks or months ago are
-    ignored.
+    Starting at the new Inventory Date, walk prior sightings backward while
+    each adjacent Inventory Date is within INCIDENT_WINDOW_DAYS. This allows a
+    multi-day incident to extend beyond one fixed lookback window without
+    including an older, separate incident.
 
     If no qualifying prior rows exist for an MVA, its Original Date is left
     unchanged (i.e. the Inventory Date from the current email).
@@ -1245,16 +1345,33 @@ def _resolve_original_dates(all_vals: list[list[str]], df: pd.DataFrame) -> pd.D
         if new_inv is None:
             continue
 
-        # Collect Original Dates from prior rows within the incident window
-        candidates = [
-            orig
-            for (s_mva, s_inv, orig) in sheet_rows
-            if s_mva == mva and 0 <= (new_inv - s_inv).days <= INCIDENT_WINDOW_DAYS
-        ]
-        if not candidates:
+        prior_rows = sorted(
+            (
+                (s_inv, orig)
+                for (s_mva, s_inv, orig) in sheet_rows
+                if s_mva == mva and s_inv <= new_inv
+            ),
+            reverse=True,
+        )
+
+        episode_rows: list[tuple[date, date]] = []
+        previous_date = new_inv
+        for inventory_date, original_date in prior_rows:
+            if (previous_date - inventory_date).days > INCIDENT_WINDOW_DAYS:
+                break
+            episode_rows.append((inventory_date, original_date))
+            previous_date = inventory_date
+
+        if not episode_rows:
             continue
 
-        earliest = min(candidates)
+        earliest_inventory = episode_rows[-1][0]
+        valid_original_dates = [
+            original_date
+            for _, original_date in episode_rows
+            if 0 <= (earliest_inventory - original_date).days <= INCIDENT_WINDOW_DAYS
+        ]
+        earliest = min([earliest_inventory, *valid_original_dates])
         df.at[idx, "Original Date"] = earliest.strftime("%m/%d/%Y")
         log.info(
             "Persistence: %s — Original Date carried forward from sheet: %s",
@@ -1470,15 +1587,18 @@ def run_pipeline() -> None:
         log.error("Persistence failed — %s", exc, exc_info=True)
         return
 
-    # Step 7: Notify
-    try:
-        from core.eligibility import is_notification_eligible
-        eligible_rows = df_new_rows[df_new_rows.apply(lambda r: is_notification_eligible(r.to_dict()), axis=1)]
-        notify_order_items(eligible_rows)
-    except Exception as exc:
-        log.error("Notification failed — %s", exc, exc_info=True)
-        # Notification failure is non-fatal for data persistence; pipeline ends here
-        return
+    # Step 7: Notify when explicitly enabled
+    if NOTIFICATIONS_ENABLED:
+        try:
+            from core.eligibility import is_notification_eligible
+            eligible_rows = df_new_rows[df_new_rows.apply(lambda r: is_notification_eligible(r.to_dict()), axis=1)]
+            notify_order_items(eligible_rows)
+        except Exception as exc:
+            log.error("Notification failed — %s", exc, exc_info=True)
+            # Notification failure is non-fatal for data persistence; pipeline ends here
+            return
+    else:
+        log.info("Notification: Disabled by configuration")
 
     # Step 8: Mark source email as read only after successful completion.
     if source_uid is not None:

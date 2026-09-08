@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, call
 from WorkItems.build_close_queue import (
     _append_candidates,
     _load_existing_candidates,
-    _load_uncategorized_receipts,
+    _load_uncategorized_invoices,
     _retire_processed_candidates,
     build_close_candidates,
 )
@@ -16,7 +16,7 @@ def test_apply_ensures_vendor_columns_before_processing(monkeypatch, tmp_path):
     updater = MagicMock()
     monkeypatch.setattr(build_close_queue, "VendorSheetUpdater", MagicMock(return_value=updater))
     monkeypatch.setattr(build_close_queue, "_load_config", lambda: {"spreadsheet_id": "sheet-id"})
-    monkeypatch.setattr(build_close_queue, "_load_uncategorized_receipts", lambda: ([], []))
+    monkeypatch.setattr(build_close_queue, "_load_uncategorized_invoices", lambda: ([], []))
     monkeypatch.setattr(build_close_queue, "_load_existing_candidates", lambda _path: set())
     monkeypatch.setattr(build_close_queue, "_load_processed_candidates", lambda _path: set())
     monkeypatch.setattr(build_close_queue, "_retire_processed_candidates", lambda *_args: 0)
@@ -37,12 +37,12 @@ def test_apply_ensures_vendor_columns_before_processing(monkeypatch, tmp_path):
     assert updater.method_calls[:2] == [call.connect(), call.ensure_columns()]
 
 
-def test_loads_only_uncategorized_outlook_receipts_oldest_first(monkeypatch):
+def test_loads_only_uncategorized_outlook_invoices_oldest_first(monkeypatch):
     import outlook.agn_invoices as agn_invoices
 
     def make_mail(subject, received, categorized=False):
         attachment = MagicMock()
-        attachment.FileName = "receipt.pdf"
+        attachment.FileName = "invoice.pdf"
         mail = MagicMock()
         mail.Class = 43
         mail.Subject = subject
@@ -51,83 +51,105 @@ def test_loads_only_uncategorized_outlook_receipts_oldest_first(monkeypatch):
         mail.Attachments = [attachment]
         return mail
 
-    newer = make_mail("Receipt for Job #102", "2026-02-02T08:00:00")
-    older = make_mail("Receipt for Job #101", "2026-02-01T08:00:00")
-    categorized = make_mail("Receipt for Job #100", "2026-01-01T08:00:00", categorized=True)
-    invoice = make_mail("Invoice #200", "2026-01-02T08:00:00")
+    newer = make_mail("Invoice #202", "2026-02-02T08:00:00")
+    older = make_mail("Invoice #201", "2026-02-01T08:00:00")
+    categorized = make_mail("Invoice #200", "2026-01-01T08:00:00", categorized=True)
+    receipt = make_mail("Receipt for Job #100", "2026-01-02T08:00:00")
     folder = MagicMock()
-    folder.Items = [newer, categorized, invoice, older]
+    folder.Items = [newer, categorized, receipt, older]
 
     monkeypatch.setattr(agn_invoices, "get_invoice_folder", lambda: folder)
-    monkeypatch.setattr(agn_invoices, "extract_receipt_vin_and_amount", lambda path: ("1HGBH41JXMN109186", "306.00"))
+    monkeypatch.setattr(
+        agn_invoices,
+        "extract_invoice_data",
+        lambda path: (None, "1HGBH41JXMN109186", "306.00"),
+    )
 
-    receipts, review_notes = _load_uncategorized_receipts()
+    invoices, review_notes = _load_uncategorized_invoices()
 
-    assert [row["subject"] for row in receipts] == [
-        "Receipt for Job #101",
-        "Receipt for Job #102",
+    assert [row["subject"] for row in invoices] == [
+        "Invoice #201",
+        "Invoice #202",
     ]
     assert review_notes == []
     categorized.Attachments[0].SaveAsFile.assert_not_called()
-    invoice.Attachments[0].SaveAsFile.assert_not_called()
+    receipt.Attachments[0].SaveAsFile.assert_not_called()
 
 
-def test_builds_only_strict_unique_vin_candidates():
+def test_same_mva_duplicate_vin_rows_select_latest_inventory_date():
     updater = MagicMock()
-    updater.find_unique_row_by_vin.side_effect = [
-        type("Match", (), {"is_ok": True, "row_index": 4, "status": "ok", "note": ""})(),
-        type(
-            "Match",
-            (),
-            {"is_ok": False, "row_index": None, "status": "ambiguous", "note": "VIN matched 2 rows"},
-        )(),
+    updater.find_rows_by_vin.return_value = [4, 9]
+    updater.get_row_fields.side_effect = [
+        {"MVA": "12345678", "Inventory Date": "8/16/2026"},
+        {"MVA": "12345678", "Inventory Date": "8/17/2026"},
     ]
-    updater.get_row_fields.return_value = {"MVA": "12345678"}
-    receipts = [
-        {"subject": "Receipt for Job #101", "vin": "VIN1", "received": "2026-02-01", "invoice_amount": "125.00"},
-        {"subject": "Receipt for Job #102", "vin": "VIN2", "received": "2026-02-02", "invoice_amount": "306.00"},
+    invoices = [
+        {"subject": "Invoice #201", "vin": "VIN1", "received": "2026-02-01", "invoice_amount": "125.00"},
     ]
 
-    candidates, review_notes = build_close_candidates(updater, receipts, set(), None)
+    candidates, review_notes = build_close_candidates(updater, invoices, set(), None)
 
     assert candidates == [{
         "mva": "012345678",
         "complaint_type": "Glass",
         "vin": "VIN1",
-        "job_id": "101",
+        "invoice_id": "201",
         "cost": "125.00",
-        "row_index": "4",
+        "row_index": "9",
         "received": "2026-02-01",
-        "_mail": None,
     }]
-    assert review_notes == ["Receipt for Job #102: VIN matched 2 rows"]
+    assert review_notes == []
 
 
-def test_recovers_uncategorized_receipt_already_in_active_queue():
+def test_different_mvas_for_same_vin_require_review():
     updater = MagicMock()
-    updater.find_unique_row_by_vin.return_value = type(
-        "Match", (), {"is_ok": True, "row_index": 4, "status": "ok", "note": ""}
-    )()
-    updater.get_row_fields.return_value = {"MVA": "12345678"}
-    receipt = {
-        "subject": "Receipt for Job #101",
+    updater.find_rows_by_vin.return_value = [4, 9]
+    updater.get_row_fields.side_effect = [
+        {"MVA": "12345678", "Inventory Date": "8/16/2026"},
+        {"MVA": "87654321", "Inventory Date": "8/17/2026"},
+    ]
+    invoice = {
+        "subject": "Invoice #201",
         "vin": "VIN1",
         "received": "2026-02-01",
         "invoice_amount": "125.00",
     }
-    queued = {("012345678", "Glass")}
 
     candidates, review_notes = build_close_candidates(
         updater,
-        [receipt],
-        queued,
+        [invoice],
+        set(),
         None,
-        recoverable_existing=queued,
     )
 
+    assert candidates == []
+    assert review_notes == [
+        "Invoice #201: VIN VIN1 matched different MVAs: 012345678, 087654321"
+    ]
+
+
+def test_target_mva_filters_other_candidates_and_review_notes():
+    updater = MagicMock()
+    updater.find_rows_by_vin.side_effect = [[4], []]
+    updater.get_row_fields.return_value = {
+        "MVA": "12345678",
+        "Inventory Date": "8/17/2026",
+    }
+    invoices = [
+        {"subject": "Invoice #201", "vin": "VIN1", "invoice_amount": "125.00"},
+        {"subject": "Invoice #202", "vin": "VIN2", "invoice_amount": "306.00"},
+    ]
+
+    candidates, review_notes = build_close_candidates(
+        updater,
+        invoices,
+        set(),
+        None,
+        target_mvas={"099999999"},
+    )
+
+    assert candidates == []
     assert review_notes == []
-    assert len(candidates) == 1
-    assert candidates[0]["_already_queued"] is True
 
 
 def test_appends_without_replacing_review_queue(tmp_path):

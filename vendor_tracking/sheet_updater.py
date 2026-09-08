@@ -17,8 +17,13 @@ if they are not already present.
 
 import logging
 import re
+import ssl
 from datetime import datetime
 from typing import Any, Optional
+
+import requests
+from google.auth.transport.requests import AuthorizedSession, Request
+from google.oauth2.service_account import Credentials
 
 try:
     import gspread  # pyright: ignore[reportMissingImports]
@@ -29,6 +34,26 @@ except ModuleNotFoundError:
     _HAS_GSPREAD = False
 
 log = logging.getLogger("vendor_tracking.sheet_updater")
+
+
+class _WindowsTrustAdapter(requests.adapters.HTTPAdapter):
+    """Use the Windows certificate store instead of requests' bundled roots."""
+
+    def init_poolmanager(self, connections: int, maxsize: int, block: bool = False, **pool_kwargs: Any) -> None:
+        pool_kwargs["ssl_context"] = ssl.create_default_context()
+        super().init_poolmanager(connections, maxsize, block=block, **pool_kwargs)
+
+
+def _google_sheets_client(service_account_json: str) -> Any:
+    credentials = Credentials.from_service_account_file(
+        service_account_json,
+        scopes=gspread.auth.DEFAULT_SCOPES,
+    )
+    refresh_session = requests.Session()
+    refresh_session.mount("https://", _WindowsTrustAdapter())
+    session = AuthorizedSession(credentials, auth_request=Request(refresh_session))
+    session.mount("https://", _WindowsTrustAdapter())
+    return gspread.authorize(credentials, session=session)
 
 # Vendor tracking columns managed by this module (Phase 3 subset).
 # Phase 4 will add Completed Date and Turnaround Days.
@@ -124,7 +149,7 @@ class VendorSheetUpdater:
     def connect(self) -> None:
         """Authenticate and open the target worksheet."""
         try:
-            gc = gspread.service_account(filename=self._service_account_json)
+            gc = _google_sheets_client(self._service_account_json)
             sh = gc.open_by_key(self._spreadsheet_id)
             self._ws = sh.worksheet(self._sheet_name)
         except PermissionError as exc:
@@ -239,6 +264,19 @@ class VendorSheetUpdater:
         if not matching_rows:
             return MatchResult(None, "not_found", f"VIN {norm_vin} not found")
         return MatchResult(None, "ambiguous", f"VIN {norm_vin} matched {len(matching_rows)} rows")
+
+    def find_rows_by_vin(self, vin: str) -> list[int]:
+        """Return every sheet row matching a valid VIN."""
+        norm_vin = normalize_vin_for_match(vin)
+        vin_col = self._col_index("VIN")
+        if not norm_vin or vin_col is None:
+            return []
+
+        return [
+            row_idx
+            for row_idx, row in enumerate(self._all_values[1:], start=2)
+            if len(row) >= vin_col and normalize_vin_for_match(row[vin_col - 1]) == norm_vin
+        ]
 
     def get_row_fields(self, row_index: int, column_names: list[str]) -> dict[str, str]:
         """Return named values from one cached sheet row."""

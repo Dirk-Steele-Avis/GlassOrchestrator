@@ -1,4 +1,4 @@
-"""Build the reviewed Compass close queue from Outlook AGN completion receipts."""
+"""Build the reviewed Compass close queue from Outlook AGN invoices."""
 
 import argparse
 import csv
@@ -13,18 +13,22 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
 from vendor_tracking.monitor import _load_config
-from vendor_tracking.sheet_updater import STATUS_COMPLETED, VendorSheetUpdater
+from vendor_tracking.sheet_updater import (
+    STATUS_COMPLETED,
+    VendorSheetUpdater,
+    normalize_date_for_match,
+)
 
 DEFAULT_CLOSE_QUEUE = BASE_DIR / "WorkItems" / "close_workitem.csv"
 DEFAULT_CLOSE_HISTORY = BASE_DIR / "data" / "close_workitem_history.csv"
 PROCESSED_STATE_PATH = BASE_DIR / "data" / "close_workitem_processed.json"
-RECEIPT_SUBJECT_PATTERN = re.compile(r"receipt\s+for\s+job\s*#\s*(\d+)", re.IGNORECASE)
+INVOICE_SUBJECT_PATTERN = re.compile(r"invoice\s*#\s*(\d+)", re.IGNORECASE)
 
 
-def _load_uncategorized_receipts() -> tuple[list[dict], list[str]]:
-    """Read only uncategorized completion receipts directly from Outlook."""
+def _load_uncategorized_invoices() -> tuple[list[dict], list[str]]:
+    """Read only uncategorized invoices directly from Outlook."""
     from outlook.agn_invoices import (
-        extract_receipt_vin_and_amount,
+        extract_invoice_data,
         get_invoice_folder,
         has_processed_category,
         parse_received_timestamp,
@@ -35,14 +39,14 @@ def _load_uncategorized_receipts() -> tuple[list[dict], list[str]]:
         list(folder.Items),
         key=lambda mail: parse_received_timestamp(str(getattr(mail, "ReceivedTime", ""))),
     )
-    receipts: list[dict] = []
+    invoices: list[dict] = []
     review_notes: list[str] = []
-    with tempfile.TemporaryDirectory(prefix="glass-close-receipts-") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="glass-close-invoices-") as temp_dir:
         for index, mail in enumerate(items):
             if getattr(mail, "Class", None) != 43 or has_processed_category(mail):
                 continue
             subject = str(getattr(mail, "Subject", "") or "")
-            if not RECEIPT_SUBJECT_PATTERN.search(subject):
+            if not INVOICE_SUBJECT_PATTERN.search(subject):
                 continue
             attachments = [
                 attachment
@@ -52,20 +56,20 @@ def _load_uncategorized_receipts() -> tuple[list[dict], list[str]]:
             if not attachments:
                 review_notes.append(f"{subject}: no PDF attachment")
                 continue
-            pdf_path = Path(temp_dir) / f"receipt-{index}.pdf"
+            pdf_path = Path(temp_dir) / f"invoice-{index}.pdf"
             attachments[0].SaveAsFile(str(pdf_path))
-            vin, amount = extract_receipt_vin_and_amount(str(pdf_path))
+            invoice_date, vin, amount = extract_invoice_data(str(pdf_path))
             if not vin or not amount:
                 review_notes.append(f"{subject}: PDF VIN or amount could not be parsed")
                 continue
-            receipts.append({
+            invoices.append({
                 "subject": subject,
                 "received": str(getattr(mail, "ReceivedTime", "")),
+                "invoice_date": invoice_date.isoformat() if invoice_date else "",
                 "vin": vin,
                 "invoice_amount": amount,
-                "_mail": mail,
             })
-    return receipts, review_notes
+    return invoices, review_notes
 
 
 def _load_existing_candidates(path: Path) -> set[tuple[str, str]]:
@@ -164,62 +168,93 @@ def _normalize_glass_candidate(raw_mva: str) -> tuple[str, str] | None:
     return mva, "Glass"
 
 
+def _sheet_date_sort_key(raw_date: str) -> date:
+    normalized = normalize_date_for_match(raw_date)
+    try:
+        return datetime.strptime(normalized, "%Y-%m-%d").date()
+    except ValueError:
+        return date.min
+
+
+def _select_invoice_sheet_row(
+    updater: VendorSheetUpdater,
+    vin: str,
+) -> tuple[int | None, tuple[str, str] | None, str]:
+    row_indexes = updater.find_rows_by_vin(vin)
+    if not row_indexes:
+        return None, None, f"VIN {vin} not found"
+
+    rows: list[tuple[int, dict[str, str], tuple[str, str] | None]] = []
+    for row_index in row_indexes:
+        fields = updater.get_row_fields(
+            row_index,
+            ["MVA", "Inventory Date", "Arrival Date"],
+        )
+        rows.append((row_index, fields, _normalize_glass_candidate(fields.get("MVA", ""))))
+
+    if any(normalized is None for _row_index, _fields, normalized in rows):
+        return None, None, f"VIN {vin} has an invalid MVA on one or more Sheet rows"
+
+    normalized_candidates = {normalized for _row_index, _fields, normalized in rows}
+    if len(normalized_candidates) != 1:
+        mvas = sorted(candidate[0] for candidate in normalized_candidates if candidate is not None)
+        return None, None, f"VIN {vin} matched different MVAs: {', '.join(mvas)}"
+
+    selected = max(
+        rows,
+        key=lambda row: (
+            _sheet_date_sort_key(
+                row[1].get("Inventory Date", "") or row[1].get("Arrival Date", "")
+            ),
+            row[0],
+        ),
+    )
+    return selected[0], selected[2], ""
+
+
 def build_close_candidates(
     updater: VendorSheetUpdater,
-    receipts: list[dict],
+    invoices: list[dict],
     existing: set[tuple[str, str]],
     max_rows: int | None,
-    recoverable_existing: set[tuple[str, str]] | None = None,
+    target_mvas: set[str] | None = None,
 ) -> tuple[list[dict], list[str]]:
     candidates: list[dict] = []
     review_notes: list[str] = []
     proposed = set(existing)
-    recoverable_existing = recoverable_existing or set()
     new_count = 0
 
-    for receipt in receipts:
-        subject = receipt.get("subject", "")
-        vin = receipt.get("vin", "")
-        job_match = RECEIPT_SUBJECT_PATTERN.search(subject)
-        job_id = job_match.group(1) if job_match else ""
-        match = updater.find_unique_row_by_vin(vin)
-        if not match.is_ok or match.row_index is None:
-            review_notes.append(f"{subject}: {match.note}")
-            continue
-
-        row_fields = updater.get_row_fields(match.row_index, ["MVA"])
-        normalized = _normalize_glass_candidate(row_fields.get("MVA", ""))
-        if normalized is None:
-            review_notes.append(
-                f"{subject}: invalid MVA on Sheet row {match.row_index}"
-            )
+    for invoice in invoices:
+        subject = invoice.get("subject", "")
+        vin = invoice.get("vin", "")
+        invoice_match = INVOICE_SUBJECT_PATTERN.search(subject)
+        invoice_id = invoice_match.group(1) if invoice_match else ""
+        row_index, normalized, match_note = _select_invoice_sheet_row(updater, vin)
+        if row_index is None or normalized is None:
+            if target_mvas is None:
+                review_notes.append(f"{subject}: {match_note}")
             continue
 
         mva, complaint_type = normalized
+        if target_mvas is not None and mva not in target_mvas:
+            continue
         key = (mva, complaint_type)
         if key in proposed:
-            if key not in recoverable_existing:
-                continue
-            already_queued = True
-        else:
-            if max_rows is not None and new_count >= max_rows:
-                continue
-            proposed.add(key)
-            new_count += 1
-            already_queued = False
+            continue
+        if max_rows is not None and new_count >= max_rows:
+            continue
+        proposed.add(key)
+        new_count += 1
 
         candidate = {
             "mva": mva,
             "complaint_type": complaint_type,
             "vin": vin,
-            "job_id": job_id,
-            "cost": receipt.get("invoice_amount", ""),
-            "row_index": str(match.row_index),
-            "received": receipt.get("received", ""),
-            "_mail": receipt.get("_mail"),
+            "invoice_id": invoice_id,
+            "cost": invoice.get("invoice_amount", ""),
+            "row_index": str(row_index),
+            "received": invoice.get("received", ""),
         }
-        if already_queued:
-            candidate["_already_queued"] = True
         candidates.append(candidate)
 
     return candidates, review_notes
@@ -227,16 +262,23 @@ def build_close_candidates(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Build a reviewed close queue from Outlook AGN completion receipts."
+        description="Build a reviewed close queue from Outlook AGN invoices."
     )
     parser.add_argument("--apply", action="store_true", help="Write candidates to the close CSV and mark matched Sheet rows Completed")
     parser.add_argument("--reconcile-only", action="store_true", help="Archive checkpointed CSV rows without selecting or adding candidates")
     parser.add_argument("--max-rows", type=int, default=None, help="Limit new candidates after oldest-first matching")
+    parser.add_argument("--mva", action="append", default=[], help="Limit review to one MVA; may be repeated")
     parser.add_argument("--close-queue", type=Path, default=DEFAULT_CLOSE_QUEUE)
     parser.add_argument("--history", type=Path, default=DEFAULT_CLOSE_HISTORY)
     args = parser.parse_args()
     if args.max_rows is not None and args.max_rows <= 0:
         parser.error("--max-rows must be greater than 0")
+    target_mvas: set[str] | None = None
+    if args.mva:
+        normalized_targets = [_normalize_glass_candidate(raw_mva) for raw_mva in args.mva]
+        if any(target is None for target in normalized_targets):
+            parser.error("--mva must contain an 8- or 9-digit MVA")
+        target_mvas = {target[0] for target in normalized_targets if target is not None}
 
     if args.reconcile_only:
         processed = _load_processed_candidates(PROCESSED_STATE_PATH)
@@ -258,33 +300,29 @@ def main() -> int:
     updater.connect()
     if args.apply:
         updater.ensure_columns()
-    receipts, source_review_notes = _load_uncategorized_receipts()
+    invoices, source_review_notes = _load_uncategorized_invoices()
     processed = _load_processed_candidates(PROCESSED_STATE_PATH)
     queued = _load_existing_candidates(args.close_queue)
     completed = _load_existing_candidates(args.history) | processed
     existing = queued | completed
     candidates, review_notes = build_close_candidates(
         updater,
-        receipts,
+        invoices,
         existing,
         args.max_rows,
-        recoverable_existing=queued - completed,
+        target_mvas=target_mvas,
     )
-    new_candidates = [candidate for candidate in candidates if not candidate.get("_already_queued")]
-    recovery_candidates = [candidate for candidate in candidates if candidate.get("_already_queued")]
     review_notes = source_review_notes + review_notes
 
     mode = "APPLY" if args.apply else "DRY RUN"
-    print(f"{mode}: {len(receipts)} completion receipt(s), {len(new_candidates)} new candidate(s)")
-    if recovery_candidates:
-        print(f"Recovering {len(recovery_candidates)} receipt(s) already present in the close queue")
+    print(f"{mode}: {len(invoices)} invoice(s), {len(candidates)} new candidate(s)")
     for candidate in candidates:
         print(
             f"  {candidate['received']} | MVA {candidate['mva']} | "
-            f"VIN {candidate['vin']} | Job {candidate['job_id']}"
+            f"VIN {candidate['vin']} | Invoice {candidate['invoice_id']}"
         )
     if review_notes:
-        print(f"Needs review: {len(review_notes)} receipt(s) were not uniquely matched")
+        print(f"Needs review: {len(review_notes)} invoice(s) could not be matched safely")
         for note in review_notes[:20]:
             print(f"  {note}")
 
@@ -295,17 +333,13 @@ def main() -> int:
     retired_count = _retire_processed_candidates(args.close_queue, args.history, processed)
     if retired_count:
         print(f"Retired {retired_count} handled candidate(s) from the review queue")
-    _append_candidates(args.close_queue, new_candidates)
-    from outlook.agn_invoices import mark_processed_category
+    _append_candidates(args.close_queue, candidates)
     for candidate in candidates:
         fields = {"Repair Status": STATUS_COMPLETED}
-        if candidate["job_id"]:
-            fields["Vendor Job Number"] = candidate["job_id"]
         if candidate["cost"]:
             fields["Cost"] = candidate["cost"]
         updater.update_vendor_fields(int(candidate["row_index"]), fields)
-        mark_processed_category(candidate["_mail"])
-    print(f"Added {len(new_candidates)} candidate(s) to {args.close_queue}")
+    print(f"Added {len(candidates)} candidate(s) to {args.close_queue}")
     return 0
 
 

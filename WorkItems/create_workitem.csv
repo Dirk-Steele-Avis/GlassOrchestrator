@@ -3,14 +3,14 @@
 #
 # Columns:
 #   mva      — MVA number (required)
-#   Type     — Work item type: Glass, PM               (required; defaults to Glass if omitted)
-#   location — Glass only: glass area code             (required for Glass, e.g. WS, BW, FLD)
+#   Type     — Work item type: Glass                   (defaults to Glass if omitted)
+#   location — Glass only: configured area code        (required for Glass, e.g. WS, BW, LFD, RVM)
 #   action   — Glass/WS only: Replace or Repair        (defaults to Replace if omitted)
 #
 # Notes:
 #   - Repair is only valid for windshields (location=WS)
-#   - Non-WS glass locations always map to Side/Rear Window Damage regardless of action
-#   - PM rows leave location and action blank
+#   - RVM creates Glass Damage / Mechanical Issue with complaint description RVM
+#   - Other non-WS glass locations map to Side/Rear Window Damage regardless of action
 #   - Lines starting with # are ignored
 #
 mva,Type,location,action

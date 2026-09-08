@@ -77,6 +77,36 @@ class TestUT1_SuffixRegex:
         assert manifest["59193750"]["Claim#"] == "Listed"
         assert mva_list == ["59193750"]
 
+    def test_spaced_lowercase_scan_is_normalized(self):
+        """58898324 wsc → parser accepts scanner spacing before lowercase suffix values."""
+        manifest, mva_list = parse_descriptions_to_manifest(
+            [("0907APO", "58898324 wsc")], datetime(2026, 9, 7)
+        )
+        assert manifest["58898324"]["Action"] == "Replacement"
+        assert manifest["58898324"]["Area"] == "Windshield"
+        assert manifest["58898324"]["Claim#"] == "Listed"
+        assert mva_list == ["58898324"]
+
+    def test_spaced_repair_and_claim_scan_is_normalized(self):
+        """59409641 wsrc → parser accepts scanner spacing before lowercase repair/claim suffix values."""
+        manifest, mva_list = parse_descriptions_to_manifest(
+            [("0907APO", "59409641 wsrc")], datetime(2026, 9, 7)
+        )
+        assert manifest["59409641"]["Action"] == "Repair"
+        assert manifest["59409641"]["Area"] == "Windshield"
+        assert manifest["59409641"]["Claim#"] == "Listed"
+        assert mva_list == ["59409641"]
+
+    @pytest.mark.parametrize("camera_code", ["cam", "CAM", "Cam", "cAm"])
+    def test_camera_category_has_no_claim_indicator(self, camera_code):
+        manifest, mva_list = parse_descriptions_to_manifest(
+            [("0904APO", f"62155822{camera_code}")], datetime(2026, 9, 4)
+        )
+        assert manifest["62155822"]["Action"] == "Replacement"
+        assert manifest["62155822"]["Area"] == "Camera"
+        assert manifest["62155822"]["Claim#"] == "Missing"
+        assert mva_list == ["62155822"]
+
     def test_both_suffixes(self):
         """59340120WSrc → both flags captured"""
         m = MVA_PATTERN.match("59340120WSrc")
@@ -85,6 +115,40 @@ class TestUT1_SuffixRegex:
         assert m.group(2) == "WS"
         assert m.group(3) == "r"
         assert m.group(4) == "c"
+
+    def test_oem_suffix_is_captured_separately(self):
+        m = MVA_PATTERN.match("59340120WSc OEM")
+        assert m is not None
+        assert m.group(2) == "WS"
+        assert m.group(4) == "c"
+        assert m.group(5).upper() == " OEM"
+
+    def test_oem_routes_to_avis_without_changing_area(self):
+        manifest, _ = parse_descriptions_to_manifest(
+            [("0305APO", "59340120LFDc OEM")], datetime(2026, 3, 5)
+        )
+        row = manifest["59340120"]
+        assert row["Action"] == "Replacement"
+        assert row["Area"] == "Left Front Door"
+        assert row["Claim#"] == "Listed"
+        assert row["_OEM"] is True
+
+    def test_oem_repair_normalizes_to_replacement(self, caplog):
+        manifest, _ = parse_descriptions_to_manifest(
+            [("0305APO", "59340120WSrc OEM")], datetime(2026, 3, 5)
+        )
+        row = manifest["59340120"]
+        assert row["Action"] == "Replacement"
+        assert row["Claim#"] == "Listed"
+        assert row["_OEM"] is True
+        assert "OEM_REPAIR_NORMALIZED" in caplog.text
+
+    @pytest.mark.parametrize(
+        "scan",
+        ["59340120OEM", "59340120WSOEM", "59340120WS_OEM", "59340120WS OEMc"],
+    )
+    def test_noncanonical_oem_forms_do_not_match(self, scan):
+        assert MVA_PATTERN.match(scan) is None
 
     def test_no_area_code_does_not_match(self):
         """Bare MVA with no area code must not match (AREA_ID required)."""
@@ -237,13 +301,13 @@ class TestUT1b_ScanErrorCodes:
         assert manifest["59193750"]["Claim#"] == "Listed"
         assert mva_list == ["59193750"]
 
-    def test_spec_example_fldc(self):
-        """59536396FLDc → Replacement, Front Left Door, Listed (spec example 2)."""
+    def test_spec_example_lfdc(self):
+        """59536396LFDc → Replacement, Left Front Door, Listed."""
         manifest, mva_list = parse_descriptions_to_manifest(
-            [("0305APO", "59536396FLDc")], datetime(2026, 3, 5)
+            [("0305APO", "59536396LFDc")], datetime(2026, 3, 5)
         )
         assert manifest["59536396"]["Action"] == "Replacement"
-        assert manifest["59536396"]["Area"] == "Front Left Door"
+        assert manifest["59536396"]["Area"] == "Left Front Door"
         assert manifest["59536396"]["Claim#"] == "Listed"
         assert mva_list == ["59536396"]
 
@@ -257,15 +321,24 @@ class TestUT1b_ScanErrorCodes:
         assert manifest["61066902"]["Claim#"] == "Missing"
         assert mva_list == ["61066902"]
 
-    def test_frw_area_label(self):
-        """59400084FRWc → Replacement, Front Right Window, Listed."""
+    def test_rfw_area_label(self):
+        """59400084RFWc → Replacement, Right Front Window, Listed."""
         manifest, mva_list = parse_descriptions_to_manifest(
-            [("0427APO", "59400084FRWc")], datetime(2026, 4, 27)
+            [("0427APO", "59400084RFWc")], datetime(2026, 4, 27)
         )
         assert manifest["59400084"]["Action"] == "Replacement"
-        assert manifest["59400084"]["Area"] == "Front Right Window"
+        assert manifest["59400084"]["Area"] == "Right Front Window"
         assert manifest["59400084"]["Claim#"] == "Listed"
         assert mva_list == ["59400084"]
+
+    def test_rvm_area_label(self):
+        manifest, mva_list = parse_descriptions_to_manifest(
+            [("0427APO", "59400085RVM")], datetime(2026, 4, 27)
+        )
+        assert manifest["59400085"]["Action"] == "Replacement"
+        assert manifest["59400085"]["Area"] == "Rear View Mirror"
+        assert manifest["59400085"]["Claim#"] == "Missing"
+        assert mva_list == ["59400085"]
 
 
 # ─── UT-2: HTML Extraction ────────────────────────────────────────────────────
@@ -316,6 +389,15 @@ class TestUT2_HTMLExtraction:
     def test_orca_multiline_cell_splits_into_individual_mvas(self):
         result = _parse_html_descriptions(self.ORCA_HTML)
         assert result == [("0205", "59340120c"), ("0205", "58157002"), ("0205", "58135663cr"), ("0205", "57193500r")]
+
+        def test_oem_scan_with_space_remains_one_description(self):
+                html = """
+                <table id="rowData">
+                    <tr><th>Type</th><th>Description</th></tr>
+                    <tr><td>0830APO</td><td>62155855WS OEM</td></tr>
+                </table>
+                """
+                assert _parse_html_descriptions(html) == [("0830APO", "62155855WS OEM")]
 
     def test_returns_empty_on_no_table(self):
         result = _parse_html_descriptions("<html><body><p>No table</p></body></html>")
@@ -483,15 +565,34 @@ class TestUT4_Sanitization:
         assert manifest == {}
         assert mva_list == []
 
-    def test_lowercase_current_area_alias_is_accepted(self):
-        """Current scanner codes like 51085661lfd parse to the matching door area."""
+    def test_lowercase_directional_area_is_accepted(self):
+        """Directional codes remain case-insensitive."""
         manifest, mva_list = parse_descriptions_to_manifest(
             [("0505apo", "51085661lfd")], datetime(2026, 5, 5)
         )
         assert manifest["51085661"]["Action"] == "Replacement"
-        assert manifest["51085661"]["Area"] == "Front Left Door"
+        assert manifest["51085661"]["Area"] == "Left Front Door"
         assert manifest["51085661"]["Location"] == "APO"
         assert manifest["51085661"]["Claim#"] == "Missing"
+        assert mva_list == ["51085661"]
+
+    @pytest.mark.parametrize(
+        "legacy_code,expected_area",
+        [
+            ("FLD", "Left Front Door"),
+            ("FRD", "Right Front Door"),
+            ("RLD", "Left Rear Door"),
+            ("FLV", "Left Front Vent"),
+            ("FRV", "Right Front Vent"),
+            ("RLQ", "Left Rear Quarter"),
+            ("FRW", "Right Front Window"),
+        ],
+    )
+    def test_legacy_orientation_first_area_is_normalized(self, legacy_code, expected_area):
+        manifest, mva_list = parse_descriptions_to_manifest(
+            [("0505APO", f"51085661{legacy_code}")], datetime(2026, 5, 5)
+        )
+        assert manifest["51085661"]["Area"] == expected_area
         assert mva_list == ["51085661"]
 
 

@@ -2,11 +2,25 @@
   "account_name": "Dirk.Steele@avisbudget.com",
   "processed_folder_name": "Processed",
   "processed_category_name": "Green Category",
-  "move_to_processed_folder": false,
+  "process_categorized_invoices": true,
   "max_items_per_run": 20,
   "max_approvals_per_run": 20,
-  "age_approval_days": 14,
+  "age_approval_days": 30,
   "allowed_work_order_created_by": [
     "Steele, Dirk"
+  ],
+  "excluded_standard_price_skus": [
+    "DW03055GTY",
+    "DW03031GTY",
+    "DW03037GTY",
+    "DW03035GTY",
+    "DW02766GTY",
+    "DW02900GTY",
+    "DW02958GTY",
+    "DW02458GTY",
+    "FW06239GTY",
+    "FW06423GTY",
+    "FW06496GTY",
+    "DW02439GTY"
   ]
 }

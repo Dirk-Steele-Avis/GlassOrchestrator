@@ -104,3 +104,10 @@ class TestElig5_SheetStyleKey:
         """'Damage Type' key takes precedence over 'damage_type' when both are present."""
         row = {"Damage Type": "Repair", "damage_type": "Replacement"}
         assert is_notification_eligible(row) is False  # Repair wins because "Damage Type" key takes precedence
+
+    @pytest.mark.parametrize("value", ["Replace(AGN)", "Replace(AVIS)"])
+    def test_sheet_vendor_replacement_labels_are_eligible(self, value):
+        assert is_notification_eligible({"Action": value}) is True
+
+    def test_sheet_vendor_repair_label_is_not_eligible(self):
+        assert is_notification_eligible({"Action": "Repair(SuperGlass)"}) is False

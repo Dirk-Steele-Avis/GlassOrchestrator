@@ -2,8 +2,8 @@
 # Standalone script — not part of the main GlassOrchestrator pipeline.
 # Reads from GlassClaims sheet, creates Compass work items for eligible MVAs.
 #
-# Location is read from the sheet when explicitly provided.
-# If Location is blank or missing, it defaults to WINDSHIELD.
+# Location is read from the sheet when explicitly provided, then from Area.
+# If both are blank or missing, it defaults to WINDSHIELD.
 # Side/rear damage remains uncommon and may still require operator review.
 #
 # ARCHITECTURE NOTE: Designed for extraction into the unified automation repo.
@@ -11,7 +11,7 @@
 # WorkItemHandler subclasses are the extension point — not this orchestrator.
 
 from utils.logger import log
-from core.eligibility import is_notification_eligible
+from core.eligibility import is_notification_eligible, normalize_damage_type
 from flows.mva_navigation import warmup_compass, navigate_to_mva
 from flows.work_item_flow import check_existing_work_item
 from flows.work_item_handler import WorkItemConfig, create_work_item_handler
@@ -26,7 +26,7 @@ def read_glass_claims(sheet_client, tab_name: str = "GlassClaims") -> list[dict]
     - WorkItemCreated column is blank
 
     Returns list of dicts with keys: mva, damage_type, location.
-    Location defaults to WINDSHIELD when blank.
+    Location falls back to Area, then WINDSHIELD, when blank.
     """
     rows = sheet_client.get_all_records()
     result = []
@@ -43,8 +43,8 @@ def read_glass_claims(sheet_client, tab_name: str = "GlassClaims") -> list[dict]
             continue
         result.append({
             "mva": mva,
-            "damage_type": row.get("Damage Type") or row.get("damage_type", "Replacement"),
-            "location": (row.get("Location") or "").strip() or "WINDSHIELD",
+            "damage_type": normalize_damage_type(row),
+            "location": (row.get("Location") or row.get("Area") or "").strip() or "WINDSHIELD",
         })
     return result
 

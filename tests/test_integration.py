@@ -22,6 +22,7 @@ import pandas as pd
 import pytest
 
 from GlassOrchestrator import (
+    AREAS,
     COLUMNS,
     CSV_PATH,
     DATA_DIR,
@@ -31,6 +32,7 @@ from GlassOrchestrator import (
     SPREADSHEET_ID,
     SHEET_NAME,
     TARGET_SENDER,
+    _find_insert_row,
     _get_worksheet,
     parse_descriptions_to_manifest,
     merge_manifest_with_results,
@@ -209,12 +211,47 @@ class TestIT4_SpreadsheetPersistence:
     def _mock_worksheet(self, existing_rows=None):
         """Create a mock worksheet with optional existing data."""
         ws = MagicMock()
+        ws.id = 123
         header = ["Inventory Date", "Original Date", "MVA", "FPO#", "VIN", "Make", "Location",
                   "Action", "Area", "Claim#", "WorkItem"]
+        summary = ["", "Avg Repair Days", "", "", "", "", "", "Repairs", "", "Claims", "Total"]
         if existing_rows is None:
             existing_rows = []
-        ws.get_all_values.return_value = [header] + existing_rows
+        ws.get_all_values.return_value = [header] + existing_rows + [summary]
         return ws
+
+    def test_insert_row_uses_last_mva_before_summary(self):
+        """Blank separator rows do not move insertion below the summary."""
+        header = ["Inventory Date", "Original Date", "MVA", "FPO#", "VIN", "Make", "Location",
+                  "Action", "Area", "Claim#", "WorkItem"]
+        data = ["08/26/2026", "08/26/2026", "61093642", "", "VIN", "Make", "BB",
+                "Replace(AGN)", "Windshield", "Missing", "verified"]
+        blank = [""] * len(header)
+        summary = ["", "Avg Repair Days", "", "", "", "", "", "Repairs", "", "Claims", "Total"]
+
+        assert _find_insert_row([header, data, blank, blank, summary]) == 3
+
+    def test_insert_row_uses_configured_mva_column_with_blank_sheet_header(self):
+        header = [""] * len(COLUMNS)
+        data = ["08/26/2026", "08/26/2026", "61093642"]
+        summary = ["", "Avg Repair Days", "", "", "", "", "", "Repairs", "", "Claims", "Total"]
+
+        assert _find_insert_row([header, data, summary]) == 3
+
+    def test_insert_row_requires_summary(self):
+        with pytest.raises(RuntimeError, match="found 0 matching rows"):
+            _find_insert_row([list(COLUMNS)])
+
+    def test_insert_row_rejects_duplicate_summaries(self):
+        summary = ["", "Avg Repair Days", "", "", "", "", "", "Repairs", "", "Claims", "Total"]
+
+        with pytest.raises(RuntimeError, match="found 2 matching rows"):
+            _find_insert_row([list(COLUMNS), summary, summary])
+
+    def test_insert_row_empty_table_uses_row_two(self):
+        summary = ["", "Avg Repair Days", "", "", "", "", "", "Repairs", "", "Claims", "Total"]
+
+        assert _find_insert_row([list(COLUMNS), summary]) == 2
 
     @patch("GlassOrchestrator._get_worksheet")
     def test_creates_new_rows(self, mock_get_ws):
@@ -226,9 +263,19 @@ class TestIT4_SpreadsheetPersistence:
         new_rows = persist_new_rows(df)
 
         assert len(new_rows) == 2
-        ws.insert_rows.assert_called_once()
-        written = ws.insert_rows.call_args[0][0]
-        assert ws.insert_rows.call_args.kwargs["inherit_from_before"] is True
+        ws.spreadsheet.batch_update.assert_called_once()
+        insert_request = ws.spreadsheet.batch_update.call_args.args[0]["requests"][0]["insertDimension"]
+        assert insert_request == {
+            "range": {
+                "sheetId": 123,
+                "dimension": "ROWS",
+                "startIndex": 1,
+                "endIndex": 3,
+            },
+            "inheritFromBefore": True,
+        }
+        written = ws.update.call_args.args[0]
+        assert ws.update.call_args.kwargs["range_name"] == "A2:K3"
         assert len(written) == 2
         assert written[0][2] == "59340120"
         assert written[1][2] == "59340121"
@@ -245,9 +292,9 @@ class TestIT4_SpreadsheetPersistence:
         new_rows = persist_new_rows(df)
 
         assert len(new_rows) == 1
-        ws.insert_rows.assert_called_once()
-        written = ws.insert_rows.call_args[0][0]
-        assert ws.insert_rows.call_args.kwargs["inherit_from_before"] is True
+        ws.spreadsheet.batch_update.assert_called_once()
+        written = ws.update.call_args.args[0]
+        assert ws.update.call_args.kwargs["range_name"] == "A3:K3"
         assert written[0][2] == "59340121"
 
     @patch("GlassOrchestrator._get_worksheet")
@@ -262,7 +309,7 @@ class TestIT4_SpreadsheetPersistence:
         new_rows = persist_new_rows(df)
 
         assert len(new_rows) == 1
-        ws.insert_rows.assert_called_once()
+        ws.update.assert_called_once()
 
     @patch("GlassOrchestrator._get_worksheet")
     def test_existing_row_with_different_date_format_still_writes(self, mock_get_ws):
@@ -276,7 +323,7 @@ class TestIT4_SpreadsheetPersistence:
         new_rows = persist_new_rows(df)
 
         assert len(new_rows) == 1
-        ws.insert_rows.assert_called_once()
+        ws.update.assert_called_once()
 
     @patch("GlassOrchestrator._get_worksheet")
     def test_correct_columns_written(self, mock_get_ws):
@@ -287,8 +334,7 @@ class TestIT4_SpreadsheetPersistence:
         df = self._make_test_df(["59340120"])
         persist_new_rows(df)
 
-        written = ws.insert_rows.call_args[0][0]
-        assert ws.insert_rows.call_args.kwargs["inherit_from_before"] is True
+        written = ws.update.call_args.args[0]
         assert written[0] == ["03/05/2026", "03/05/2026", "59340120", "", "1HGCM82633A004352",
                                 "Windshield", "APO", "Replace(AGN)", "Windshield", "Missing", "verified"]
 
@@ -304,7 +350,7 @@ class TestIT4_SpreadsheetPersistence:
         new_rows = persist_new_rows(df)
 
         assert len(new_rows) == 1
-        ws.insert_rows.assert_called_once()
+        ws.update.assert_called_once()
         ws.update_cell.assert_not_called()
 
     @patch("GlassOrchestrator._get_worksheet")
@@ -319,7 +365,7 @@ class TestIT4_SpreadsheetPersistence:
         new_rows = persist_new_rows(df)
 
         assert len(new_rows) == 1
-        ws.insert_rows.assert_called_once()
+        ws.update.assert_called_once()
 
     @patch("GlassOrchestrator._get_worksheet")
     def test_original_date_carried_forward_from_sheet(self, mock_get_ws):
@@ -329,11 +375,11 @@ class TestIT4_SpreadsheetPersistence:
         ws = self._mock_worksheet(existing)
         mock_get_ws.return_value = ws
 
-        # New row 2 days after existing Inventory Date (within 3-day window)
+        # New row 2 days after existing Inventory Date (within 7-day window)
         df = self._make_test_df(["59340120"], date="03/07/2026")
         persist_new_rows(df)
 
-        written = ws.insert_rows.call_args[0][0]
+        written = ws.update.call_args.args[0]
         inventory_col = COLUMNS.index("Inventory Date")
         original_col = COLUMNS.index("Original Date")
         assert written[0][inventory_col] == "03/07/2026"        # current date
@@ -355,7 +401,7 @@ class TestIT4_SpreadsheetPersistence:
         df = self._make_test_df(["59340120"], date="03/08/2026")
         persist_new_rows(df)
 
-        written = ws.insert_rows.call_args[0][0]
+        written = ws.update.call_args.args[0]
         original_col = COLUMNS.index("Original Date")
         assert written[0][original_col] == "03/03/2026"         # earliest of 03/03 and 03/04
 
@@ -368,7 +414,7 @@ class TestIT4_SpreadsheetPersistence:
         df = self._make_test_df(["59999999"], date="03/07/2026")
         persist_new_rows(df)
 
-        written = ws.insert_rows.call_args[0][0]
+        written = ws.update.call_args.args[0]
         inventory_col = COLUMNS.index("Inventory Date")
         original_col = COLUMNS.index("Original Date")
         assert written[0][inventory_col] == "03/07/2026"
@@ -376,19 +422,61 @@ class TestIT4_SpreadsheetPersistence:
 
     @patch("GlassOrchestrator._get_worksheet")
     def test_original_date_outside_window_not_carried_forward(self, mock_get_ws):
-        """Prior rows outside the incident window (>3 days) are ignored for Original Date lookup."""
+        """Prior rows outside the incident window (>7 days) are ignored for Original Date lookup."""
         existing = [["03/01/2026", "02/28/2026", "59340120", "", "1HGCM82633A004352",
                      "Windshield", "APO", "Replace(AGN)", "Windshield", "Missing", "verified"]]
         ws = self._mock_worksheet(existing)
         mock_get_ws.return_value = ws
 
-        # New row 6 days after existing Inventory Date — outside the 3-day window
-        df = self._make_test_df(["59340120"], date="03/07/2026")
+        # An 8-day date difference means seven intervening days without the MVA.
+        df = self._make_test_df(["59340120"], date="03/09/2026")
         persist_new_rows(df)
 
-        written = ws.insert_rows.call_args[0][0]
+        written = ws.update.call_args.args[0]
         original_col = COLUMNS.index("Original Date")
-        assert written[0][original_col] == "03/07/2026"         # not carried forward
+        assert written[0][original_col] == "03/09/2026"         # not carried forward
+
+    @patch("GlassOrchestrator._get_worksheet")
+    def test_original_date_walks_back_through_latest_episode(self, mock_get_ws):
+        """Adjacent sightings chain backward even when the full episode exceeds seven days."""
+        existing = [
+            ["03/01/2026", "03/01/2026", "59340120", "", "1HGCM82633A004352",
+             "Windshield", "APO", "Replace(AGN)", "Windshield", "Missing", "verified"],
+            ["03/07/2026", "03/01/2026", "59340120", "", "1HGCM82633A004352",
+             "Windshield", "APO", "Replace(AGN)", "Windshield", "Missing", "verified"],
+            ["03/13/2026", "03/01/2026", "59340120", "", "1HGCM82633A004352",
+             "Windshield", "APO", "Replace(AGN)", "Windshield", "Missing", "verified"],
+        ]
+        ws = self._mock_worksheet(existing)
+        mock_get_ws.return_value = ws
+
+        df = self._make_test_df(["59340120"], date="03/20/2026")
+        persist_new_rows(df)
+
+        written = ws.update.call_args.args[0]
+        original_col = COLUMNS.index("Original Date")
+        assert written[0][original_col] == "03/01/2026"
+
+    @patch("GlassOrchestrator._get_worksheet")
+    def test_original_date_excludes_old_episode(self, mock_get_ws):
+        """An old sighting and stale Original Date do not leak into the latest episode."""
+        existing = [
+            ["09/01/2025", "09/01/2025", "59340120", "", "1HGCM82633A004352",
+             "Windshield", "APO", "Replace(AGN)", "Windshield", "Missing", "verified"],
+            ["03/17/2026", "09/01/2025", "59340120", "", "1HGCM82633A004352",
+             "Windshield", "APO", "Replace(AGN)", "Windshield", "Missing", "verified"],
+            ["03/19/2026", "09/01/2025", "59340120", "", "1HGCM82633A004352",
+             "Windshield", "APO", "Replace(AGN)", "Windshield", "Missing", "verified"],
+        ]
+        ws = self._mock_worksheet(existing)
+        mock_get_ws.return_value = ws
+
+        df = self._make_test_df(["59340120"], date="03/20/2026")
+        persist_new_rows(df)
+
+        written = ws.update.call_args.args[0]
+        original_col = COLUMNS.index("Original Date")
+        assert written[0][original_col] == "03/17/2026"
 
     @patch("GlassOrchestrator._get_worksheet")
     def test_original_date_legacy_blank_falls_back_to_inventory_date(self, mock_get_ws):
@@ -398,11 +486,11 @@ class TestIT4_SpreadsheetPersistence:
         ws = self._mock_worksheet(existing)
         mock_get_ws.return_value = ws
 
-        # Within the 3-day incident window; blank Original Date should resolve to 03/06/2026.
+        # Within the 7-day incident window; blank Original Date should resolve to 03/06/2026.
         df = self._make_test_df(["59340120"], date="03/07/2026")
         persist_new_rows(df)
 
-        written = ws.insert_rows.call_args[0][0]
+        written = ws.update.call_args.args[0]
         original_col = COLUMNS.index("Original Date")
         assert written[0][original_col] == "03/06/2026"
 
@@ -582,26 +670,36 @@ _ALL_SCAN_CASES = [
     ("60000002WSc",  "Replacement", "Windshield",          "Listed"),
     ("60000003WSr",  "Repair",      "Windshield",          "Missing"),
     ("60000004WSrc", "Repair",      "Windshield",          "Listed"),
-    ("60000005FLD",  "Replacement", "Front Left Door",     "Missing"),
-    ("60000006FLDc", "Replacement", "Front Left Door",     "Listed"),
-    ("60000007FRD",  "Replacement", "Front Right Door",    "Missing"),
-    ("60000008FRDc", "Replacement", "Front Right Door",    "Listed"),
-    ("60000009RLD",  "Replacement", "Rear Left Door",      "Missing"),
-    ("60000010RLDc", "Replacement", "Rear Left Door",      "Listed"),
-    ("60000011RRD",  "Replacement", "Rear Right Door",     "Missing"),
-    ("60000012RRDc", "Replacement", "Rear Right Door",     "Listed"),
-    ("60000013FLV",  "Replacement", "Front Left Vent",     "Missing"),
-    ("60000014FLVc", "Replacement", "Front Left Vent",     "Listed"),
-    ("60000015FRV",  "Replacement", "Front Right Vent",    "Missing"),
-    ("60000016FRVc", "Replacement", "Front Right Vent",    "Listed"),
+    ("60000005LFD",  "Replacement", "Left Front Door",     "Missing"),
+    ("60000006LFDc", "Replacement", "Left Front Door",     "Listed"),
+    ("60000007RFD",  "Replacement", "Right Front Door",    "Missing"),
+    ("60000008RFDc", "Replacement", "Right Front Door",    "Listed"),
+    ("60000009LRD",  "Replacement", "Left Rear Door",      "Missing"),
+    ("60000010LRDc", "Replacement", "Left Rear Door",      "Listed"),
+    ("60000011RRD",  "Replacement", "Right Rear Door",     "Missing"),
+    ("60000012RRDc", "Replacement", "Right Rear Door",     "Listed"),
+    ("60000013LFV",  "Replacement", "Left Front Vent",     "Missing"),
+    ("60000014LFVc", "Replacement", "Left Front Vent",     "Listed"),
+    ("60000015RFV",  "Replacement", "Right Front Vent",    "Missing"),
+    ("60000016RFVc", "Replacement", "Right Front Vent",    "Listed"),
     ("60000017BW",   "Replacement", "Back Window",         "Missing"),
     ("60000018BWc",  "Replacement", "Back Window",         "Listed"),
     ("60000019SR",   "Replacement", "Sunroof",             "Missing"),
     ("60000020SRc",  "Replacement", "Sunroof",             "Listed"),
-    ("60000021RLQ",  "Replacement", "Rear Left Quarter",   "Missing"),
-    ("60000022RLQc", "Replacement", "Rear Left Quarter",   "Listed"),
-    ("60000023RRQ",  "Replacement", "Rear Right Quarter",  "Missing"),
-    ("60000024RRQc", "Replacement", "Rear Right Quarter",  "Listed"),
+    ("60000021TFS",  "Replacement", "Sunroof",             "Missing"),
+    ("60000022TFSc", "Replacement", "Sunroof",             "Listed"),
+    ("60000023TRS",  "Replacement", "Sunroof",             "Missing"),
+    ("60000024TRSc", "Replacement", "Sunroof",             "Listed"),
+    ("60000025LRQ",  "Replacement", "Left Rear Quarter",   "Missing"),
+    ("60000026LRQc", "Replacement", "Left Rear Quarter",   "Listed"),
+    ("60000027RRQ",  "Replacement", "Right Rear Quarter",  "Missing"),
+    ("60000028RRQc", "Replacement", "Right Rear Quarter",  "Listed"),
+    ("60000029RFW",  "Replacement", "Right Front Window",  "Missing"),
+    ("60000030RFWc", "Replacement", "Right Front Window",  "Listed"),
+    ("60000031RVM",  "Replacement", "Rear View Mirror",    "Missing"),
+    ("60000032RVMc", "Replacement", "Rear View Mirror",    "Listed"),
+    ("60000033CAM",  "Replacement", "Camera",              "Missing"),
+    ("60000034CAMc", "Replacement", "Camera",              "Listed"),
 ]
 
 
@@ -609,11 +707,11 @@ class TestIT7_AllAreaClaimCombinations:
     """
     Full pipeline walkthrough for all valid AREA_ID × claim-flag combinations.
 
-    Simulates an Orca Scan email containing 24 scan strings (one per valid combo),
+    Simulates an Orca Scan email containing 34 scan strings (one per valid combo),
     then drives parse → merge → persist and asserts correctness at each stage.
 
-    Repair is only valid for WS; all 10 other areas produce Replacement only.
-    Total combinations: WS(4) + non-WS × 10 areas × 2 claim flags = 24.
+    Repair is only valid for WS; all 15 other areas produce Replacement only.
+    Total combinations: WS(4) + non-WS x 15 areas x 2 claim flags = 34.
     """
 
     _EMAIL_DATE = datetime(2026, 4, 25)
@@ -627,16 +725,18 @@ class TestIT7_AllAreaClaimCombinations:
 
     def _mock_worksheet(self):
         ws = MagicMock()
-        ws.get_all_values.return_value = [list(COLUMNS)]  # header only — empty sheet
+        ws.id = 123
+        summary = ["", "Avg Repair Days", "", "", "", "", "", "Repairs", "", "Claims", "Total"]
+        ws.get_all_values.return_value = [list(COLUMNS), summary]
         return ws
 
     # ── Parse stage ───────────────────────────────────────────────────────────
 
-    def test_all_24_combos_present_in_manifest(self):
-        """All 24 valid scan strings produce a manifest entry."""
+    def test_all_34_combos_present_in_manifest(self):
+        """All 34 valid scan strings produce a manifest entry."""
         manifest, mva_list = self._parse_all()
-        assert len(manifest) == 24
-        assert len(mva_list) == 24
+        assert len(manifest) == 34
+        assert len(mva_list) == 34
 
     @pytest.mark.parametrize(
         "scan,expected_action,expected_area,expected_claim", _ALL_SCAN_CASES
@@ -679,26 +779,26 @@ class TestIT7_AllAreaClaimCombinations:
         }
 
     def test_location_extracted_for_all_rows(self):
-        """All 24 rows inherit location from the email type value."""
+        """All 34 rows inherit location from the email type value."""
         manifest, _ = self._parse_all()
         for mva, row in manifest.items():
             assert row["Location"] == "APO", f"MVA {mva} has unexpected location '{row['Location']}'"
 
     # ── Merge stage ───────────────────────────────────────────────────────────
 
-    def test_merge_produces_24_rows_all_vin_na(self, tmp_path, monkeypatch):
-        """All 24 manifest rows survive merge; VIN='N/A' when scraper results absent."""
+    def test_merge_produces_34_rows_all_vin_na(self, tmp_path, monkeypatch):
+        """All 34 manifest rows survive merge; VIN='N/A' when scraper results absent."""
         manifest, _ = self._parse_all()
         monkeypatch.setattr("GlassOrchestrator.RESULTS_PATH", tmp_path / "nonexistent.txt")
         df = merge_manifest_with_results(manifest)
-        assert len(df) == 24
+        assert len(df) == 34
         assert (df["VIN"] == "N/A").all()
 
     # ── Persist stage ─────────────────────────────────────────────────────────
 
     @patch("GlassOrchestrator._get_worksheet")
-    def test_all_24_rows_written_to_sheet(self, mock_get_ws, tmp_path, monkeypatch):
-        """persist_new_rows() writes exactly 24 rows to an empty sheet."""
+    def test_all_34_rows_written_to_sheet(self, mock_get_ws, tmp_path, monkeypatch):
+        """persist_new_rows() writes exactly 34 rows to an empty sheet."""
         monkeypatch.setattr("GlassOrchestrator.RESULTS_PATH", tmp_path / "nonexistent.txt")
         manifest, _ = self._parse_all()
         df = merge_manifest_with_results(manifest)
@@ -708,10 +808,10 @@ class TestIT7_AllAreaClaimCombinations:
 
         new_rows = persist_new_rows(df)
 
-        assert len(new_rows) == 24
-        ws.insert_rows.assert_called_once()
-        written = ws.insert_rows.call_args[0][0]
-        assert len(written) == 24
+        assert len(new_rows) == 34
+        ws.update.assert_called_once()
+        written = ws.update.call_args.args[0]
+        assert len(written) == 34
 
     @patch("GlassOrchestrator._get_worksheet")
     def test_vendor_labels_applied_in_sheet_rows(self, mock_get_ws, tmp_path, monkeypatch):
@@ -724,7 +824,7 @@ class TestIT7_AllAreaClaimCombinations:
         mock_get_ws.return_value = ws
         persist_new_rows(df)
 
-        written = ws.insert_rows.call_args[0][0]
+        written = ws.update.call_args.args[0]
         action_col_idx = list(COLUMNS).index("Action")
         written_actions = {row[action_col_idx] for row in written}
 
@@ -734,8 +834,65 @@ class TestIT7_AllAreaClaimCombinations:
         assert "Replacement" not in written_actions,  "Internal label 'Replacement' must not reach the sheet"
 
     @patch("GlassOrchestrator._get_worksheet")
+    def test_oem_replacement_routes_to_avis(self, mock_get_ws, tmp_path, monkeypatch):
+        monkeypatch.setattr("GlassOrchestrator.RESULTS_PATH", tmp_path / "nonexistent.txt")
+        manifest, _ = parse_descriptions_to_manifest(
+            [
+                (self._TYPE_VALUE, "60000100WS"),
+                (self._TYPE_VALUE, "60000101WS OEM"),
+            ],
+            self._EMAIL_DATE,
+        )
+        df = merge_manifest_with_results(manifest)
+
+        ws = self._mock_worksheet()
+        mock_get_ws.return_value = ws
+        persist_new_rows(df)
+
+        written = ws.update.call_args.args[0]
+        action_col_idx = list(COLUMNS).index("Action")
+        area_col_idx = list(COLUMNS).index("Area")
+        assert written[0][action_col_idx] == "Replace(AGN)"
+        assert written[1][action_col_idx] == "Replace(AVIS)"
+        assert written[0][area_col_idx] == "Windshield"
+        assert written[1][area_col_idx] == "Windshield(OEM)"
+
+    @patch("GlassOrchestrator._get_worksheet")
+    def test_every_area_supports_both_oem_claim_states(self, mock_get_ws, tmp_path, monkeypatch):
+        monkeypatch.setattr("GlassOrchestrator.RESULTS_PATH", tmp_path / "nonexistent.txt")
+        descriptions = []
+        expected = []
+        for index, (area_code, area_label) in enumerate(AREAS.items(), start=1):
+            missing_mva = f"61{index:06d}"
+            listed_mva = f"62{index:06d}"
+            descriptions.extend([
+                (self._TYPE_VALUE, f"{missing_mva}{area_code} OEM"),
+                (self._TYPE_VALUE, f"{listed_mva}{area_code}c OEM"),
+            ])
+            expected.extend([
+                (f"{area_label}(OEM)", "Missing"),
+                (f"{area_label}(OEM)", "Listed"),
+            ])
+
+        manifest, _ = parse_descriptions_to_manifest(descriptions, self._EMAIL_DATE)
+        df = merge_manifest_with_results(manifest)
+        ws = self._mock_worksheet()
+        mock_get_ws.return_value = ws
+        persist_new_rows(df)
+
+        written = ws.update.call_args.args[0]
+        action_col_idx = list(COLUMNS).index("Action")
+        area_col_idx = list(COLUMNS).index("Area")
+        claim_col_idx = list(COLUMNS).index("Claim#")
+        assert len(written) == len(AREAS) * 2
+        assert [
+            (row[area_col_idx], row[claim_col_idx]) for row in written
+        ] == expected
+        assert {row[action_col_idx] for row in written} == {"Replace(AVIS)"}
+
+    @patch("GlassOrchestrator._get_worksheet")
     def test_claim_listed_and_missing_split_evenly(self, mock_get_ws, tmp_path, monkeypatch):
-        """12 of 24 rows have Claim#='Listed', 12 have 'Missing' — one c and one plain per area."""
+        """Listed and Missing rows remain evenly split across all combinations."""
         monkeypatch.setattr("GlassOrchestrator.RESULTS_PATH", tmp_path / "nonexistent.txt")
         manifest, _ = self._parse_all()
         df = merge_manifest_with_results(manifest)
@@ -744,13 +901,14 @@ class TestIT7_AllAreaClaimCombinations:
         mock_get_ws.return_value = ws
         persist_new_rows(df)
 
-        written = ws.insert_rows.call_args[0][0]
+        written = ws.update.call_args.args[0]
         claim_col_idx = list(COLUMNS).index("Claim#")
         listed_count  = sum(1 for row in written if row[claim_col_idx] == "Listed")
         missing_count = sum(1 for row in written if row[claim_col_idx] == "Missing")
 
-        assert listed_count  == 12
-        assert missing_count == 12
+        expected_count = len(_ALL_SCAN_CASES) // 2
+        assert listed_count == expected_count
+        assert missing_count == expected_count
 
 
 # ─── IT-8: Live Sheet — All Area × Claim Combinations ────────────────────────
@@ -789,7 +947,7 @@ def live_sheet_it8(tmp_path_factory):
     """
     Class-scoped fixture for IT-8.
 
-    Setup  — purges any leftover sentinel rows, then writes all 24 test rows
+    Setup  — purges any leftover sentinel rows, then writes all 26 test rows
              to the real GlassClaims sheet using the production persist_new_rows().
     Yield  — (ws, written_df) for tests to inspect.
     Teardown — purges sentinel rows UNLESS GLASS_IT8_SKIP_TEARDOWN=1, which
@@ -800,7 +958,7 @@ def live_sheet_it8(tmp_path_factory):
     # Pre-clean: remove leftovers from a previously interrupted run
     _it8_delete_sentinel_rows(ws)
 
-    # Build a DataFrame with all 24 combinations using the sentinel date
+    # Build a DataFrame with all 26 combinations using the sentinel date
     rows = []
     for scan, expected_action, expected_area, expected_claim in _ALL_SCAN_CASES:
         rows.append({
@@ -839,7 +997,7 @@ def live_sheet_it8(tmp_path_factory):
 )
 class TestIT8_LiveSheetAllCombinations:
     """
-    Live end-to-end test: writes all 24 valid area × claim combinations to the
+    Live end-to-end test: writes all 26 valid area × claim combinations to the
     real GlassClaims Google Sheet and reads back to validate correctness.
 
     Requires GLASS_RUN_LIVE_SHEETS_TESTS=1 and a valid Service_account.json.
@@ -847,16 +1005,16 @@ class TestIT8_LiveSheetAllCombinations:
     claims.  The fixture tears down (deletes sentinel rows) after every run.
     """
 
-    def test_24_rows_written(self, live_sheet_it8):
-        """persist_new_rows() reports 24 new rows written."""
+    def test_26_rows_written(self, live_sheet_it8):
+        """persist_new_rows() reports 26 new rows written."""
         _, written = live_sheet_it8
-        assert len(written) == 24, (
-            f"Expected 24 rows written, got {len(written)}.  "
+        assert len(written) == 26, (
+            f"Expected 26 rows written, got {len(written)}.  "
             "Check whether sentinel rows already existed (duplicate guard)."
         )
 
     def test_sentinel_rows_visible_in_sheet(self, live_sheet_it8):
-        """All 24 sentinel rows are readable back from the live sheet."""
+        """All 26 sentinel rows are readable back from the live sheet."""
         ws, _ = live_sheet_it8
         sentinel_mvas = {scan[:8] for scan, *_ in _ALL_SCAN_CASES}
 
@@ -883,7 +1041,7 @@ class TestIT8_LiveSheetAllCombinations:
     )
     def test_each_row_has_correct_values(self, live_sheet_it8, scan, expected_action, expected_area, expected_claim):
         """
-        Each of the 24 rows in the live sheet has the correct vendor-labelled
+        Each of the 26 rows in the live sheet has the correct vendor-labelled
         Action, the correct Area, and the correct Claim# value.
         """
         ws, _ = live_sheet_it8
@@ -920,7 +1078,7 @@ class TestIT8_LiveSheetAllCombinations:
 
     def test_sentinel_row_count_in_sheet(self, live_sheet_it8):
         """
-        Exactly 24 sentinel rows are present in the live sheet after the write.
+        Exactly 26 sentinel rows are present in the live sheet after the write.
         Non-destructive — does not delete any rows.
         """
         ws, _ = live_sheet_it8
@@ -933,6 +1091,6 @@ class TestIT8_LiveSheetAllCombinations:
             row for row in all_vals[1:]
             if len(row) > make_idx and row[make_idx].strip() == "IT8_TEST"
         ]
-        assert len(sentinel_rows) == 24, (
-            f"Expected 24 sentinel rows in sheet, found {len(sentinel_rows)}"
+        assert len(sentinel_rows) == 26, (
+            f"Expected 26 sentinel rows in sheet, found {len(sentinel_rows)}"
         )

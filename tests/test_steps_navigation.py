@@ -294,6 +294,39 @@ class TestOpenWorkItemsZeroCountProbe:
 
         open_row.assert_awaited_once_with(open_row.call_args.args[0], "GLASS-GLASS")
 
+    def test_success_closes_detail_tab_and_restores_vehicle_tab(self):
+        from playwright_prototype.steps import close_open_work_item
+
+        vehicle_page = MagicMock()
+        vehicle_page.bring_to_front = AsyncMock()
+        detail_page = MagicMock()
+        detail_page.wait_for_load_state = AsyncMock()
+        detail_page.wait_for_timeout = AsyncMock()
+        detail_page.locator.return_value.first = MagicMock()
+        detail_page.locator.return_value.first.wait_for = AsyncMock()
+        detail_page.locator.return_value.first.inner_text = AsyncMock(return_value="Mark Complete")
+        detail_page.locator.return_value.first.click = AsyncMock()
+        detail_page.close = AsyncMock()
+
+        with patch(
+            "playwright_prototype.steps._has_stable_zero_open_work_items_count",
+            new=AsyncMock(return_value=False),
+        ), patch(
+            "playwright_prototype.steps._open_open_work_items_row",
+            new=AsyncMock(return_value=(detail_page, "GLASS-GLASS")),
+        ), patch(
+            "playwright_prototype.steps._click_action_menu",
+            new=AsyncMock(),
+        ), patch(
+            "playwright_prototype.steps._confirm_mark_complete",
+            new=AsyncMock(),
+        ):
+            result = asyncio.run(close_open_work_item(vehicle_page, "050106803"))
+
+        assert result == "GLASS-GLASS"
+        detail_page.close.assert_awaited_once_with()
+        vehicle_page.bring_to_front.assert_awaited_once_with()
+
 
 class TestNavigateToMvaFailFast:
     """URL-template handling should be explicit and fail-fast."""

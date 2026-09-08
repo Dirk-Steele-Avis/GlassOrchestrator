@@ -14,13 +14,8 @@
 # ----------------------------------------------------------------------------
 
 
-def is_notification_eligible(row: dict) -> bool:
-    """
-    Return True if this row should trigger notification and work item creation.
-    Replacement items are eligible; Repair items are not.
-    Supports both 'damage_type' (internal), 'Action' (sheet) and legacy
-    'Damage Type' key formats. Missing or empty value defaults to eligible.
-    """
+def normalize_damage_type(row: dict) -> str:
+    """Normalize internal and sheet Action values to a damage type."""
     if "Action" in row:
         raw = row["Action"]
     elif "Damage Type" in row:
@@ -28,6 +23,21 @@ def is_notification_eligible(row: dict) -> bool:
     else:
         raw = row.get("damage_type")
     if not raw:
-        return True
-    normalized = raw.strip().title()
-    return normalized == "Replacement"
+        return "Replacement"
+
+    normalized = str(raw).strip().upper()
+    if normalized in {"REPLACEMENT", "REPLACE(AGN)", "REPLACE(AVIS)"}:
+        return "Replacement"
+    if normalized in {"REPAIR", "REPAIR(SUPERGLASS)"}:
+        return "Repair"
+    return str(raw).strip()
+
+
+def is_notification_eligible(row: dict) -> bool:
+    """
+    Return True if this row should trigger notification and work item creation.
+    Replacement items are eligible; Repair items are not.
+    Supports both 'damage_type' (internal), 'Action' (sheet) and legacy
+    'Damage Type' key formats. Missing or empty value defaults to eligible.
+    """
+    return normalize_damage_type(row) == "Replacement"

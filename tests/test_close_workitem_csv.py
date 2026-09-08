@@ -122,6 +122,8 @@ class TestActiveCloseRunnerDisconnect:
 
         results = asyncio.run(close_workitem._run_playwright_close_async(args, targets))
 
+        launch_kwargs = playwright.chromium.launch_persistent_context.await_args.kwargs
+        assert "chromium_sandbox" not in launch_kwargs
         assert results == [
             {"mva": "011111111", "result": close_workitem.RESULT_NOT_FOUND, "detail": ""},
             {

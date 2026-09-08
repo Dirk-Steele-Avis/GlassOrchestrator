@@ -218,6 +218,7 @@ class TestEmailSeenTiming:
 
     def test_marks_email_seen_on_success(self, monkeypatch):
         source_uid = b"12345"
+        monkeypatch.setattr("GlassOrchestrator.NOTIFICATIONS_ENABLED", False)
 
         monkeypatch.setattr(
             "GlassOrchestrator.fetch_input_descriptions",
@@ -232,7 +233,10 @@ class TestEmailSeenTiming:
         monkeypatch.setattr("GlassOrchestrator.validate_results_freshness", lambda *_a, **_k: None)
         monkeypatch.setattr("GlassOrchestrator.merge_manifest_with_results", lambda *_a, **_k: _merged_df(["59340120"]))
         monkeypatch.setattr("GlassOrchestrator.persist_new_rows", lambda df: df.iloc[0:0])
-        monkeypatch.setattr("GlassOrchestrator.notify_order_items", lambda *_a, **_k: None)
+        def unexpected_notify(*_args, **_kwargs):
+            pytest.fail("Notification must not run when notifications are disabled")
+
+        monkeypatch.setattr("GlassOrchestrator.notify_order_items", unexpected_notify)
 
         marked: list[bytes] = []
         monkeypatch.setattr("GlassOrchestrator._mark_message_seen", lambda uid: marked.append(uid))

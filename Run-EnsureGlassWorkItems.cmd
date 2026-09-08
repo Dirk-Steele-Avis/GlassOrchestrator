@@ -15,8 +15,10 @@ if not exist "%VENV_PY%" (
     echo [WARNING] py -3.13 failed, trying py -3 ...
     py -3 -m venv .venv
   )
+
   if not exist "%VENV_PY%" (
     echo [ERROR] Failed to create virtual environment at %VENV_PY%.
+    echo [INFO] Try deleting .venv folder and running this script again.
     exit /b 1
   )
   set "CREATED_VENV=1"
@@ -48,12 +50,6 @@ if "%SYNC_DEPS%"=="1" (
     echo [ERROR] Failed to install requirements from %REQ_FILE%
     exit /b 1
   )
-  echo [BOOTSTRAP] Installing Playwright browsers ...
-  "%VENV_PY%" -m playwright install
-  if errorlevel 1 (
-    echo [ERROR] Failed to install Playwright browsers
-    exit /b 1
-  )
   if defined REQ_HASH (
     > "%REQ_STAMP%" echo !REQ_HASH!
   )
@@ -61,38 +57,39 @@ if "%SYNC_DEPS%"=="1" (
   echo [BOOTSTRAP] Requirements unchanged. Skipping dependency install.
 )
 
-rem ---------------------------------------------------------------------------
-rem  Create open glass work items for MVAs listed in a CSV.
-rem
-rem  Usage:
-rem    Run-CreateWorkItems.cmd                        -- uses data\workitems_today.csv
-rem    Run-CreateWorkItems.cmd "data\my_mvas.csv"     -- custom CSV
-rem
-rem  CSV format: mva,Type,location,action
-rem    Type: Glass or PM (defaults to Glass if omitted)
-rem    location required for Glass rows (e.g. WS, BW, FLD)
-rem    action required when Type=Glass and location=WS (Replace or Repair)
-rem
-rem  Exit code:
-rem    0 = all MVAs created or skipped (existing work item found)
-rem    1 = one or more MVAs failed
-rem ---------------------------------------------------------------------------
+rem No arguments: process valid MVAs from today's spreadsheet rows.
+rem Manual modes:
+rem   Run-EnsureGlassWorkItems.cmd --mva 058524185
+rem   Run-EnsureGlassWorkItems.cmd --mva 058524185 --dry-run
+rem   Run-EnsureGlassWorkItems.cmd --csv WorkItems\create_workitem.csv
 
-set "CSV_PATH=WorkItems\create_workitem.csv"
+if /i "%~1"=="--csv" goto :run_csv
 
-if not "%~1"=="" set "CSV_PATH=%~1"
+echo Ensuring Glass complaints and work items from today's spreadsheet...
+"%VENV_PY%" ".\create_compass_complaints.py" %*
+goto :complete
 
-if not exist "%CSV_PATH%" (
-  echo [ERROR] CSV file not found: %CSV_PATH%
-  echo Usage: Run-CreateWorkItems.cmd [csv_path]
+:run_csv
+if "%~2"=="" (
+  echo [ERROR] --csv requires a CSV path.
+  echo Usage: Run-EnsureGlassWorkItems.cmd --csv path\to\file.csv
+  exit /b 2
+)
+if not "%~3"=="" (
+  echo [ERROR] CSV mode accepts only --csv and a path.
+  exit /b 2
+)
+if not exist "%~2" (
+  echo [ERROR] CSV file not found: %~2
   exit /b 1
 )
 
-echo Creating work items from: %CSV_PATH%
-
+echo Ensuring Glass complaints and work items from CSV: %~2
 set "GLASS_AGENTIC=1"
-"%VENV_PY%" WorkItems\create_workitem.py --csv "%CSV_PATH%" --backend playwright
+"%VENV_PY%" WorkItems\create_workitem.py --csv "%~2" --backend playwright
 
+:complete
+set "RUN_EXIT=%errorlevel%"
 echo.
-echo Exit code: %errorlevel%
-exit /b %errorlevel%
+echo Exit code: %RUN_EXIT%
+exit /b %RUN_EXIT%

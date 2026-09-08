@@ -136,6 +136,11 @@ class TestMapDamageType:
         from playwright_prototype.steps import _map_damage_type
         assert _map_damage_type("ws", "replace") == "Windshield Crack"
 
+    def test_rvm_detection_accepts_code_and_sheet_label(self):
+        from playwright_prototype.steps import _is_rear_view_mirror
+        assert _is_rear_view_mirror("RVM")
+        assert _is_rear_view_mirror("Rear View Mirror")
+
 
 def _make_new_complaint_page_mock():
     """Page mock for the new-complaint path — no existing glass tile."""
@@ -212,6 +217,19 @@ class TestHandleComplaintDialogNewPathDamageType:
         assert damage_selectors, (
             f"Expected XPath selector containing 'Windshield Chip' but got: {locator_calls}"
         )
+
+    def test_rvm_uses_dedicated_complaint_form(self):
+        from playwright_prototype.steps import handle_complaint_dialog
+
+        page, _ = _make_new_complaint_page_mock()
+        fill_rvm = AsyncMock()
+
+        with patch("playwright_prototype.steps._fill_rvm_complaint_form", new=fill_rvm), \
+             patch("playwright_prototype.steps._click_submit_complaint", new=AsyncMock()), \
+             patch("playwright_prototype.steps._wait_for_post_submit_progress", new=AsyncMock(return_value=True)):
+            asyncio.run(handle_complaint_dialog(page, "99999999", "Glass", "RVM", "Replace"))
+
+        fill_rvm.assert_awaited_once_with(page, "99999999")
 
 
 class TestComplaintTypePatterns:

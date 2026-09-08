@@ -15,18 +15,15 @@ if not exist "%VENV_PY%" (
     echo [WARNING] py -3.13 failed, trying py -3 ...
     py -3 -m venv .venv
   )
-
   if not exist "%VENV_PY%" (
     echo [ERROR] Failed to create virtual environment at %VENV_PY%.
-    echo [INFO] Try deleting .venv folder and running this script again.
     exit /b 1
   )
   set "CREATED_VENV=1"
-  echo [BOOTSTRAP] Virtual environment created successfully.
 )
 
 if not exist "%REQ_FILE%" (
-  echo [ERROR] Missing %REQ_FILE%. Cannot install dependencies.
+  echo [ERROR] Missing %REQ_FILE%.
   exit /b 1
 )
 
@@ -46,20 +43,15 @@ if defined REQ_HASH if exist "%REQ_STAMP%" (
 if "%SYNC_DEPS%"=="1" (
   echo [BOOTSTRAP] Installing/updating Python requirements ...
   "%VENV_PY%" -m pip install --disable-pip-version-check -r "%REQ_FILE%"
-  if errorlevel 1 (
-    echo [ERROR] Failed to install requirements from %REQ_FILE%
-    exit /b 1
-  )
-  if defined REQ_HASH (
-    > "%REQ_STAMP%" echo !REQ_HASH!
-  )
-) else (
-  echo [BOOTSTRAP] Requirements unchanged. Skipping dependency install.
+  if errorlevel 1 exit /b 1
+  echo [BOOTSTRAP] Installing Playwright browsers ...
+  "%VENV_PY%" -m playwright install
+  if errorlevel 1 exit /b 1
+  if defined REQ_HASH > "%REQ_STAMP%" echo !REQ_HASH!
 )
 
-echo Running Compass complaints batch with venv Python...
-"%VENV_PY%" ".\create_compass_complaints.py" %*
-
+"%VENV_PY%" -m invoice_workflow.cli %*
+set "EXIT_CODE=%errorlevel%"
 echo.
-echo Exit code: %errorlevel%
-exit /b %errorlevel%
+echo Exit code: %EXIT_CODE%
+exit /b %EXIT_CODE%
