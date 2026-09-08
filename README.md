@@ -21,6 +21,7 @@ Canonical behavioral requirements are maintained in
 | Suffix | Field | Value | Default (no suffix) |
 |--------|-------|-------|---------------------|
 | `r` | Damage Type | Repair | Replacement |
+| `war` | Damage Type | Warranty | Replacement |
 | `c` | Claim# | Listed | Missing |
 | ` OEM` | Vendor routing | Replace(AVIS) | Replace(AGN) |
 

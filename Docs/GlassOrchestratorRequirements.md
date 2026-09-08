@@ -20,7 +20,7 @@ GlassOrchestrator processes vehicle-glass scan exports from Gmail, retrieves veh
 The permanent scan format is:
 
 ```text
-<MVA><AREA>[r][c][ OEM]
+<MVA><AREA>[r|war][c][ OEM]
 ```
 
 - `MVA` is exactly eight digits.
@@ -28,6 +28,7 @@ The permanent scan format is:
 - Directional area codes use `<side><orientation><area>` order; for example, `LFD` means Left Front Door.
 - Configured `legacy_area_aliases` temporarily normalize older orientation-first codes to canonical directional codes.
 - `r` means Repair when valid for the area.
+- `war` means Warranty.
 - `c` means the claim is Listed.
 - ` OEM` is an optional terminal OEM marker preceded by one space.
 - Matching is case-insensitive.
@@ -39,6 +40,7 @@ Examples:
 | `62155855WS` | AGN windshield replacement, claim Missing |
 | `62155855WSc` | AGN windshield replacement, claim Listed |
 | `62155855WSr` | SuperGlass windshield repair, claim Missing |
+| `62155855WSwar` | Warranty windshield claim, claim Missing |
 | `62155855WS OEM` | AVIS OEM windshield replacement, claim Missing |
 | `62155855WSc OEM` | AVIS OEM windshield replacement, claim Listed |
 | `62155855LFD OEM` | AVIS OEM left-front-door replacement, claim Missing |

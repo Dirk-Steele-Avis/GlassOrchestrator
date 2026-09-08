@@ -191,7 +191,7 @@ def _compile_scan_pattern(
         area_alternation = "|".join(
             sorted((re.escape(code) for code in area_codes), key=len, reverse=True)
         )
-        generated_pattern = rf"^(\d{{8}})({area_alternation})([r]?)([c]?)( OEM)?$"
+        generated_pattern = rf"^(\d{{8}})({area_alternation})((?:war|r)?)([c]?)( OEM)?$"
         return _compile_regex_with_fallback(generated_pattern, safe_fallback_text)
 
     return _compile_regex_with_fallback(configured_pattern_text, safe_fallback_text)
@@ -249,7 +249,7 @@ LEGACY_AREA_ALIASES: dict[str, str] = {
     str(alias).upper(): str(canonical).upper()
     for alias, canonical in RUNTIME_CONFIG.get("legacy_area_aliases", {}).items()
 }
-DEFAULT_MVA_PATTERN = r"^(\d{8})([A-Z]+?)([r]?)([c]?)( OEM)?$"
+DEFAULT_MVA_PATTERN = r"^(\d{8})([A-Z]+?)((?:WAR|R)?)([C]?)( OEM)?$"
 MVA_PATTERN = _compile_scan_pattern(
     list(AREAS.keys()) + list(LEGACY_AREA_ALIASES.keys()),
     str(RUNTIME_CONFIG.get("mva_pattern", DEFAULT_MVA_PATTERN)),
@@ -808,8 +808,9 @@ def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_da
     """
     Apply regex to each description string and build a session manifest.
 
-        Scan format: <MVA:8 digits><AREA_ID:uppercase>[r][c][ OEM]
-      r = repair flag (only valid on repair-eligible areas, e.g. WS)
+                Scan format: <MVA:8 digits><AREA_ID:uppercase>[r|war][c][ OEM]
+            r = repair flag (only valid on repair-eligible areas, e.g. WS)
+            war = warranty damage type flag
       c = claim listed flag
             " OEM" = AVIS-sourced OEM replacement
 
@@ -850,7 +851,9 @@ def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_da
         mva = match.group(1)
         scanned_area_code = match.group(2).upper()
         area_code = LEGACY_AREA_ALIASES.get(scanned_area_code, scanned_area_code)
-        repair_flag = match.group(3).lower()
+        damage_flag = (match.group(3) or "").lower()
+        repair_flag = damage_flag == "r"
+        warranty_flag = damage_flag == "war"
         claim_flag = match.group(4).lower()
         is_oem = bool(match.group(5))
 
@@ -865,7 +868,14 @@ def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_da
             log.warning("Parsing: INVALID_REPAIR — scan='%s'", raw)
             continue
 
-        damage_type = "Repair" if repair_flag and not is_oem else "Replacement"
+        if is_oem and warranty_flag:
+            log.warning("Parsing: INVALID_WARRANTY_OEM — scan='%s'", raw)
+            continue
+
+        if warranty_flag:
+            damage_type = "Warranty"
+        else:
+            damage_type = "Repair" if repair_flag and not is_oem else "Replacement"
         damage_area = AREAS[area_code]
         # Claim status values must match allowed UI options.
         claim = "Listed" if claim_flag else "Missing"

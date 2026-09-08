@@ -38,7 +38,7 @@ from GlassOrchestrator import (
 class TestUT1_SuffixRegex:
     """Verify the parser correctly extracts the 8-digit MVA and maps
     Action / Area / Claim# for all four flag combinations.
-    Scan format: <MVA:8digits><AREA_ID:uppercase>[r][c]"""
+    Scan format: <MVA:8digits><AREA_ID:uppercase>[r|war][c]"""
 
     def test_plain_mva(self):
         """59340120WS → group 1=MVA, 2=AREA_ID, 3=empty, 4=empty"""
@@ -66,6 +66,15 @@ class TestUT1_SuffixRegex:
         assert m.group(2) == "WS"
         assert m.group(3) == ""
         assert m.group(4) == "c"
+
+    def test_warranty_suffix(self):
+        """59340120WSwar → warranty flag captured in group 3"""
+        m = MVA_PATTERN.match("59340120WSwar")
+        assert m is not None
+        assert m.group(1) == "59340120"
+        assert m.group(2) == "WS"
+        assert m.group(3).lower() == "war"
+        assert m.group(4) == ""
 
     def test_lowercase_scan_matches_case_insensitively(self):
         """59193750wsc → parser accepts scanner-lowercase area/suffix values."""
@@ -177,6 +186,20 @@ class TestUT1_SuffixRegex:
         """59340120WSc → Replacement, Windshield, Listed"""
         manifest, _ = parse_descriptions_to_manifest([("0305APO", "59340120WSc")], datetime(2026, 3, 5))
         assert manifest["59340120"]["Action"] == "Replacement"
+        assert manifest["59340120"]["Area"] == "Windshield"
+        assert manifest["59340120"]["Claim#"] == "Listed"
+
+    def test_phase2_mapping_warranty(self):
+        """59340120WSwar → Warranty, Windshield, Missing"""
+        manifest, _ = parse_descriptions_to_manifest([("0305APO", "59340120WSwar")], datetime(2026, 3, 5))
+        assert manifest["59340120"]["Action"] == "Warranty"
+        assert manifest["59340120"]["Area"] == "Windshield"
+        assert manifest["59340120"]["Claim#"] == "Missing"
+
+    def test_phase2_mapping_warranty_claim(self):
+        """59340120WSwarc → Warranty, Windshield, Listed"""
+        manifest, _ = parse_descriptions_to_manifest([("0305APO", "59340120WSwarc")], datetime(2026, 3, 5))
+        assert manifest["59340120"]["Action"] == "Warranty"
         assert manifest["59340120"]["Area"] == "Windshield"
         assert manifest["59340120"]["Claim#"] == "Listed"
 
