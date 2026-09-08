@@ -91,9 +91,6 @@
   "compass_complaint_api_precheck_enabled_comment": "Feature flag for batch complaint detection. false uses the legacy UI table check; true tries the Compass complaint API first and falls back to UI on API errors.",
   "compass_complaint_api_precheck_enabled": false,
 
-  "compass_complaint_api_shadow_ui_comment": "Optional rollout logging. When true and the API precheck is enabled, also run the legacy UI lookup for comparison logging only.",
-  "compass_complaint_api_shadow_ui": false,
-
   "compass_complaint_api_base_url_comment": "Base URL for the Compass Go complaint-read endpoints used by the batch precheck.",
   "compass_complaint_api_base_url": "https://go.avisbudget.palantirfoundry.com",
   

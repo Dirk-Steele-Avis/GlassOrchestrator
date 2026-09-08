@@ -1,5 +1,8 @@
+import json
 from datetime import date
 from unittest.mock import MagicMock
+
+import pytest
 
 import create_compass_complaints as complaints
 
@@ -24,9 +27,15 @@ class _FakeRequestContext:
         return _FakeResponse(self._responses.pop(0))
 
 
-class _FakeBrowserContext:
+class _FakePage:
     def __init__(self, responses):
+        self._responses = list(responses)
         self.request = _FakeRequestContext(responses)
+
+    def evaluate(self, script, arg):
+        self.request.calls.append({"url": arg["url"], "payload": arg["payload"]})
+        payload = self._responses.pop(0)
+        return {"ok": True, "status": 200, "text": json.dumps(payload)}
 
 
 def _candidate(mva: str = "012345678", area: str | None = None) -> complaints.CandidateRow:
@@ -317,7 +326,7 @@ def test_inspect_glass_complaint_matches_exact_title(monkeypatch):
 
 
 def test_inspect_glass_complaint_via_api_filters_to_active_glass_only():
-    context = _FakeBrowserContext(
+    page = _FakePage(
         [
             [{"$primaryKey": "12189223", "mvaNo": "054019932"}],
             [
@@ -340,19 +349,19 @@ def test_inspect_glass_complaint_via_api_filters_to_active_glass_only():
         ]
     )
 
-    result = complaints._inspect_glass_complaint_via_api(context, {}, "054019932")
+    result = complaints._inspect_glass_complaint_via_api(page, {}, "054019932")
 
     assert result.exists is True
     assert result.reason == "api_glass_complaint_found"
     assert result.source == "api"
     assert result.complaint_ids == ["glass-1"]
     assert result.title_texts == ["Glass Damage"]
-    assert context.request.calls[0]["url"].endswith("/sw/get-vehicle-fresh")
-    assert context.request.calls[1]["url"].endswith("/sw/get-complaint-fresh")
+    assert page.request.calls[0]["url"].endswith("/sw/get-vehicle-fresh")
+    assert page.request.calls[1]["url"].endswith("/sw/get-complaint-fresh")
 
 
 def test_inspect_glass_complaint_via_api_ignores_active_non_glass_complaints():
-    context = _FakeBrowserContext(
+    page = _FakePage(
         [
             [{"$primaryKey": "12189223", "mvaNo": "054019932"}],
             [
@@ -365,7 +374,7 @@ def test_inspect_glass_complaint_via_api_ignores_active_non_glass_complaints():
         ]
     )
 
-    result = complaints._inspect_glass_complaint_via_api(context, {}, "054019932")
+    result = complaints._inspect_glass_complaint_via_api(page, {}, "054019932")
 
     assert result.exists is False
     assert result.reason == "api_glass_complaint_not_present"
@@ -387,23 +396,22 @@ def test_resolve_glass_complaint_lookup_uses_ui_when_flag_disabled(monkeypatch):
     api_mock.assert_not_called()
 
 
-def test_resolve_glass_complaint_lookup_falls_back_to_ui_on_api_error(monkeypatch):
-    ui_lookup = complaints.LookupResult(False, "glass_damage_not_present")
-    ui_mock = MagicMock(return_value=ui_lookup)
+def test_resolve_glass_complaint_lookup_raises_on_api_error(monkeypatch):
     api_mock = MagicMock(side_effect=RuntimeError("boom"))
+    ui_mock = MagicMock()
     monkeypatch.setattr(complaints, "_inspect_glass_complaint", ui_mock)
     monkeypatch.setattr(complaints, "_inspect_glass_complaint_via_api", api_mock)
 
-    result = complaints._resolve_glass_complaint_lookup(
-        MagicMock(),
-        MagicMock(),
-        {complaints.COMPASS_COMPLAINT_API_FLAG: True},
-        "012345678",
-    )
+    with pytest.raises(RuntimeError, match="boom"):
+        complaints._resolve_glass_complaint_lookup(
+            MagicMock(),
+            MagicMock(),
+            {complaints.COMPASS_COMPLAINT_API_FLAG: True},
+            "012345678",
+        )
 
-    assert result is ui_lookup
     api_mock.assert_called_once()
-    ui_mock.assert_called_once()
+    ui_mock.assert_not_called()
 
 
 def test_vehicle_mva_match_requires_exact_canonical_digits():

@@ -67,7 +67,6 @@ COMPASS_OVERVIEW_MVA_VALUE_SELECTOR = (
 BROWSER_PROFILE_DIR = BASE_DIR / "outlook" / "browser_profile"
 SETTLE_WAIT_MS = 15_000
 COMPASS_COMPLAINT_API_FLAG = "compass_complaint_api_precheck_enabled"
-COMPASS_COMPLAINT_API_SHADOW_FLAG = "compass_complaint_api_shadow_ui"
 COMPASS_COMPLAINT_API_BASE_URL_KEY = "compass_complaint_api_base_url"
 ACTIVE_GLASS_COMPLAINT_TYPES = {"glass damage"}
 INACTIVE_COMPLAINT_STATUSES = {"ignored", "deleted", "resolved"}
@@ -183,11 +182,52 @@ def _runtime_compass_api_base_url(runtime_config: dict[str, Any]) -> str:
     return (configured or COMPASS_GO_BASE_URL).rstrip("/")
 
 
-def _post_compass_structure(api_context, url: str, payload: dict[str, Any]) -> Any:
-    response = api_context.post(url, multipart={"__structure__": json.dumps(payload)})
-    if not response.ok:
-        raise RuntimeError(f"request_failed status={response.status} url={url}")
-    return response.json()
+def _prime_compass_go_scan_page(page, mva: str) -> None:
+    try:
+        if "Confirm User" in (page.locator("body").inner_text(timeout=2000) or ""):
+            page.locator('input[autocomplete="one-time-code"]').first.fill("764567")
+            page.wait_for_timeout(3500)
+
+        try:
+            page.wait_for_load_state("domcontentloaded")
+        except Exception:
+            pass
+        page.wait_for_timeout(5000)
+
+        begin = page.get_by_role("button", name="Begin Scanning", exact=True)
+        if begin.count() and begin.first.is_visible():
+            begin.first.click()
+            page.wait_for_timeout(1000)
+
+        input_locator = page.get_by_label("Or enter MVA/VIN").first
+        input_locator.wait_for(state="visible", timeout=30000)
+        input_locator.fill(mva)
+        page.get_by_role("button", name="Enter", exact=True).first.click()
+        page.wait_for_timeout(8000)
+    except Exception as exc:
+        raise RuntimeError(f"go_scan_prime_failed: {exc}") from exc
+
+
+def _post_compass_structure(page, url: str, payload: dict[str, Any]) -> Any:
+    result = page.evaluate(
+        """
+        async ({ url, payload }) => {
+            const form = new FormData();
+            form.append('__structure__', JSON.stringify(payload));
+            const response = await fetch(url, {
+                method: 'POST',
+                body: form,
+                credentials: 'include',
+            });
+            const text = await response.text();
+            return { ok: response.ok, status: response.status, text };
+        }
+        """,
+        {"url": url, "payload": payload},
+    )
+    if not result.get("ok"):
+        raise RuntimeError(f"request_failed status={result.get('status')} url={url}")
+    return json.loads(result.get("text") or "null")
 
 
 def _extract_vehicle_identifier(vehicle: dict[str, Any]) -> str | None:
@@ -210,11 +250,11 @@ def _is_glass_complaint_record(complaint: dict[str, Any]) -> bool:
     return False
 
 
-def _inspect_glass_complaint_via_api(context, runtime_config: dict[str, Any], mva: str) -> LookupResult:
+def _inspect_glass_complaint_via_api(page, runtime_config: dict[str, Any], mva: str) -> LookupResult:
     base_url = _runtime_compass_api_base_url(runtime_config)
     vehicle_payload = {"where": {"mvaNo": mva}, "$pageSize": 1}
     vehicle_rows = _post_compass_structure(
-        context.request,
+        page,
         f"{base_url}/sw/get-vehicle-fresh",
         vehicle_payload,
     )
@@ -238,7 +278,7 @@ def _inspect_glass_complaint_via_api(context, runtime_config: dict[str, Any], mv
         }
     }
     complaint_rows = _post_compass_structure(
-        context.request,
+        page,
         f"{base_url}/sw/get-complaint-fresh",
         complaint_payload,
     )
@@ -272,8 +312,14 @@ def _resolve_glass_complaint_lookup(context, page, runtime_config: dict[str, Any
     if not use_api_precheck:
         return _inspect_glass_complaint(page, mva)
 
+    api_page = None
     try:
-        lookup = _inspect_glass_complaint_via_api(context, runtime_config, mva)
+        api_page = context.new_page()
+        api_page.goto(_runtime_compass_api_base_url(runtime_config), wait_until="domcontentloaded")
+        api_page.wait_for_timeout(2_000)
+        _handle_msft_auth_if_needed(api_page)
+        _prime_compass_go_scan_page(api_page, mva)
+        lookup = _inspect_glass_complaint_via_api(api_page, runtime_config, mva)
         log.info(
             "MVA %s -> complaint lookup via %s: exists=%s reason=%s complaint_ids=%s titles=%s",
             mva,
@@ -283,24 +329,12 @@ def _resolve_glass_complaint_lookup(context, page, runtime_config: dict[str, Any
             lookup.complaint_ids or [],
             lookup.title_texts or [],
         )
-    except Exception as exc:
-        log.warning("MVA %s -> complaint API precheck failed; falling back to UI (%s)", mva, exc)
-        return _inspect_glass_complaint(page, mva)
-
-    if _config_bool(runtime_config.get(COMPASS_COMPLAINT_API_SHADOW_FLAG), default=False):
+    finally:
         try:
-            ui_lookup = _inspect_glass_complaint(page, mva)
-            if ui_lookup.exists != lookup.exists:
-                log.warning(
-                    "MVA %s -> complaint lookup mismatch api=%s ui=%s api_reason=%s ui_reason=%s",
-                    mva,
-                    lookup.exists,
-                    ui_lookup.exists,
-                    lookup.reason,
-                    ui_lookup.reason,
-                )
-        except Exception as exc:
-            log.warning("MVA %s -> complaint UI shadow lookup failed (%s)", mva, exc)
+            if api_page is not None:
+                api_page.close()
+        except Exception:
+            pass
 
     return lookup
 
