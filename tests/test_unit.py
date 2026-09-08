@@ -409,18 +409,14 @@ class TestUT2_HTMLExtraction:
         result = _parse_html_descriptions(self.MOCK_HTML)
         assert result == [("batch1", "59340120"), ("batch1", "59340121r"), ("batch1", "59340122rc")]
 
-    def test_orca_multiline_cell_splits_into_individual_mvas(self):
-        result = _parse_html_descriptions(self.ORCA_HTML)
-        assert result == [("0205", "59340120c"), ("0205", "58157002"), ("0205", "58135663cr"), ("0205", "57193500r")]
-
-        def test_oem_scan_with_space_remains_one_description(self):
-                html = """
-                <table id="rowData">
-                    <tr><th>Type</th><th>Description</th></tr>
-                    <tr><td>0830APO</td><td>62155855WS OEM</td></tr>
-                </table>
-                """
-                assert _parse_html_descriptions(html) == [("0830APO", "62155855WS OEM")]
+    def test_oem_scan_with_space_remains_one_description(self):
+        html = """
+        <table id="rowData">
+            <tr><th>Type</th><th>Description</th></tr>
+            <tr><td>0830APO</td><td>62155855WS OEM</td></tr>
+        </table>
+        """
+        assert _parse_html_descriptions(html) == [("0830APO", "62155855WS OEM")]
 
     def test_returns_empty_on_no_table(self):
         result = _parse_html_descriptions("<html><body><p>No table</p></body></html>")

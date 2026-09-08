@@ -177,7 +177,6 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--max-invoices", type=_positive_int)
     parser.add_argument("--invoice-number", type=_invoice_number)
     parser.add_argument("--sweep-terminal-to-needs-review", action="store_true")
-    parser.add_argument("--resume-failed", action="store_true")
     return parser.parse_args(argv)
 
 

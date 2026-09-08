@@ -18,6 +18,7 @@ from vendor_tracking.sheet_updater import (
     VendorSheetUpdater,
     normalize_date_for_match,
 )
+from outlook.agn_invoices import mark_processed_category
 
 DEFAULT_CLOSE_QUEUE = BASE_DIR / "WorkItems" / "close_workitem.csv"
 DEFAULT_CLOSE_HISTORY = BASE_DIR / "data" / "close_workitem_history.csv"
@@ -68,6 +69,7 @@ def _load_uncategorized_invoices() -> tuple[list[dict], list[str]]:
                 "invoice_date": invoice_date.isoformat() if invoice_date else "",
                 "vin": vin,
                 "invoice_amount": amount,
+                "mail": mail,
             })
     return invoices, review_notes
 
@@ -255,6 +257,8 @@ def build_close_candidates(
             "row_index": str(row_index),
             "received": invoice.get("received", ""),
         }
+        if "mail" in invoice:
+            candidate["mail"] = invoice["mail"]
         candidates.append(candidate)
 
     return candidates, review_notes
@@ -339,6 +343,9 @@ def main() -> int:
         if candidate["cost"]:
             fields["Cost"] = candidate["cost"]
         updater.update_vendor_fields(int(candidate["row_index"]), fields)
+        mail = candidate.get("mail")
+        if mail is not None:
+            mark_processed_category(mail)
     print(f"Added {len(candidates)} candidate(s) to {args.close_queue}")
     return 0
 

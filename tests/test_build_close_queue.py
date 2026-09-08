@@ -37,6 +37,49 @@ def test_apply_ensures_vendor_columns_before_processing(monkeypatch, tmp_path):
     assert updater.method_calls[:2] == [call.connect(), call.ensure_columns()]
 
 
+def test_apply_marks_processed_mail_after_successful_update(monkeypatch, tmp_path):
+    import WorkItems.build_close_queue as build_close_queue
+
+    updater = MagicMock()
+    updater.method_calls = []
+    updater.find_rows_by_vin.return_value = [4]
+    updater.get_row_fields.return_value = {
+        "MVA": "12345678",
+        "Inventory Date": "8/17/2026",
+    }
+
+    mail = MagicMock()
+    mail.Categories = ""
+
+    monkeypatch.setattr(build_close_queue, "VendorSheetUpdater", MagicMock(return_value=updater))
+    monkeypatch.setattr(build_close_queue, "_load_config", lambda: {"spreadsheet_id": "sheet-id"})
+    monkeypatch.setattr(
+        build_close_queue,
+        "_load_uncategorized_invoices",
+        lambda: ([{"subject": "Invoice #201", "vin": "VIN1", "received": "2026-02-01", "invoice_amount": "125.00", "mail": mail}], []),
+    )
+    monkeypatch.setattr(build_close_queue, "_load_existing_candidates", lambda _path: set())
+    monkeypatch.setattr(build_close_queue, "_load_processed_candidates", lambda _path: set())
+    monkeypatch.setattr(build_close_queue, "_retire_processed_candidates", lambda *_args: 0)
+    monkeypatch.setattr(build_close_queue, "_append_candidates", lambda *_args: None)
+    mark_mock = MagicMock(return_value=True)
+    monkeypatch.setattr(build_close_queue, "mark_processed_category", mark_mock)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "build_close_queue.py",
+            "--apply",
+            "--close-queue",
+            str(tmp_path / "close.csv"),
+            "--history",
+            str(tmp_path / "history.csv"),
+        ],
+    )
+
+    assert build_close_queue.main() == 0
+    mark_mock.assert_called_once_with(mail)
+
+
 def test_loads_only_uncategorized_outlook_invoices_oldest_first(monkeypatch):
     import outlook.agn_invoices as agn_invoices
 

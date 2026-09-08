@@ -287,6 +287,19 @@ def has_processed_category(mail):
     return any(PROCESSED_CATEGORY_NAME.lower() == category.lower() for category in categories)
 
 
+def mark_processed_category(mail):
+    categories = _split_categories(getattr(mail, "Categories", ""))
+    if any(PROCESSED_CATEGORY_NAME.lower() == category.lower() for category in categories):
+        return False
+
+    categories.append(PROCESSED_CATEGORY_NAME)
+    setattr(mail, "Categories", ", ".join(categories))
+    save = getattr(mail, "Save", None)
+    if callable(save):
+        save()
+    return True
+
+
 def extract_invoice_data(pdf_path):
     """Extract the invoice date, VIN, and subtotal from an AGN invoice PDF."""
     with pdfplumber.open(pdf_path) as pdf:
