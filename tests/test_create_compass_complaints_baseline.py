@@ -396,22 +396,26 @@ def test_resolve_glass_complaint_lookup_uses_ui_when_flag_disabled(monkeypatch):
     api_mock.assert_not_called()
 
 
-def test_resolve_glass_complaint_lookup_raises_on_api_error(monkeypatch):
+def test_resolve_glass_complaint_lookup_falls_back_to_ui_on_api_error(monkeypatch):
+    ui_lookup = complaints.LookupResult(True, "glass_damage_found")
     api_mock = MagicMock(side_effect=RuntimeError("boom"))
-    ui_mock = MagicMock()
+    ui_mock = MagicMock(return_value=ui_lookup)
+    context = MagicMock()
+    api_page = MagicMock()
+    context.new_page.return_value = api_page
     monkeypatch.setattr(complaints, "_inspect_glass_complaint", ui_mock)
     monkeypatch.setattr(complaints, "_inspect_glass_complaint_via_api", api_mock)
 
-    with pytest.raises(RuntimeError, match="boom"):
-        complaints._resolve_glass_complaint_lookup(
-            MagicMock(),
-            MagicMock(),
-            {complaints.COMPASS_COMPLAINT_API_FLAG: True},
-            "012345678",
-        )
+    result = complaints._resolve_glass_complaint_lookup(
+        context,
+        MagicMock(),
+        {complaints.COMPASS_COMPLAINT_API_FLAG: True},
+        "012345678",
+    )
 
+    assert result is ui_lookup
     api_mock.assert_called_once()
-    ui_mock.assert_not_called()
+    ui_mock.assert_called_once()
 
 
 def test_vehicle_mva_match_requires_exact_canonical_digits():
