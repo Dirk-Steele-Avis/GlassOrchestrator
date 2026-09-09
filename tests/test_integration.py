@@ -858,6 +858,27 @@ class TestIT7_AllAreaClaimCombinations:
         assert written[1][area_col_idx] == "Windshield(OEM)"
 
     @patch("GlassOrchestrator._get_worksheet")
+    def test_turnback_routes_to_avis_without_oem_area_suffix(self, mock_get_ws, tmp_path, monkeypatch):
+        monkeypatch.setattr("GlassOrchestrator.RESULTS_PATH", tmp_path / "nonexistent.txt")
+        manifest, _ = parse_descriptions_to_manifest(
+            [
+                (self._TYPE_VALUE, "60000102WStbk"),
+            ],
+            self._EMAIL_DATE,
+        )
+        df = merge_manifest_with_results(manifest)
+
+        ws = self._mock_worksheet()
+        mock_get_ws.return_value = ws
+        persist_new_rows(df)
+
+        written = ws.update.call_args.args[0]
+        action_col_idx = list(COLUMNS).index("Action")
+        area_col_idx = list(COLUMNS).index("Area")
+        assert written[0][action_col_idx] == "Replace(AVIS)"
+        assert written[0][area_col_idx] == "Windshield"
+
+    @patch("GlassOrchestrator._get_worksheet")
     def test_every_area_supports_both_oem_claim_states(self, mock_get_ws, tmp_path, monkeypatch):
         monkeypatch.setattr("GlassOrchestrator.RESULTS_PATH", tmp_path / "nonexistent.txt")
         descriptions = []

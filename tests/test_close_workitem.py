@@ -38,6 +38,8 @@ class TestBuildTargets:
         valid_types = ["Glass", "PM"]
         assert cw._normalize_sheet_type("Replacement", valid_types) == "Glass"
         assert cw._normalize_sheet_type("Repair", valid_types) == "Glass"
+        assert cw._normalize_sheet_type("Turnback", valid_types) == "Glass"
+        assert cw._normalize_sheet_type("TBK", valid_types) == "Glass"
         assert cw._normalize_sheet_type("PM Gas", valid_types) == "PM"
 
     def test_normalize_sheet_mva_prepends_zero_to_8_digit_values(self):

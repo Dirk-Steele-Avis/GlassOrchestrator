@@ -329,14 +329,28 @@ def _resolve_glass_complaint_lookup(context, page, runtime_config: dict[str, Any
             lookup.complaint_ids or [],
             lookup.title_texts or [],
         )
+        return lookup
+    except Exception as exc:
+        log.warning(
+            "MVA %s -> API complaint lookup failed (%s); falling back to UI lookup",
+            mva,
+            exc,
+        )
+        fallback = _inspect_glass_complaint(page, mva)
+        log.info(
+            "MVA %s -> fallback UI lookup result: exists=%s reason=%s source=%s",
+            mva,
+            fallback.exists,
+            fallback.reason,
+            fallback.source,
+        )
+        return fallback
     finally:
         try:
             if api_page is not None:
                 api_page.close()
         except Exception:
             pass
-
-    return lookup
 
 
 # ------------------------------------------------------------
@@ -387,7 +401,7 @@ def _normalize_damage_expectation(raw: str) -> str | None:
         return None
 
     is_repair = bool(re.search(r"\brepair\b|\bchip\b", value)) or value == "r"
-    is_replace = bool(re.search(r"\breplace\b|\breplacement\b|\bcrack\b", value))
+    is_replace = bool(re.search(r"\breplace\b|\breplacement\b|\bcrack\b|\bturnback\b|\btbk\b", value))
 
     if is_repair and not is_replace:
         return "repair"

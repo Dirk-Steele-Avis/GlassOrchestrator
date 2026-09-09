@@ -33,6 +33,7 @@ except ModuleNotFoundError:
     gspread = None  # type: ignore[assignment]
 import pandas as pd
 from cycle_tracker import CycleTracker
+from core.damage_types import resolve_damage_type, to_sheet_action_label
 
 try:
     from bs4 import BeautifulSoup
@@ -94,6 +95,7 @@ def _load_runtime_config(config_path: Path) -> dict:
         "vendor_labels": {
             "Repair":      "Repair(SuperGlass)",
             "Replacement": "Replace(AGN)",
+            "Turnback":    "Replace(AVIS)",
         },
         "cycle_tracker_store": "data/mva_cycle_tracker.json",
         "cycle_gap_grace_days": 1,
@@ -191,7 +193,7 @@ def _compile_scan_pattern(
         area_alternation = "|".join(
             sorted((re.escape(code) for code in area_codes), key=len, reverse=True)
         )
-        generated_pattern = rf"^(\d{{8}})({area_alternation})((?:war|r)?)([c]?)( OEM)?$"
+        generated_pattern = rf"^(\d{{8}})({area_alternation})((?:war|tbk|r)?)([c]?)( OEM)?$"
         return _compile_regex_with_fallback(generated_pattern, safe_fallback_text)
 
     return _compile_regex_with_fallback(configured_pattern_text, safe_fallback_text)
@@ -249,7 +251,7 @@ LEGACY_AREA_ALIASES: dict[str, str] = {
     str(alias).upper(): str(canonical).upper()
     for alias, canonical in RUNTIME_CONFIG.get("legacy_area_aliases", {}).items()
 }
-DEFAULT_MVA_PATTERN = r"^(\d{8})([A-Z]+?)((?:WAR|R)?)([C]?)( OEM)?$"
+DEFAULT_MVA_PATTERN = r"^(\d{8})([A-Z]+?)((?:WAR|TBK|R)?)([C]?)( OEM)?$"
 MVA_PATTERN = _compile_scan_pattern(
     list(AREAS.keys()) + list(LEGACY_AREA_ALIASES.keys()),
     str(RUNTIME_CONFIG.get("mva_pattern", DEFAULT_MVA_PATTERN)),
@@ -259,6 +261,7 @@ REPAIR_ELIGIBLE_AREAS: set[str] = set(RUNTIME_CONFIG.get("repair_eligible_areas"
 VENDOR_LABELS: dict[str, str] = dict(RUNTIME_CONFIG.get("vendor_labels", {
     "Repair": "Repair(SuperGlass)",
     "Replacement": "Replace(AGN)",
+    "Turnback": "Replace(AVIS)",
 }))
 LOCATION = str(RUNTIME_CONFIG["location"])
 COLUMNS = list(RUNTIME_CONFIG["columns"])
@@ -808,9 +811,10 @@ def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_da
     """
     Apply regex to each description string and build a session manifest.
 
-                Scan format: <MVA:8 digits><AREA_ID:uppercase>[r|war][c][ OEM]
+                Scan format: <MVA:8 digits><AREA_ID:uppercase>[r|war|tbk][c][ OEM]
             r = repair flag (only valid on repair-eligible areas, e.g. WS)
             war = warranty damage type flag
+            tbk = turnback flag (leased vehicle, AVIS must order glass)
       c = claim listed flag
             " OEM" = AVIS-sourced OEM replacement
 
@@ -854,6 +858,7 @@ def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_da
         damage_flag = (match.group(3) or "").lower()
         repair_flag = damage_flag == "r"
         warranty_flag = damage_flag == "war"
+        turnback_flag = damage_flag == "tbk"
         claim_flag = match.group(4).lower()
         is_oem = bool(match.group(5))
 
@@ -872,10 +877,14 @@ def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_da
             log.warning("Parsing: INVALID_WARRANTY_OEM — scan='%s'", raw)
             continue
 
-        if warranty_flag:
+        if turnback_flag:
+            damage_type = "Turnback"
+        elif warranty_flag:
             damage_type = "Warranty"
         else:
             damage_type = "Repair" if repair_flag and not is_oem else "Replacement"
+        damage_rule = resolve_damage_type(damage_type)
+        force_avis_order = is_oem or bool(damage_rule and damage_rule.forces_avis_order)
         damage_area = AREAS[area_code]
         # Claim status values must match allowed UI options.
         claim = "Listed" if claim_flag else "Missing"
@@ -893,6 +902,7 @@ def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_da
             "Claim#": claim,
             "WorkItem": default_work_item,
             "_OEM": is_oem,
+            "_FORCE_AVIS_ORDER": force_avis_order,
         }
         mva_list.append(mva)
 
@@ -986,6 +996,8 @@ def merge_manifest_with_results(manifest: dict) -> pd.DataFrame:
     df_manifest = pd.DataFrame(list(manifest.values()))
     if "_OEM" not in df_manifest.columns:
         df_manifest["_OEM"] = False
+    if "_FORCE_AVIS_ORDER" not in df_manifest.columns:
+        df_manifest["_FORCE_AVIS_ORDER"] = False
 
     # Read scraper results (headerless: MVA,VIN,Desc per writer contract)
     if RESULTS_PATH.exists():
@@ -1025,7 +1037,7 @@ def merge_manifest_with_results(manifest: dict) -> pd.DataFrame:
         df_merged.drop(columns=["Make_scraped"], inplace=True)
 
     # Keep internal routing metadata after the canonical sheet columns.
-    df_merged = df_merged[COLUMNS + ["_OEM"]]
+    df_merged = df_merged[COLUMNS + ["_OEM", "_FORCE_AVIS_ORDER"]]
 
     n_missing = (df_merged["VIN"] == "N/A").sum()
     log.info("Merge: Complete — %d rows, %d missing VINs", len(df_merged), n_missing)
@@ -1292,10 +1304,11 @@ def _rows_from_dataframe(df: pd.DataFrame) -> list[list[str]]:
         for col in COLUMNS:
             val = row[col]
             if col == "Action":
-                if str(val) == "Replacement" and row.get("_OEM", False) is True:
-                    val = "Replace(AVIS)"
-                else:
-                    val = VENDOR_LABELS.get(str(val), val)
+                val = to_sheet_action_label(
+                    str(val),
+                    vendor_labels=VENDOR_LABELS,
+                    force_avis_order=bool(row.get("_FORCE_AVIS_ORDER", False)),
+                )
             elif col == "Area" and row.get("_OEM", False) is True:
                 val = f"{val}(OEM)"
             values.append(val)

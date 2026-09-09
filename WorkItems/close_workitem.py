@@ -157,7 +157,7 @@ def _normalize_sheet_type(raw_type: str, valid_types: list[str]) -> str:
         return value
 
     lowered = value.lower()
-    if lowered in {"replacement", "repair", "glass"}:
+    if lowered in {"replacement", "repair", "glass", "turnback", "tbk"}:
         return "Glass"
     if lowered.startswith("pm"):
         return "PM"

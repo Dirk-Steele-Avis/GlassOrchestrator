@@ -13,6 +13,8 @@
 # NOTES:        Used by Phase 6 notify filter and Phase 7 work item creation.
 # ----------------------------------------------------------------------------
 
+from core.damage_types import is_replacement_eligible, normalize_action_label
+
 
 def normalize_damage_type(row: dict) -> str:
     """Normalize internal and sheet Action values to a damage type."""
@@ -22,15 +24,7 @@ def normalize_damage_type(row: dict) -> str:
         raw = row["Damage Type"]
     else:
         raw = row.get("damage_type")
-    if not raw:
-        return "Replacement"
-
-    normalized = str(raw).strip().upper()
-    if normalized in {"REPLACEMENT", "REPLACE(AGN)", "REPLACE(AVIS)"}:
-        return "Replacement"
-    if normalized in {"REPAIR", "REPAIR(SUPERGLASS)"}:
-        return "Repair"
-    return str(raw).strip()
+    return normalize_action_label(raw, default="Replacement")
 
 
 def is_notification_eligible(row: dict) -> bool:
@@ -40,4 +34,4 @@ def is_notification_eligible(row: dict) -> bool:
     Supports both 'damage_type' (internal), 'Action' (sheet) and legacy
     'Damage Type' key formats. Missing or empty value defaults to eligible.
     """
-    return normalize_damage_type(row) == "Replacement"
+    return is_replacement_eligible(normalize_damage_type(row), default_if_missing=True)
