@@ -30,8 +30,8 @@
   "notifications_enabled_comment": "Send replacement notification emails after successful persistence. Must be a JSON boolean. Defaults to false so notifications can be restored cautiously if needed.",
   "notifications_enabled": false,
   
-  "mva_pattern_comment": "Fallback regex for Orca Scan parsing (compiled case-insensitively). When 'areas' is populated, the runtime parser derives AREA_ID alternation from those keys to avoid ambiguity; this pattern is used when 'areas' is empty. Directional AREA_ID values use side + orientation + area (for example, LFD = Left Front Door). Format: MVA + required AREA_ID + optional r + optional c + one space + terminal OEM. Groups: 1=MVA, 2=AREA_ID, 3=repair, 4=claim, 5=OEM. Examples: WS OEM, WSc OEM, LFD OEM, LFDc OEM. Bare MVA+OEM without an area is invalid. OEM scans are routed as AVIS replacements; an r on an OEM scan is normalized to replacement with a warning.",
-  "mva_pattern": "^(\\d{8})([A-Z]+?)([r]?)([c]?)( OEM)?$",
+  "mva_pattern_comment": "Fallback regex for Orca Scan parsing (compiled case-insensitively). When 'areas' is populated, the runtime parser derives AREA_ID alternation from those keys to avoid ambiguity; this pattern is used when 'areas' is empty. Directional AREA_ID values use side + orientation + area (for example, LFD = Left Front Door). Format: MVA + required AREA_ID + optional r|war|tbk + optional c + one space + terminal OEM. Groups: 1=MVA, 2=AREA_ID, 3=damage flag, 4=claim, 5=OEM. Examples: WS OEM, WSc OEM, LFDtbk OEM, LFDc OEM. Bare MVA+OEM without an area is invalid. OEM scans are routed as AVIS replacements; an r on an OEM scan is normalized to replacement with a warning.",
+  "mva_pattern": "^(\\d{8})([A-Z]+?)((?:war|tbk|r)?)([c]?)( OEM)?$",
 
   "areas_comment": "Map of valid AREA_ID codes to human-readable labels. Used by the parser to validate and label the Area column.",
   "areas": {
@@ -67,10 +67,11 @@
   "repair_eligible_areas_comment": "AREA_ID codes on which the repair flag (r) is valid. All other areas with an r flag are an INVALID_REPAIR error.",
   "repair_eligible_areas": ["WS"],
 
-  "vendor_labels_comment": "Maps internal Action values to the vendor strings written to the sheet and rendered in notification emails. Internal pipeline logic always uses the keys (Repair/Replacement).",
+  "vendor_labels_comment": "Maps internal Action values to the vendor strings written to the sheet and rendered in notification emails. Internal pipeline logic uses Repair/Replacement/Turnback keys.",
   "vendor_labels": {
     "Repair":      "Repair(SuperGlass)",
-    "Replacement": "Replace(AGN)"
+    "Replacement": "Replace(AGN)",
+    "Turnback": "Replace(AVIS)"
   },
   
   "cycle_tracker_store_comment": "Path to JSON file that tracks processed MVA cycles. Created at runtime.",
