@@ -144,6 +144,8 @@ class GlassWorkItemHandler(WorkItemHandler):
                 return GlassDamageType.SIDE_REAR_WINDOW_DAMAGE.value
         else:
             # Replacement operations
+            if dt in ("TBK", "TURNBACK"):
+                dt = "REPLACEMENT"
             if loc in ("FRONT", "WINDSHIELD"):
                 return GlassDamageType.WINDSHIELD_CRACK.value
             elif loc in ("SIDE", "REAR", "TOP", "BACK"):
@@ -232,7 +234,7 @@ class GlassWorkItemHandler(WorkItemHandler):
             result = associate_existing_complaint(self.driver, config.mva)
             if result.get("status") == "associated":
                 log.info(f"[GLASS] {config.mva} - Existing glass complaint associated")
-                if (config.damage_type or "").upper() == "REPLACEMENT":
+                if (config.damage_type or "").upper() in {"REPLACEMENT", "TBK", "TURNBACK"}:
                     log.info(f"[GLASS] {config.mva} - Replacement flow requested")
 
                 finalize_result = finalize_workitem(self.driver, config.mva)

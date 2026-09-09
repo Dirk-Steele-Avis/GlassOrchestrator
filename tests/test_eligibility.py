@@ -27,6 +27,12 @@ class TestElig1_ReplacementEligible:
     def test_replacement_mixed_case_is_eligible(self):
         assert is_notification_eligible({"damage_type": "rEpLaCeMeNt"}) is True
 
+    def test_turnback_is_eligible(self):
+        assert is_notification_eligible({"damage_type": "Turnback"}) is True
+
+    def test_tbk_code_is_eligible(self):
+        assert is_notification_eligible({"damage_type": "TBK"}) is True
+
 
 class TestElig2_RepairNotEligible:
     """Repair damage type rows are NOT notification-eligible."""
@@ -49,7 +55,7 @@ class TestElig3_CaseInsensitive:
 
     @pytest.mark.parametrize(
         "value",
-        ["Replacement", "replacement", "REPLACEMENT", "Replacement "],
+        ["Replacement", "replacement", "REPLACEMENT", "Replacement ", "Turnback", "TBK"],
     )
     def test_replacement_variants_are_eligible(self, value):
         # Pass raw value — the SUT is responsible for stripping whitespace
@@ -108,6 +114,9 @@ class TestElig5_SheetStyleKey:
     @pytest.mark.parametrize("value", ["Replace(AGN)", "Replace(AVIS)"])
     def test_sheet_vendor_replacement_labels_are_eligible(self, value):
         assert is_notification_eligible({"Action": value}) is True
+
+    def test_sheet_action_tbk_is_eligible(self):
+        assert is_notification_eligible({"Action": "TBK"}) is True
 
     def test_sheet_vendor_repair_label_is_not_eligible(self):
         assert is_notification_eligible({"Action": "Repair(SuperGlass)"}) is False

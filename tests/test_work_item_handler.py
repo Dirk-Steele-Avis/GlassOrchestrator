@@ -124,6 +124,10 @@ class TestWIH3_MapDamageTypeToUi:
         result = self.handler.map_damage_type_to_ui("REPLACEMENT", "WINDSHIELD")
         assert result == GlassDamageType.WINDSHIELD_CRACK.value
 
+    def test_turnback_windshield_returns_windshield_crack(self):
+        result = self.handler.map_damage_type_to_ui("TURNBACK", "WINDSHIELD")
+        assert result == GlassDamageType.WINDSHIELD_CRACK.value
+
     def test_replacement_side_returns_side_rear(self):
         result = self.handler.map_damage_type_to_ui("REPLACEMENT", "SIDE")
         assert result == GlassDamageType.SIDE_REAR_WINDOW_DAMAGE.value

@@ -1,0 +1,5 @@
+code,canonical_action,sheet_action_label,is_replacement_eligible,forces_avis_order,aliases,description
+REPLACEMENT,Replacement,Replace(AGN),true,false,REPLACEMENT|REPLACE|REPLACE(AGN)|REPLACE(AVIS)|CRACK,Standard replacement
+REPAIR,Repair,Repair(SuperGlass),false,false,REPAIR|REPAIR(SUPERGLASS)|CHIP,Repair flow
+WARRANTY,Warranty,Warranty,false,false,WARRANTY|WAR,Warranty flow
+TURNBACK,Turnback,Replace(AVIS),true,true,TURNBACK|TBK,Leased-vehicle turnback ordered by AVIS

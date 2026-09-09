@@ -401,7 +401,7 @@ def _normalize_damage_expectation(raw: str) -> str | None:
         return None
 
     is_repair = bool(re.search(r"\brepair\b|\bchip\b", value)) or value == "r"
-    is_replace = bool(re.search(r"\breplace\b|\breplacement\b|\bcrack\b", value))
+    is_replace = bool(re.search(r"\breplace\b|\breplacement\b|\bcrack\b|\bturnback\b|\btbk\b", value))
 
     if is_repair and not is_replace:
         return "repair"
