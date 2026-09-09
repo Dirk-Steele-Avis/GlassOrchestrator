@@ -6,6 +6,7 @@ import csv
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from typing import Mapping
 
 
 @dataclass(frozen=True)
@@ -134,3 +135,34 @@ def is_replacement_eligible(raw_value: str | None, default_if_missing: bool = Tr
     if rule is None:
         return default_if_missing if raw_value is None or str(raw_value).strip() == "" else False
     return rule.is_replacement_eligible
+
+
+def to_sheet_action_label(
+    raw_value: str | None,
+    vendor_labels: Mapping[str, str] | None = None,
+    force_avis_order: bool = False,
+) -> str:
+    """Resolve a sheet Action label using catalog semantics and runtime overrides.
+
+    Precedence:
+    1) When AVIS ordering is forced (or the rule itself forces AVIS), use the
+       Turnback catalog/runtime label.
+    2) Use runtime vendor_labels override for the canonical action when present.
+    3) Fall back to the catalog sheet_action_label.
+    4) Fall back to canonical action.
+    """
+    labels = vendor_labels or {}
+    rule = resolve_damage_type(raw_value)
+    if rule is None:
+        return "" if raw_value is None else str(raw_value).strip()
+
+    if force_avis_order or rule.forces_avis_order:
+        turnback_rule = resolve_damage_type("TURNBACK")
+        if turnback_rule is not None:
+            return labels.get(turnback_rule.canonical_action, turnback_rule.sheet_action_label)
+
+    if rule.canonical_action in labels:
+        return labels[rule.canonical_action]
+    if rule.sheet_action_label:
+        return rule.sheet_action_label
+    return rule.canonical_action

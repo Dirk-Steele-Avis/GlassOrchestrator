@@ -33,7 +33,7 @@ except ModuleNotFoundError:
     gspread = None  # type: ignore[assignment]
 import pandas as pd
 from cycle_tracker import CycleTracker
-from core.damage_types import normalize_action_label
+from core.damage_types import resolve_damage_type, to_sheet_action_label
 
 try:
     from bs4 import BeautifulSoup
@@ -811,7 +811,7 @@ def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_da
     """
     Apply regex to each description string and build a session manifest.
 
-                Scan format: <MVA:8 digits><AREA_ID:uppercase>[r|war][c][ OEM]
+                Scan format: <MVA:8 digits><AREA_ID:uppercase>[r|war|tbk][c][ OEM]
             r = repair flag (only valid on repair-eligible areas, e.g. WS)
             war = warranty damage type flag
             tbk = turnback flag (leased vehicle, AVIS must order glass)
@@ -883,6 +883,8 @@ def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_da
             damage_type = "Warranty"
         else:
             damage_type = "Repair" if repair_flag and not is_oem else "Replacement"
+        damage_rule = resolve_damage_type(damage_type)
+        force_avis_order = is_oem or bool(damage_rule and damage_rule.forces_avis_order)
         damage_area = AREAS[area_code]
         # Claim status values must match allowed UI options.
         claim = "Listed" if claim_flag else "Missing"
@@ -900,7 +902,7 @@ def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_da
             "Claim#": claim,
             "WorkItem": default_work_item,
             "_OEM": is_oem,
-            "_FORCE_AVIS_ORDER": is_oem or turnback_flag,
+            "_FORCE_AVIS_ORDER": force_avis_order,
         }
         mva_list.append(mva)
 
@@ -1302,11 +1304,11 @@ def _rows_from_dataframe(df: pd.DataFrame) -> list[list[str]]:
         for col in COLUMNS:
             val = row[col]
             if col == "Action":
-                normalized_action = normalize_action_label(str(val), default=str(val))
-                if bool(row.get("_FORCE_AVIS_ORDER", False)) and normalized_action in {"Replacement", "Turnback"}:
-                    val = "Replace(AVIS)"
-                else:
-                    val = VENDOR_LABELS.get(normalized_action, VENDOR_LABELS.get(str(val), val))
+                val = to_sheet_action_label(
+                    str(val),
+                    vendor_labels=VENDOR_LABELS,
+                    force_avis_order=bool(row.get("_FORCE_AVIS_ORDER", False)),
+                )
             elif col == "Area" and row.get("_OEM", False) is True:
                 val = f"{val}(OEM)"
             values.append(val)

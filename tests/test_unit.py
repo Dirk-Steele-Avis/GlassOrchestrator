@@ -218,6 +218,7 @@ class TestUT1_SuffixRegex:
         assert manifest["59340120"]["Action"] == "Turnback"
         assert manifest["59340120"]["Area"] == "Windshield"
         assert manifest["59340120"]["Claim#"] == "Missing"
+        assert manifest["59340120"]["_FORCE_AVIS_ORDER"] is True
 
     def test_phase2_mapping_turnback_claim(self):
         """59340120WStbkc → Turnback, Windshield, Listed"""
@@ -225,6 +226,7 @@ class TestUT1_SuffixRegex:
         assert manifest["59340120"]["Action"] == "Turnback"
         assert manifest["59340120"]["Area"] == "Windshield"
         assert manifest["59340120"]["Claim#"] == "Listed"
+        assert manifest["59340120"]["_FORCE_AVIS_ORDER"] is True
 
 class TestEmailCredentialValidation:
     """Validate Gmail credential handling before IMAP login."""
