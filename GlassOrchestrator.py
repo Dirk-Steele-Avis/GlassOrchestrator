@@ -794,14 +794,44 @@ def _extract_scan_tokens(raw_text: str) -> list[str]:
 
 def _normalize_scan_text(raw_text: str) -> str:
     """Canonicalize scanner text before applying the strict scan regex."""
+    def _normalize_suffix_order(token: str) -> str:
+        """Normalize scanner suffix order to damage-then-claim when needed."""
+        if len(token) < 8:
+            return token
+
+        mva = token[:8]
+        remainder = token[8:]
+        area_codes = sorted(
+            set(list(AREAS.keys()) + list(LEGACY_AREA_ALIASES.keys())),
+            key=len,
+            reverse=True,
+        )
+
+        matched_area = ""
+        for area_code in area_codes:
+            if remainder.startswith(area_code):
+                matched_area = area_code
+                break
+        if not matched_area:
+            return token
+
+        suffix = remainder[len(matched_area):]
+        reordered_suffix = {
+            "CR": "RC",
+            "CWAR": "WARC",
+            "CTBK": "TBKC",
+        }.get(suffix, suffix)
+        return f"{mva}{matched_area}{reordered_suffix}"
+
     collapsed = " ".join(str(raw_text).strip().split())
     if not collapsed:
         return ""
 
     upper = collapsed.upper()
     if upper.endswith(" OEM"):
-        return f"{re.sub(r'\s+', '', upper[:-4])} OEM"
-    return re.sub(r"\s+", "", upper)
+        normalized = _normalize_suffix_order(re.sub(r"\s+", "", upper[:-4]))
+        return f"{normalized} OEM"
+    return _normalize_suffix_order(re.sub(r"\s+", "", upper))
 
 
 # ─── Parsing & Normalization ─────────────────────────────────────────────────

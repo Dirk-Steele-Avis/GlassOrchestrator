@@ -85,6 +85,24 @@ class TestUT1_SuffixRegex:
         assert m.group(3).lower() == "tbk"
         assert m.group(4) == ""
 
+    def test_claim_then_turnback_suffix_is_normalized(self):
+        """WSctbk is normalized to turnback+listed instead of rejected."""
+        manifest, mva_list = parse_descriptions_to_manifest(
+            [("0910APO", "62155822WSctbk")], datetime(2026, 9, 10)
+        )
+        assert mva_list == ["62155822"]
+        assert manifest["62155822"]["Action"] == "Turnback"
+        assert manifest["62155822"]["Claim#"] == "Listed"
+
+    def test_claim_then_repair_suffix_is_normalized(self):
+        """WScr is normalized to repair+listed instead of rejected."""
+        manifest, mva_list = parse_descriptions_to_manifest(
+            [("0910APO", "59787534WScr")], datetime(2026, 9, 10)
+        )
+        assert mva_list == ["59787534"]
+        assert manifest["59787534"]["Action"] == "Repair"
+        assert manifest["59787534"]["Claim#"] == "Listed"
+
     def test_lowercase_scan_matches_case_insensitively(self):
         """59193750wsc → parser accepts scanner-lowercase area/suffix values."""
         manifest, mva_list = parse_descriptions_to_manifest(
