@@ -274,7 +274,7 @@ class TestOpenWorkItemsZeroCountProbe:
             "playwright_prototype.steps._open_open_work_items_row",
             new=AsyncMock(),
         ) as open_row:
-            with pytest.raises(LookupError, match="count is 0"):
+            with pytest.raises(LookupError, match="No work item found"):
                 asyncio.run(close_open_work_item(MagicMock(), "059733310"))
 
         open_row.assert_not_awaited()
