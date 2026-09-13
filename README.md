@@ -122,8 +122,34 @@ If you only need to set the login password, use:
 Run-Set-GlassPassword.cmd
 ```
 
+### Simplified Glass workflow
+
+The new day-to-day Glass flow is split into two commands:
+
+```bash
+Run-Glass-Intake.cmd
+Run-Glass-Closeout.cmd
+```
+
+Intake covers incoming inventory email, spreadsheet updates, FieldPO next-action, and complaint/work-item creation.
+
+Closeout covers close candidate build, work-item closure, and the CompletedInvoices PO/invoice-side path.
+
+`Run-Glass-Closeout.cmd` supports two operator modes:
+
+```bash
+Run-Glass-Closeout.cmd --mva 058524185
+Run-Glass-Closeout.cmd
+```
+
+Use `--mva` for a single-target close and the default command for batch closeout.
+
+The older component scripts remain in the repository for reference and troubleshooting, but they are deprecated and no longer the primary daily commands.
+
 `Run-GlassOrchestrator.cmd` bootstraps the runtime by creating `.venv` (if missing),
 installing `requirements.txt`, then launching `GlassOrchestrator.py` with the venv interpreter.
+
+`Run-GlassOrchestrator.cmd`, `Run-FieldPOFillNextAction.cmd`, `Run-EnsureGlassWorkItems.cmd`, `Run-BuildCloseQueue.cmd`, `Run-CloseWorkItems.cmd`, `Run-CompletedInvoices.cmd`, and `Run-PayCompletedInvoices.cmd` are still available for reference and targeted troubleshooting, but the primary daily commands are now `Run-Glass-Intake.cmd` and `Run-Glass-Closeout.cmd`.
 
 Or run directly with the virtual environment interpreter:
 

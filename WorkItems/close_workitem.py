@@ -494,8 +494,8 @@ async def _playwright_close_work_item(page: "Page", mva: str, complaint_type: st
     try:
         detail = await close_open_work_item(page, mva, complaint_type=complaint_type)
         return RESULT_CLOSED, detail
-    except LookupError:
-        log.warning("[CLOSE] %s - no open %s work item row found", mva, complaint_type)
+    except LookupError as exc:
+        log.warning("[CLOSE] %s - no work item found: %s", mva, exc)
         return RESULT_NOT_FOUND, ""
 
 
@@ -711,7 +711,7 @@ def _log_summary(results: list[dict]) -> tuple[int, int]:
     log.info("[CLOSE] %s", "=" * 50)
     log.info("[CLOSE] CLOSE SUMMARY - %d MVA(s)", len(results))
     log.info("[CLOSE]   + Closed:    %d", closed_count)
-    log.info("[CLOSE]   - Not found: %d", not_found_count)
+    log.info("[CLOSE]   - No work item found: %d", not_found_count)
     log.info("[CLOSE]   - Timeout:   %d", timeout_count)
     if timeout_count > 0:
         log.info(

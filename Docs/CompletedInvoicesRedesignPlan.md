@@ -2,7 +2,7 @@
 
 ## Objective
 
-Rename the bootstrap to `Run-CompletedInvoices.cmd` and use it as the only executable workflow entry point. One coordinator will compose importable Outlook, identity, Compass, FieldPO, persistence, and finalization modules. There will be no alternate production CLIs, fallback queues, heuristic matchers, or compatibility execution paths.
+Make `Run-CompletedInvoices.cmd` the canonical invoice-side engine used by the Glass closeout flow. The Glass operator path now enters through `Run-Glass-Closeout.cmd`, which invokes the CompletedInvoices workflow as the final closure stage. One coordinator still composes importable Outlook, identity, Compass, FieldPO, persistence, and finalization modules. There will be no alternate production CLIs, fallback queues, heuristic matchers, or compatibility execution paths.
 
 An invoice moves to Outlook `Processed` only after all three required outcomes are confirmed:
 
@@ -209,7 +209,8 @@ Deployment failback is manual release rollback only. Runtime never switches impl
 
 ## Approved Decisions
 
-- One executable entry point: `Run-CompletedInvoices.cmd`.
+- `Run-CompletedInvoices.cmd` remains the canonical invoice-side workflow engine.
+- `Run-Glass-Closeout.cmd` is the operator-facing Glass entry point for the closeout side.
 - Dry-run was a development-only validation tool and is not a final runtime feature. See `Docs/CompletedInvoicesDryRunDecision.md`.
 - Compass first, FieldPO second, Outlook finalization last.
 - Required completion: Compass work item closed, FieldPO PO approved, and FieldPO work order closed.

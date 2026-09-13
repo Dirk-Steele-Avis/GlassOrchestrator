@@ -498,7 +498,7 @@ async def close_open_work_item(page: Page, mva: str, complaint_type: str = "Glas
     log.info("[STEPS] %s — opening open-work-items row %s", mva, row_title)
 
     if await _has_stable_zero_open_work_items_count(page, mva):
-        raise LookupError(f"Open Work Items count is 0 for MVA {mva}")
+        raise LookupError(f"No work item found for MVA {mva}")
 
     detail_page, detail_text = await _open_open_work_items_row(page, row_title)
     log.info("[STEPS] %s — work item details opened", mva)
