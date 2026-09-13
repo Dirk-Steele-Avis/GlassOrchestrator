@@ -662,7 +662,7 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
                             log.info("[CLOSE] %s -   detail: %s", mva, detail)
                         await _capture_playwright_screenshot(page, "closed", mva)
                     elif result == RESULT_NOT_FOUND:
-                        log.warning("[CLOSE] %s - NOT FOUND: no open %s work item to close", mva, complaint_type)
+                        log.warning("[CLOSE] %s - WORK ITEM COUNT: 0 (%s)", mva, complaint_type)
                         await _capture_playwright_screenshot(page, "not_found", mva)
                     results.append({"mva": mva, "result": result, "detail": detail})
                 except asyncio.TimeoutError:
@@ -711,7 +711,7 @@ def _log_summary(results: list[dict]) -> tuple[int, int]:
     log.info("[CLOSE] %s", "=" * 50)
     log.info("[CLOSE] CLOSE SUMMARY - %d MVA(s)", len(results))
     log.info("[CLOSE]   + Closed:    %d", closed_count)
-    log.info("[CLOSE]   - No work item found: %d", not_found_count)
+    log.info("[CLOSE]   - Work item count 0: %d", not_found_count)
     log.info("[CLOSE]   - Timeout:   %d", timeout_count)
     if timeout_count > 0:
         log.info(
@@ -726,7 +726,8 @@ def _log_summary(results: list[dict]) -> tuple[int, int]:
         status_icon = "+" if r["result"] == RESULT_CLOSED else ("-" if r["result"] == RESULT_NOT_FOUND else "!")
         detail = r.get("detail", "")
         detail_suffix = f"  ({detail})" if detail else ""
-        log.info("[CLOSE]   %s  %12s  [%s]%s", status_icon, r["mva"], r["result"], detail_suffix)
+        display_result = "work_item_count_0" if r["result"] == RESULT_NOT_FOUND else r["result"]
+        log.info("[CLOSE]   %s  %12s  [%s]%s", status_icon, r["mva"], display_result, detail_suffix)
     log.info("[CLOSE] %s", "=" * 50)
 
     return not_found_count, failed_count

@@ -9,6 +9,28 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 
+def test_not_found_summary_displays_zero_work_item_count(monkeypatch):
+    from WorkItems import close_workitem
+
+    info = MagicMock()
+    monkeypatch.setattr(close_workitem.log, "info", info)
+
+    not_found, failed = close_workitem._log_summary([
+        {"mva": "022222222", "result": close_workitem.RESULT_NOT_FOUND, "detail": ""},
+    ])
+
+    assert (not_found, failed) == (1, 0)
+    assert any(
+        call.args == ("[CLOSE]   - Work item count 0: %d", 1)
+        for call in info.call_args_list
+    )
+    assert any(
+        call.args[0] == "[CLOSE]   %s  %12s  [%s]%s"
+        and call.args[2:4] == ("022222222", "work_item_count_0")
+        for call in info.call_args_list
+    )
+
+
 def _write_csv(tmp_path: Path, content: str) -> Path:
     p = tmp_path / "test.csv"
     p.write_text(content, encoding="utf-8")
