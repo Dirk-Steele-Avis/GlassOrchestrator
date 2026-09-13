@@ -334,7 +334,7 @@ class OutboundEmail:
 
 def fetch_input_descriptions() -> tuple[list[tuple[str, str]], datetime, bytes | None]:
     """
-        Connect to Gmail via IMAP, fetch the latest UNSEEN email from the
+        Connect to Gmail via IMAP, fetch the oldest UNSEEN email from the
     target sender, and extract:
       - A list of (type_value, description) tuples from the email table
       - The Date header parsed as a datetime object
@@ -350,7 +350,9 @@ def fetch_input_descriptions() -> tuple[list[tuple[str, str]], datetime, bytes |
             return [], datetime.now(), None
 
         log.info("Input: Found %d unseen message(s)", len(unseen_ids))
-        source_uid = unseen_ids[-1]
+        # Process oldest-first so one run can safely drain all unseen messages
+        # while preserving chronological order.
+        source_uid = unseen_ids[0]
         latest_message, internal_sent_at = _fetch_message_by_id(mail, source_uid)
         descriptions, sent_at = _extract_descriptions_from_message(
             latest_message,
@@ -1577,93 +1579,108 @@ def run_pipeline() -> None:
     log.info("GlassOrchestrator pipeline starting")
     log.info("=" * 60)
 
-    # Step 1: Input acquisition
-    try:
-        input_payload = fetch_input_descriptions()
-        descriptions, email_date, source_uid = _normalize_input_payload(input_payload)
-    except Exception as exc:
-        log.error("Input acquisition failed — %s", exc, exc_info=True)
-        return
-
-    if not descriptions:
-        log.info("Pipeline complete — no descriptions to process")
-        return
-
-    # Step 2: Parsing
-    try:
-        manifest, mva_list = parse_descriptions_to_manifest(descriptions, email_date)
-    except Exception as exc:
-        log.error("Parsing failed — %s", exc, exc_info=True)
-        return
-
-    if not manifest:
-        log.info("Pipeline complete — no valid MVAs after parsing")
-        return
-
-    # Step 2b: Cycle-day tracking (local JSON state)
-    try:
-        apply_cycle_day_tracking(manifest, mva_list, email_date)
-    except Exception as exc:
-        # Tracking should not block operational processing.
-        log.error("Cycle tracking failed — %s", exc, exc_info=True)
-
-    # Step 3: Worker
-    try:
-        parse_glass_data_results(mva_list)
-    except subprocess.CalledProcessError as exc:
-        log.error("Worker failed — non-zero exit code %d. "
-                   "Pipeline ABORTED. No data will be persisted.", exc.returncode)
-        return
-    except Exception as exc:
-        log.error("Worker failed — %s. Pipeline ABORTED.", exc, exc_info=True)
-        return
-
-    # Step 4: Validate worker output freshness
-    try:
-        validate_results_freshness(RESULTS_PATH)
-    except RuntimeError as exc:
-        log.error("Worker output validation failed — %s. Pipeline ABORTED.", exc)
-        return
-
-    # Step 5: Merge
-    try:
-        df_merged = merge_manifest_with_results(manifest)
-    except Exception as exc:
-        log.error("Merge failed — %s", exc, exc_info=True)
-        return
-
-    # Step 6: Persist
-    try:
-        df_new_rows = persist_new_rows(df_merged)
-        log.info("Persistence: %d new row(s) written", len(df_new_rows))
-    except Exception as exc:
-        log.error("Persistence failed — %s", exc, exc_info=True)
-        return
-
-    # Step 7: Notify when explicitly enabled
-    if NOTIFICATIONS_ENABLED:
+    processed_messages = 0
+    while True:
+        # Step 1: Input acquisition
         try:
-            from core.eligibility import is_notification_eligible
-            eligible_rows = df_new_rows[df_new_rows.apply(lambda r: is_notification_eligible(r.to_dict()), axis=1)]
-            notify_order_items(eligible_rows)
+            input_payload = fetch_input_descriptions()
+            descriptions, email_date, source_uid = _normalize_input_payload(input_payload)
         except Exception as exc:
-            log.error("Notification failed — %s", exc, exc_info=True)
-            # Notification failure is non-fatal for data persistence; pipeline ends here
+            log.error("Input acquisition failed — %s", exc, exc_info=True)
             return
-    else:
-        log.info("Notification: Disabled by configuration")
 
-    # Step 8: Mark source email as read only after successful completion.
-    if source_uid is not None:
+        if not descriptions:
+            if processed_messages == 0:
+                log.info("Pipeline complete — no descriptions to process")
+            else:
+                log.info("Pipeline complete — processed %d unread message(s)", processed_messages)
+                log.info("=" * 60)
+                log.info("GlassOrchestrator pipeline completed successfully")
+                log.info("=" * 60)
+            return
+
+        # If input-acquisition stubs omit UID support, keep legacy single-payload behavior.
+        is_uidless_payload = source_uid is None
+
+        # Step 2: Parsing
         try:
-            _mark_message_seen(source_uid)
-            log.info("Input: Marked source email as read (uid=%s)", source_uid.decode(errors="ignore"))
+            manifest, mva_list = parse_descriptions_to_manifest(descriptions, email_date)
         except Exception as exc:
-            log.warning("Input: Failed to mark source email as read — %s", exc)
+            log.error("Parsing failed — %s", exc, exc_info=True)
+            return
 
-    log.info("=" * 60)
-    log.info("GlassOrchestrator pipeline completed successfully")
-    log.info("=" * 60)
+        if not manifest:
+            log.info("Pipeline complete — no valid MVAs after parsing")
+            return
+
+        # Step 2b: Cycle-day tracking (local JSON state)
+        try:
+            apply_cycle_day_tracking(manifest, mva_list, email_date)
+        except Exception as exc:
+            # Tracking should not block operational processing.
+            log.error("Cycle tracking failed — %s", exc, exc_info=True)
+
+        # Step 3: Worker
+        try:
+            parse_glass_data_results(mva_list)
+        except subprocess.CalledProcessError as exc:
+            log.error("Worker failed — non-zero exit code %d. "
+                      "Pipeline ABORTED. No data will be persisted.", exc.returncode)
+            return
+        except Exception as exc:
+            log.error("Worker failed — %s. Pipeline ABORTED.", exc, exc_info=True)
+            return
+
+        # Step 4: Validate worker output freshness
+        try:
+            validate_results_freshness(RESULTS_PATH)
+        except RuntimeError as exc:
+            log.error("Worker output validation failed — %s. Pipeline ABORTED.", exc)
+            return
+
+        # Step 5: Merge
+        try:
+            df_merged = merge_manifest_with_results(manifest)
+        except Exception as exc:
+            log.error("Merge failed — %s", exc, exc_info=True)
+            return
+
+        # Step 6: Persist
+        try:
+            df_new_rows = persist_new_rows(df_merged)
+            log.info("Persistence: %d new row(s) written", len(df_new_rows))
+        except Exception as exc:
+            log.error("Persistence failed — %s", exc, exc_info=True)
+            return
+
+        # Step 7: Notify when explicitly enabled
+        if NOTIFICATIONS_ENABLED:
+            try:
+                from core.eligibility import is_notification_eligible
+                eligible_rows = df_new_rows[df_new_rows.apply(lambda r: is_notification_eligible(r.to_dict()), axis=1)]
+                notify_order_items(eligible_rows)
+            except Exception as exc:
+                log.error("Notification failed — %s", exc, exc_info=True)
+                # Notification failure is non-fatal for data persistence; pipeline ends here
+                return
+        else:
+            log.info("Notification: Disabled by configuration")
+
+        # Step 8: Mark source email as read only after successful completion.
+        if source_uid is not None:
+            try:
+                _mark_message_seen(source_uid)
+                log.info("Input: Marked source email as read (uid=%s)", source_uid.decode(errors="ignore"))
+            except Exception as exc:
+                log.warning("Input: Failed to mark source email as read — %s", exc)
+
+        processed_messages += 1
+        if is_uidless_payload:
+            log.info("Pipeline complete — processed 1 payload (legacy input mode)")
+            log.info("=" * 60)
+            log.info("GlassOrchestrator pipeline completed successfully")
+            log.info("=" * 60)
+            return
 
 
 # ─── Entry Point ──────────────────────────────────────────────────────────────
