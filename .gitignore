@@ -17,6 +17,7 @@ htmlcov/
 data/GlassDataParser.csv
 data/mva_cycle_tracker.json
 data/vendor_tracking_decisions.jsonl
+data/close_workitem_history.csv
 data/close_workitem_processed.json
 data/invoice_workflow.sqlite3
 data/invoice_workflow.sqlite3-wal
@@ -67,6 +68,8 @@ artifacts/
 outlook/pdfs/
 outlook/invoice_attachments/
 outlook/direct_approval_results.jsonl
+outlook/closure_decisions.jsonl
+outlook/invoices_queue.csv
 outlook/po_numbers.txt
 
 # Local invoice workflow runtime artifacts
