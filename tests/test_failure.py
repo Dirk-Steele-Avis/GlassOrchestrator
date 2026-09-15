@@ -6,6 +6,7 @@ FT-2: Stale Results Protection
 """
 
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -22,6 +23,18 @@ from GlassOrchestrator import (
     parse_descriptions_to_manifest,
     parse_glass_data_results,
 )
+
+
+def test_pipeline_reports_dns_failure_and_returns_error(monkeypatch, caplog):
+    """A network outage must be obvious and stop the intake launcher."""
+    monkeypatch.setattr(
+        "GlassOrchestrator.fetch_input_descriptions",
+        MagicMock(side_effect=socket.gaierror(11001, "getaddrinfo failed")),
+    )
+
+    assert run_pipeline() == 1
+    assert "NETWORK UNAVAILABLE" in caplog.text
+    assert "Check Wi-Fi/internet and DNS" in caplog.text
 
 
 # ─── FT-1: Worker Crash Handling ─────────────────────────────────────────────

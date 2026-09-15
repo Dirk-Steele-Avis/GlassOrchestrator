@@ -6,9 +6,10 @@ cd /d "%~dp0"
 echo Running Glass intake workflow...
 
 call ".\Run-GlassBootstrap.cmd" .\.venv\Scripts\python.exe GlassOrchestrator.py
-if errorlevel 1 (
-  echo [ERROR] GlassOrchestrator step failed.
-  exit /b %errorlevel%
+set "RUN_EXIT=%errorlevel%"
+if not "%RUN_EXIT%"=="0" (
+  echo [ERROR] Glass intake stopped. Resolve the error above, then run this command again.
+  exit /b %RUN_EXIT%
 )
 
 call ".\Run-GlassBootstrap.cmd" .\.venv\Scripts\python.exe FieldPOFillNextAction.py

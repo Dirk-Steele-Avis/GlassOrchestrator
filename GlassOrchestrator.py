@@ -17,6 +17,7 @@ import logging
 import os
 import re
 import smtplib
+import socket
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -1570,7 +1571,7 @@ def _send_email(message: OutboundEmail) -> None:
 # ─── Pipeline Orchestrator ────────────────────────────────────────────────────
 
 
-def run_pipeline() -> None:
+def run_pipeline() -> int | None:
     """Execute the end-to-end pipeline with step-level error handling."""
     # Broad exception handling is intentional here to fail-fast by stage
     # while preserving a stable top-level orchestrator process.
@@ -1586,8 +1587,14 @@ def run_pipeline() -> None:
             input_payload = fetch_input_descriptions()
             descriptions, email_date, source_uid = _normalize_input_payload(input_payload)
         except Exception as exc:
+            if isinstance(exc, socket.gaierror):
+                log.error(
+                    "NETWORK UNAVAILABLE: Could not resolve %s. Check Wi-Fi/internet and DNS, then run intake again.",
+                    IMAP_SERVER,
+                )
+                return 1
             log.error("Input acquisition failed — %s", exc, exc_info=True)
-            return
+            return 1
 
         if not descriptions:
             if processed_messages == 0:
@@ -1686,4 +1693,4 @@ def run_pipeline() -> None:
 # ─── Entry Point ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    run_pipeline()
+    sys.exit(run_pipeline() or 0)
