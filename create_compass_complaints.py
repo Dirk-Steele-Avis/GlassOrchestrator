@@ -39,6 +39,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 from config.config_loader import get_config
+from src.compass_go.pages.login_confirm_page import LoginConfirmPage
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -184,8 +185,9 @@ def _runtime_compass_api_base_url(runtime_config: dict[str, Any]) -> str:
 
 def _prime_compass_go_scan_page(page, mva: str) -> None:
     try:
-        if "Confirm User" in (page.locator("body").inner_text(timeout=2000) or ""):
-            page.locator('input[autocomplete="one-time-code"]').first.fill("764567")
+        login_confirm = LoginConfirmPage(page)
+        if login_confirm.is_displayed():
+            login_confirm.continue_as_current_user()
             page.wait_for_timeout(3500)
 
         try:

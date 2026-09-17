@@ -11,6 +11,7 @@ Prerequisites:
                   COMPASS_GO_ENTRY_URL (overrides default Foundry PWA URL)
 """
 import os
+import time
 from pathlib import Path
 
 import pytest
@@ -29,9 +30,29 @@ pytestmark = [
 pytest.importorskip("playwright.sync_api")
 
 from src.compass_go.auth_flow import AuthFlow
+from src.compass_go.pages.login_confirm_page import HEADING_TEXT, LoginConfirmPage
 from src.compass_go.scrape_flow import ScrapeFlow
 from src.compass_go.session import CompassGoSession
 from src.compass_go.writer import ResultsWriter
+
+
+def test_confirm_user_requires_no_manual_input():
+    with CompassGoSession().page() as page:
+        login_confirm = LoginConfirmPage(page)
+        deadline = time.monotonic() + 120
+
+        while time.monotonic() < deadline:
+            if "/scan" in page.url:
+                return
+            if login_confirm.is_displayed():
+                login_confirm.continue_as_current_user()
+                page.get_by_role(
+                    "heading", name=HEADING_TEXT, exact=True
+                ).wait_for(state="hidden", timeout=20_000)
+                return
+            page.wait_for_timeout(250)
+
+        pytest.fail("Compass GO did not reach or pass the Confirm User step")
 
 
 def test_single_mva_produces_results_row(tmp_path: Path):

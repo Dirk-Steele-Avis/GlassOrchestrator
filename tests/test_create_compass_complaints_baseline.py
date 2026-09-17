@@ -405,6 +405,7 @@ def test_resolve_glass_complaint_lookup_falls_back_to_ui_on_api_error(monkeypatc
     context.new_page.return_value = api_page
     monkeypatch.setattr(complaints, "_inspect_glass_complaint", ui_mock)
     monkeypatch.setattr(complaints, "_inspect_glass_complaint_via_api", api_mock)
+    monkeypatch.setattr(complaints, "_prime_compass_go_scan_page", MagicMock())
 
     result = complaints._resolve_glass_complaint_lookup(
         context,
@@ -416,6 +417,25 @@ def test_resolve_glass_complaint_lookup_falls_back_to_ui_on_api_error(monkeypatc
     assert result is ui_lookup
     api_mock.assert_called_once()
     ui_mock.assert_called_once()
+
+
+def test_prime_compass_go_scan_page_delegates_confirm_user(monkeypatch):
+    page = MagicMock()
+    login_confirm = MagicMock()
+    login_confirm.is_displayed.return_value = True
+    login_confirm_type = MagicMock(return_value=login_confirm)
+    monkeypatch.setattr(complaints, "LoginConfirmPage", login_confirm_type)
+
+    begin_button = page.get_by_role.return_value
+    begin_button.count.return_value = 0
+    mva_input = page.get_by_label.return_value.first
+
+    complaints._prime_compass_go_scan_page(page, "012345678")
+
+    login_confirm_type.assert_called_once_with(page)
+    login_confirm.continue_as_current_user.assert_called_once_with()
+    mva_input.wait_for.assert_called_once_with(state="visible", timeout=30000)
+    mva_input.fill.assert_called_once_with("012345678")
 
 
 def test_vehicle_mva_match_requires_exact_canonical_digits():
