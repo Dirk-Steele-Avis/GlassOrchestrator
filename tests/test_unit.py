@@ -85,6 +85,41 @@ class TestUT1_SuffixRegex:
         assert m.group(3).lower() == "tbk"
         assert m.group(4) == ""
 
+    def test_combined_email_routes_bb_then_apo_and_tbk_to_avis(self):
+        descriptions = [
+            ("0918bb", "02000521wstbk"),
+            ("0918bb", "61598106cam"),
+            ("0918bb", "Break"),
+            ("0918bb", "61147446wstbk"),
+            ("0918bb", "60092491ws"),
+        ]
+
+        manifest, mva_list = parse_descriptions_to_manifest(
+            descriptions, datetime(2026, 9, 18)
+        )
+
+        assert mva_list == ["02000521", "61598106", "61147446", "60092491"]
+        assert manifest["02000521"]["Location"] == "BB"
+        assert manifest["61598106"]["Location"] == "BB"
+        assert manifest["61147446"]["Location"] == "APO"
+        assert manifest["60092491"]["Location"] == "APO"
+        assert manifest["02000521"]["Action"] == "Turnback"
+        assert manifest["02000521"]["_FORCE_AVIS_ORDER"] is True
+        assert manifest["61147446"]["Action"] == "Turnback"
+        assert manifest["61147446"]["_FORCE_AVIS_ORDER"] is True
+
+    def test_combined_email_rejects_multiple_break_delimiters(self):
+        descriptions = [
+            ("0918bb", "02000521wstbk"),
+            ("0918bb", "break"),
+            ("0918bb", "61147446wstbk"),
+            ("0918bb", "BREAK"),
+            ("0918bb", "60092491ws"),
+        ]
+
+        with pytest.raises(ValueError, match="exactly one 'break' delimiter"):
+            parse_descriptions_to_manifest(descriptions, datetime(2026, 9, 18))
+
     def test_claim_then_turnback_suffix_is_normalized(self):
         """WSctbk is normalized to turnback+listed instead of rejected."""
         manifest, mva_list = parse_descriptions_to_manifest(

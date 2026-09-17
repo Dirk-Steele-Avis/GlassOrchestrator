@@ -837,6 +837,52 @@ def _normalize_scan_text(raw_text: str) -> str:
     return _normalize_suffix_order(re.sub(r"\s+", "", upper))
 
 
+def _normalize_combined_location_groups(
+    descriptions: list[tuple[str, str]],
+) -> list[tuple[str, str]]:
+    """Map one Orca ``break`` delimiter to BB-before and APO-after groups."""
+    delimiter_indexes = [
+        index
+        for index, (_, description) in enumerate(descriptions)
+        if description.strip().casefold() == "break"
+    ]
+    if not delimiter_indexes:
+        return descriptions
+    if len(delimiter_indexes) != 1:
+        raise ValueError(
+            "Combined Orca email must contain exactly one 'break' delimiter"
+        )
+
+    delimiter_index = delimiter_indexes[0]
+    if delimiter_index == 0 or delimiter_index == len(descriptions) - 1:
+        raise ValueError(
+            "Combined Orca email 'break' delimiter must separate BB and APO scans"
+        )
+
+    normalized: list[tuple[str, str]] = []
+    date_prefix: str | None = None
+    for index, (type_value, description) in enumerate(descriptions):
+        if index == delimiter_index:
+            continue
+
+        type_match = re.fullmatch(r"(\d{4})BB", type_value.strip(), re.IGNORECASE)
+        if not type_match:
+            raise ValueError(
+                "Combined Orca email requires every Type value to use MMDDbb format"
+            )
+        if date_prefix is None:
+            date_prefix = type_match.group(1)
+        elif type_match.group(1) != date_prefix:
+            raise ValueError(
+                "Combined Orca email requires one shared MMDD date for both locations"
+            )
+
+        location = "BB" if index < delimiter_index else "APO"
+        normalized.append((f"{date_prefix}{location}", description))
+
+    return normalized
+
+
 # ─── Parsing & Normalization ─────────────────────────────────────────────────
 
 # not phase based
@@ -865,6 +911,7 @@ def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_da
                   Location, Action, Area, Claim#, WorkItem}
         mva_list: list of clean 8-digit MVA strings for the worker (errors excluded)
     """
+    descriptions = _normalize_combined_location_groups(descriptions)
     log.info("Parsing: Processing %d descriptions …", len(descriptions))
 
     manifest: dict[str, dict] = {}
