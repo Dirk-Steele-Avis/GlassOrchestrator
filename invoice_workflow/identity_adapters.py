@@ -7,7 +7,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from invoice_workflow.contracts import FieldPOIdentitySnapshot
+from invoice_workflow.contracts import FieldPOIdentitySnapshot, FieldPOReviewSnapshot
 from vendor_tracking.sheet_updater import VendorSheetUpdater
 
 FIELDPO_URL = "https://supply-chain.east.prod.sdp.abg.cloud/fieldpo/dashboard"
@@ -154,6 +154,46 @@ class FieldPOBrowserIdentityReader:
             vin=vin,
             mva=mva,
             authorized_amount=authorized_amount,
+        )
+
+
+class FieldPOBrowserReviewReader:
+    """Read current PO status and amount without mutating FieldPO."""
+
+    def __init__(
+        self,
+        page: Any,
+        identity_reader: FieldPOBrowserIdentityReader | None = None,
+    ) -> None:
+        self._page = page
+        self._identity_reader = identity_reader or FieldPOBrowserIdentityReader(page)
+
+    def read_review(self, po_number: str) -> FieldPOReviewSnapshot:
+        identity = self._identity_reader.read_identity(po_number)
+        po_result = self._page.get_by_text(po_number, exact=True)
+        if po_result.count() != 1:
+            raise RuntimeError(
+                f"Expected exactly one FieldPO PO {po_number}, found {po_result.count()}"
+            )
+        po_card_text = po_result.locator(
+            "xpath=ancestor::*[contains(@class, 'card')][1]"
+        ).inner_text()
+        statuses = tuple(
+            dict.fromkeys(
+                status.upper()
+                for status in re.findall(
+                    r"(?im)^\s*(APPROVED|IN PROGRESS)\s*$",
+                    po_card_text,
+                )
+            )
+        )
+        if len(statuses) != 1:
+            raise ValueError(
+                f"Expected exactly one recognized FieldPO PO status, found {len(statuses)}"
+            )
+        return FieldPOReviewSnapshot(
+            po_status=statuses[0],
+            authorized_amount=identity.authorized_amount,
         )
 
 

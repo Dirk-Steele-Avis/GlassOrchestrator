@@ -12,7 +12,7 @@ from invoice_workflow.outlook_source import (
 
 def _folder_tree(messages):
     processed = SimpleNamespace(Name="Processed")
-    needs_review = SimpleNamespace(Name="Needs Review")
+    needs_review = SimpleNamespace(Name="Needs Review", Items=[])
     invoice = SimpleNamespace(
         Name="Invoice",
         Items=messages,
@@ -83,6 +83,65 @@ def test_scan_captures_only_exact_invoice_messages(tmp_path):
         INTERNET_MESSAGE_ID_PROPERTY
     )
     receipt.PropertyAccessor.GetProperty.assert_not_called()
+
+
+def test_scan_needs_review_reads_only_exact_new_format_without_moves(tmp_path):
+    parent_invoice = _message(
+        "[External] Invoice #5294411 (PO # FPO1131463)",
+        "<parent@example>",
+    )
+    exact_review = _message(
+        "[External] Invoice #5294412 (PO # FPO1131464)",
+        "<review@example>",
+    )
+    old_format_review = _message("Invoice #5294413", "<old@example>")
+    namespace, _, needs_review = _folder_tree([parent_invoice])
+    needs_review.Items = [old_format_review, exact_review]
+    source = OutlookInvoiceSource(
+        namespace,
+        account_name="Dirk.Steele@avisbudget.com",
+        attachment_directory=tmp_path,
+        pdf_parser=lambda path: InvoicePdfData(
+            po_number="FPO1131464",
+            vin="1C4SJSBP6SS537975",
+            amount=Decimal("340.00"),
+        ),
+    )
+
+    result = source.scan_needs_review_invoices()
+
+    assert [invoice.internet_message_id for invoice in result.invoices] == [
+        "<review@example>"
+    ]
+    assert result.failures == ()
+    parent_invoice.Attachments[0].SaveAsFile.assert_not_called()
+    old_format_review.Attachments[0].SaveAsFile.assert_not_called()
+    exact_review.Move.assert_not_called()
+
+
+def test_scanned_needs_review_message_moves_to_processed_by_exact_id(tmp_path):
+    exact_review = _message(
+        "[External] Invoice #5294412 (PO # FPO1131464)",
+        "<review@example>",
+    )
+    namespace, processed, needs_review = _folder_tree([])
+    needs_review.Items = [exact_review]
+    exact_review.Move.return_value = SimpleNamespace(Parent=processed)
+    source = OutlookInvoiceSource(
+        namespace,
+        account_name="Dirk.Steele@avisbudget.com",
+        attachment_directory=tmp_path,
+        pdf_parser=lambda path: InvoicePdfData(
+            po_number="FPO1131464",
+            vin="1C4SJSBP6SS537975",
+            amount=Decimal("340.00"),
+        ),
+    )
+    source.scan_needs_review_invoices()
+
+    source.move_to_processed("<review@example>")
+
+    exact_review.Move.assert_called_once_with(processed)
 
 
 def test_scan_reports_multiple_pdf_attachments_without_parsing(tmp_path):

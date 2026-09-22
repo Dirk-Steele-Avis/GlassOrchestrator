@@ -136,7 +136,13 @@ Log capture counts, exact identity values, validation results, action starts/res
 
 Browser-stage failures save screenshots under `log/completed_invoices/failures/<run_id>/`. Screenshot failure is logged and never replaces the original failure.
 
-Generate `outlook/invoice_review.csv` from blocked ledger records. It is reporting only and cannot authorize or control execution.
+Generate `outlook/invoice_review.csv` with `Run-ReviewInvoices.cmd`. The command
+inventories exact new-format messages currently in Outlook `Needs Review`, joins
+blocked ledger evidence only by exact `InternetMessageID`, and reads current
+FieldPO PO status and authorized amount. An exact `APPROVED` PO authorizes moving
+that same email to `Processed`, regardless of amount comparison. No other report
+result authorizes a move. The command cannot approve POs, close work orders, or
+update workflow ledger state.
 
 At startup, delete completed-invoice logs and failure screenshots older than 15 days by UTC modification time. Cleanup is restricted to `log/completed_invoices/`, logs every deletion/error, and does not alter workflow execution.
 

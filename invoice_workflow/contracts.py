@@ -54,6 +54,13 @@ class OutlookScanResult:
 
 
 @dataclass(frozen=True, slots=True)
+class ReviewHistory:
+    stage: str
+    status: StageStatus
+    detail: str
+
+
+@dataclass(frozen=True, slots=True)
 class ValidatedIdentity:
     internet_message_id: str
     invoice_number: str
@@ -76,6 +83,12 @@ class FieldPOIdentitySnapshot:
     po_number: str
     vin: str
     mva: str
+    authorized_amount: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class FieldPOReviewSnapshot:
+    po_status: str
     authorized_amount: Decimal
 
 
@@ -125,6 +138,8 @@ class OutlookSource(Protocol):
         excluded_message_ids: frozenset[str] = frozenset(),
     ) -> OutlookScanResult: ...
 
+    def scan_needs_review_invoices(self) -> OutlookScanResult: ...
+
     def move_to_processed(self, internet_message_id: str) -> None: ...
 
     def move_to_needs_review(self, internet_message_id: str) -> None: ...
@@ -140,6 +155,10 @@ class SheetIdentityReader(Protocol):
 
 class FieldPOIdentityReader(Protocol):
     def read_identity(self, po_number: str) -> FieldPOIdentitySnapshot: ...
+
+
+class FieldPOReviewReader(Protocol):
+    def read_review(self, po_number: str) -> FieldPOReviewSnapshot: ...
 
 
 class CompassWorker(Protocol):

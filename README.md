@@ -135,6 +135,26 @@ Intake covers incoming inventory email, spreadsheet updates, FieldPO next-action
 
 Closeout covers close candidate build, work-item closure, and the CompletedInvoices PO/invoice-side path.
 
+To review invoices already in Outlook `Inbox/AGN/Invoice/Needs Review` and move
+emails whose exact FieldPO PO status is `APPROVED` to `Processed`, run:
+
+```bash
+Run-ReviewInvoices.cmd
+```
+
+Close `outlook/invoice_review.csv` in Excel before starting. The command verifies
+that the report can be replaced before it opens Outlook or FieldPO; a locked report
+stops the run before any email moves.
+
+The command includes only exact new-format subjects such as
+`[External] Invoice #5294412 (PO # FPO1131464)`. It rewrites
+`outlook/invoice_review.csv` with every matching message, its original recorded
+review reason when available, and the current FieldPO approval status and amount.
+Every approved PO authorizes moving that exact email to `Processed`, regardless of
+whether its amount matches. Amount-match-only emails remain in `Needs Review`.
+The command does not approve POs, close work orders, update workflow ledger state,
+or move old-format messages, receipts, or unresolved invoices.
+
 `Run-Glass-Closeout.cmd` supports two operator modes:
 
 ```bash

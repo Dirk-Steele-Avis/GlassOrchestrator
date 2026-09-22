@@ -55,7 +55,7 @@ Bare OEM scans such as `62155855OEM` are invalid because they do not identify th
 3. Scans before `break` shall use location BB; scans after `break` shall use location APO.
 4. The delimiter shall not be processed as a scan.
 5. A combined export shall contain exactly one delimiter with at least one entry on each side.
-6. Every row in a combined export shall use the same `MMDDbb` Type value. A malformed combined export shall abort parsing with a precise error.
+6. Every row in a combined export shall use the same `MMDD` Type value. A malformed combined export shall abort parsing with a precise error.
 
 ## OEM Requirements
 

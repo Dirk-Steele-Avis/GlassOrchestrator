@@ -67,6 +67,8 @@ artifacts/
 # Outlook invoice and receipt downloads
 outlook/pdfs/
 outlook/invoice_attachments/
+outlook/invoice_review.csv
+outlook/invoice_review.csv.tmp
 outlook/FieldPO_Closer/attachments/
 outlook/FieldPO_Closer/*.pdf
 outlook/FieldPO_Closer/vins.csv
