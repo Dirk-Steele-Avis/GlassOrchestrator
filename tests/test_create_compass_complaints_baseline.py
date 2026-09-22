@@ -70,7 +70,7 @@ def _mock_processing_session(monkeypatch):
 
 def test_collect_candidates_filters_today_normalizes_mva_and_damage_type():
     values = [
-        ["Inventory Date", "MVA", "Damage Type", "Area"],
+        ["Inventory Date", "MVA", "Action", "Area"],
         ["08/20/2026", "12345678", "Repair", "Rear View Mirror"],
         ["08/19/2026", "999999999", "Replace", "Windshield"],
         ["08/20/2026", "invalid", "Replace", "Windshield"],

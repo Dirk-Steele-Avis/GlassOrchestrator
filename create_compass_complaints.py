@@ -902,10 +902,21 @@ def _set_glass_damage_subcategory(scope, value: str = "Glass Damage") -> None:
         raise RuntimeError(f"Could not set Sub-Category to {value}")
 
 
-def _complaint_fields_for_area(area: str | None) -> tuple[str, str]:
-    if (area or "").strip().casefold() in {"rvm", "rear view mirror"}:
+def _complaint_fields_for_area(
+    area: str | None,
+    damage_expectation: str | None,
+) -> tuple[str, str]:
+    normalized_area = (area or "").strip().casefold()
+    if normalized_area in {"rvm", "rear view mirror"}:
         return "Mechanical Issue", "RVM"
-    return "Glass Damage", "Glass Damage"
+    if normalized_area.startswith("windshield"):
+        subcategory = _subcategory_for_damage_expectation(damage_expectation)
+        if subcategory is None:
+            raise RuntimeError("Windshield complaint requires a valid repair or replacement Action")
+        return subcategory, "Glass Damage"
+    if normalized_area:
+        return "Side/Rear Window Damage", "Glass Damage"
+    raise RuntimeError("Glass complaint requires an Area")
 
 
 def _create_complaint_only(
@@ -943,7 +954,7 @@ def _create_complaint_only(
         _set_glass_damage_category(scope)
         page.wait_for_timeout(600)
 
-        subcategory, description = _complaint_fields_for_area(area)
+        subcategory, description = _complaint_fields_for_area(area, damage_expectation)
 
         _set_glass_damage_subcategory(scope, subcategory)
         page.wait_for_timeout(600)
@@ -955,13 +966,13 @@ def _create_complaint_only(
         submit = scope.locator("a[role='button']", has_text="Submit Complaint").first
         submit.wait_for(state="visible", timeout=10_000)
         log.info(
-            "Complaint form state before submit: drivable_yes=%s category_glass=%s subcategory_glass=%s",
+            "Complaint form state before submit: drivable_yes=%s category_glass=%s subcategory_selected=%s",
             scope.locator("input[type='radio'][value='Yes']").first.is_checked(),
             _complaint_form_region(scope, "Category")
             .locator("input[type='radio'][value='Glass Damage']")
             .first.is_checked(),
             _complaint_form_region(scope, "Sub-Category")
-            .locator("input[type='radio'][value='Glass Damage']")
+            .locator(f"input[type='radio'][value='{subcategory}']")
             .first.is_checked(),
         )
         log.info("MVA %s -> chosen sub-category=%s description=%s", mva, subcategory, description)
@@ -1089,6 +1100,7 @@ def _collect_candidates(values: list[list[str]], run_day: date) -> tuple[list[Ca
     mva_col = _find_col(headers, "MVA")
     damage_col = _find_col(
         headers,
+        "Action",
         "DamageType",
         "Damage Type",
         "Repair/Replace",

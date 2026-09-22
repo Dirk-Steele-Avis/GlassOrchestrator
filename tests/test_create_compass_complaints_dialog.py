@@ -64,8 +64,26 @@ def test_category_and_subcategory_select_distinct_glass_damage_radios():
 
 
 def test_rvm_uses_mechanical_issue_subcategory_and_rvm_description():
-    assert _complaint_fields_for_area("Rear View Mirror") == ("Mechanical Issue", "RVM")
-    assert _complaint_fields_for_area("RVM") == ("Mechanical Issue", "RVM")
+    assert _complaint_fields_for_area("Rear View Mirror", "replace") == ("Mechanical Issue", "RVM")
+    assert _complaint_fields_for_area("RVM", "repair") == ("Mechanical Issue", "RVM")
+
+
+def test_windshield_subcategory_uses_action():
+    assert _complaint_fields_for_area("Windshield", "replace") == (
+        "Windshield Crack",
+        "Glass Damage",
+    )
+    assert _complaint_fields_for_area("Windshield", "repair") == (
+        "Windshield Chip",
+        "Glass Damage",
+    )
+
+
+def test_non_windshield_uses_side_rear_window_subcategory():
+    assert _complaint_fields_for_area("Left Front Door", "replace") == (
+        "Side/Rear Window Damage",
+        "Glass Damage",
+    )
 
 
 def test_wait_for_new_glass_complaint_requires_count_increase():
