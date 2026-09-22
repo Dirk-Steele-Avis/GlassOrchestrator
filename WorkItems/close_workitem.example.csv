@@ -1,0 +1,10 @@
+# close_workitem.csv - operator-reviewed input for WorkItems/close_workitem.py
+#
+# Copy this file to close_workitem.csv, then add one work item per row.
+# Supported Type values are Glass and PM.
+#
+# Notes:
+#   - Blank lines and lines beginning with # are ignored
+#   - Rows with a blank mva are skipped
+#
+mva,Type

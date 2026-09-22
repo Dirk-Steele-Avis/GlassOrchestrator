@@ -67,6 +67,7 @@ artifacts/
 # Outlook invoice and receipt downloads
 outlook/pdfs/
 outlook/invoice_attachments/
+outlook/check_fpo_status.py
 outlook/invoice_review.csv
 outlook/invoice_review.csv.tmp
 outlook/fpo_fieldpo_status.csv
@@ -86,6 +87,9 @@ data/completed_invoices.db
 data/completed_invoices.lock
 data/*.db
 data/*.lock
+
+# Operator-reviewed work item queues
+WorkItems/close_workitem.csv
 
 # Local CSV overrides and per-machine working copies
 *.local.csv
