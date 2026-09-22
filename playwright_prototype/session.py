@@ -18,7 +18,12 @@ from playwright_prototype.login import (
 
 log = logging.getLogger(__name__)
 BUTTON_PUSH_DELAY_MS = 2000
-WORKSHOP_VEHICLES_BUTTON_SELECTOR = "[data-test-id='workshop-inline-button']"
+COMPASS_HOME_MVA_INPUT_SELECTOR = 'input[placeholder="MVA number"]'
+COMPASS_HOME_ORIGIN = "https://compass-home.avisbudget.palantirfoundry.com/"
+COMPASS_HOME_CONSENT_TEXT = (
+    "Compass Homepage is requesting access to your account in order to have the following "
+    "operations on resources approved for this application:"
+)
 
 
 def _credentials() -> tuple[str, str, str, str]:
@@ -132,15 +137,46 @@ async def _is_on_compass_app_page(page: Page) -> bool:
 
 
 async def _is_on_workshop_home(page: Page) -> bool:
-    """True when the configured Workshop homepage is ready for vehicle navigation."""
-    if not (page.url or "").lower().startswith(LOGIN_URL.lower()):
+    """True when the Compass homepage Vehicle Search is ready."""
+    current_url = (page.url or "").lower()
+    if not current_url.startswith((LOGIN_URL.lower(), COMPASS_HOME_ORIGIN.lower())):
         return False
     try:
-        vehicles_button = page.locator(WORKSHOP_VEHICLES_BUTTON_SELECTOR).filter(has_text="Vehicles").first
-        await vehicles_button.wait_for(state="visible", timeout=8_000)
+        mva_input = page.locator(COMPASS_HOME_MVA_INPUT_SELECTOR)
+        search_button = page.get_by_role("button", name="Search", exact=True)
+        if await mva_input.count() != 1 or await search_button.count() != 1:
+            return False
+        await mva_input.first.wait_for(state="visible", timeout=8_000)
+        await search_button.first.wait_for(state="visible", timeout=8_000)
         return True
     except Exception:
         return False
+
+
+async def _allow_compass_home_consent(page: Page) -> bool:
+    """Approve the exact Compass Homepage ontology consent screen when present."""
+    consent_text = page.get_by_text(COMPASS_HOME_CONSENT_TEXT, exact=True)
+    consent_count = await consent_text.count()
+    if consent_count == 0:
+        return False
+    if consent_count != 1:
+        raise RuntimeError("Expected exactly one Compass Homepage consent message")
+
+    for scope_text in ("Read Ontology data", "Write Ontology data"):
+        if await page.get_by_text(scope_text, exact=True).count() != 1:
+            raise RuntimeError(f"Compass Homepage consent is missing exact scope: {scope_text}")
+
+    allow_button = page.get_by_role("button", name="Allow", exact=True)
+    if await allow_button.count() != 1:
+        raise RuntimeError("Expected exactly one Allow button on Compass Homepage consent")
+
+    log.info("[SESSION] Compass Homepage ontology consent detected — clicking Allow")
+    await allow_button.click(timeout=8_000)
+    mva_input = page.locator(COMPASS_HOME_MVA_INPUT_SELECTOR)
+    if await mva_input.count() != 1:
+        raise RuntimeError("Compass Homepage did not expose exactly one MVA field after consent")
+    await mva_input.first.wait_for(state="visible", timeout=20_000)
+    return True
 
 
 async def _advance_existing_session_page(page: Page) -> Page:
@@ -151,12 +187,13 @@ async def _advance_existing_session_page(page: Page) -> Page:
         await page.goto(FOUNDRY_HOME_URL, wait_until="domcontentloaded")
         current_url = (page.url or "").lower()
 
-    if current_url and not current_url.startswith(LOGIN_URL.lower()):
+    if current_url and not current_url.startswith((LOGIN_URL.lower(), COMPASS_HOME_ORIGIN.lower())):
         log.info("[SESSION] Existing session page not on login URL — opening login URL: %s", LOGIN_URL)
         await page.goto(LOGIN_URL, wait_until="domcontentloaded")
 
+    await _allow_compass_home_consent(page)
     if await _is_on_workshop_home(page):
-        log.info("[SESSION] Existing session page on Workshop Home — ready for vehicle search")
+        log.info("[SESSION] Existing session page on Compass Homepage — ready for vehicle search")
         return page
 
     if await _is_on_login_page(page):
@@ -195,10 +232,14 @@ async def _advance_existing_session_page(page: Page) -> Page:
             log.info("[SESSION] Existing session page unknown — opening login URL: %s", LOGIN_URL)
             await page.goto(LOGIN_URL, wait_until="domcontentloaded")
 
+    await _allow_compass_home_consent(page)
+
     if await _is_on_wwid_screen(page):
         log.info("[SESSION] Existing session page on WWID screen — submitting login ID")
         _, _, login_id, _ = _credentials()
         page = await enter_wwid(page, login_id)
+
+    await _allow_compass_home_consent(page)
 
     return page
 

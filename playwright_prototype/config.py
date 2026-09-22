@@ -9,7 +9,7 @@ log = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-LOGIN_URL: str = get_config("login_url", "https://avisbudget.palantirfoundry.com/workspace/fleet-operations-pwa/health")
+LOGIN_URL: str = get_config("login_url", "https://avisbudget.palantirfoundry.com/")
 FOUNDRY_HOME_URL: str = get_config("foundry_home_url", "https://avisbudget.palantirfoundry.com/")
 SSO_EMAIL: str = get_config("credentials.sso_email", "")
 STORAGE_STATE_PATH: Path = BASE_DIR / "storage_state.json"

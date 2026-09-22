@@ -13,6 +13,66 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
+def test_compass_home_vehicle_search_submits_exact_mva():
+    from playwright_prototype.steps import (
+        COMPASS_HOME_MVA_INPUT_SELECTOR,
+        DATA_ENTRY_SUBMIT_DELAY_MS,
+        _enter_mva,
+    )
+
+    page = MagicMock()
+    mva_input = MagicMock()
+    mva_input.count = AsyncMock(return_value=1)
+    mva_input.first = mva_input
+    mva_input.is_visible = AsyncMock(return_value=True)
+    mva_input.fill = AsyncMock()
+    search_button = MagicMock()
+    search_button.count = AsyncMock(return_value=1)
+    search_button.first = search_button
+    search_button.click = AsyncMock()
+    vehicle_page = MagicMock()
+    vehicle_page.wait_for_load_state = AsyncMock()
+    new_page_info = MagicMock()
+    new_page_info.value = AsyncMock(return_value=vehicle_page)()
+    expect_page = AsyncMock()
+    expect_page.__aenter__ = AsyncMock(return_value=new_page_info)
+    expect_page.__aexit__ = AsyncMock(return_value=None)
+    page.context.expect_page.return_value = expect_page
+    page.locator.return_value = mva_input
+    page.get_by_role.return_value = search_button
+    page.wait_for_timeout = AsyncMock()
+
+    result = asyncio.run(_enter_mva(page, "059733310"))
+
+    assert result is vehicle_page
+    page.locator.assert_called_once_with(COMPASS_HOME_MVA_INPUT_SELECTOR)
+    page.get_by_role.assert_called_once_with("button", name="Search", exact=True)
+    mva_input.fill.assert_awaited_once_with("059733310")
+    page.wait_for_timeout.assert_awaited_once_with(DATA_ENTRY_SUBMIT_DELAY_MS)
+    page.context.expect_page.assert_called_once_with(timeout=10_000)
+    search_button.click.assert_awaited_once_with(timeout=5_000)
+    vehicle_page.wait_for_load_state.assert_awaited_once_with("domcontentloaded")
+
+
+def test_compass_home_vehicle_search_rejects_ambiguous_search_button():
+    from playwright_prototype.steps import _enter_mva
+
+    page = MagicMock()
+    mva_input = MagicMock()
+    mva_input.count = AsyncMock(return_value=1)
+    mva_input.first = mva_input
+    mva_input.is_visible = AsyncMock(return_value=True)
+    search_button = MagicMock()
+    search_button.count = AsyncMock(return_value=2)
+    page.locator.return_value = mva_input
+    page.get_by_role.return_value = search_button
+
+    with pytest.raises(RuntimeError, match="exactly one Search button"):
+        asyncio.run(_enter_mva(page, "059733310"))
+
+    mva_input.fill.assert_not_called()
+
+
 def _make_open_work_items_page(*badge_values):
     page = MagicMock()
     tabs = MagicMock()
@@ -344,7 +404,7 @@ class TestNavigateToMvaFailFast:
 
         with patch("playwright_prototype.steps.get_config", return_value="https://example.com/{oops}"), \
              patch("playwright_prototype.steps._open_vehicle_search_context", new=AsyncMock(return_value=page)), \
-               patch("playwright_prototype.steps._enter_mva", new=AsyncMock()) as mock_enter_mva, \
+               patch("playwright_prototype.steps._enter_mva", new=AsyncMock(return_value=page)) as mock_enter_mva, \
                              patch("playwright_prototype.steps._wait_for_open_work_items_tab_ready", new=AsyncMock()) as mock_ready:
             with pytest.raises(RuntimeError, match="invalid compass_vehicle_url_template"):
                 asyncio.run(navigate_to_mva(page, "59000001"))
@@ -371,7 +431,7 @@ class TestNavigateToMvaFailFast:
 
         with patch("playwright_prototype.steps.get_config", return_value="https://example.com/vehicle/{mva}"), \
              patch("playwright_prototype.steps._open_vehicle_search_context", new=AsyncMock(return_value=page)), \
-               patch("playwright_prototype.steps._enter_mva", new=AsyncMock()) as mock_enter_mva, \
+                             patch("playwright_prototype.steps._enter_mva", new=AsyncMock(return_value=page)) as mock_enter_mva, \
                              patch("playwright_prototype.steps._wait_for_vehicle_details_ready", new=AsyncMock()) as mock_vehicle_ready, \
                              patch("playwright_prototype.steps._wait_for_open_work_items_tab_ready", new=AsyncMock()) as mock_ready:
             asyncio.run(navigate_to_mva(page, "59000001"))
@@ -401,7 +461,7 @@ class TestNavigateToMvaFailFast:
         with caplog.at_level(logging.INFO, logger="playwright_prototype.steps"):
             with patch("playwright_prototype.steps.get_config", return_value=""), \
                  patch("playwright_prototype.steps._open_vehicle_search_context", new=AsyncMock(return_value=page)), \
-                 patch("playwright_prototype.steps._enter_mva", new=AsyncMock()) as mock_enter_mva, \
+                 patch("playwright_prototype.steps._enter_mva", new=AsyncMock(return_value=page)) as mock_enter_mva, \
                   patch("playwright_prototype.steps._wait_for_vehicle_details_ready", new=AsyncMock()) as mock_vehicle_ready, \
                  patch("playwright_prototype.steps._wait_for_open_work_items_tab_ready", new=AsyncMock()) as mock_ready:
                 asyncio.run(navigate_to_mva(page, "59000001"))
@@ -428,7 +488,7 @@ class TestNavigateToMvaFailFast:
 
         with patch("playwright_prototype.steps.get_config", return_value=""), \
              patch("playwright_prototype.steps._open_vehicle_search_context", new=AsyncMock(return_value=page)), \
-             patch("playwright_prototype.steps._enter_mva", new=AsyncMock()), \
+             patch("playwright_prototype.steps._enter_mva", new=AsyncMock(return_value=page)), \
                patch("playwright_prototype.steps._wait_for_vehicle_details_ready", new=AsyncMock()), \
              patch(
                  "playwright_prototype.steps._wait_for_open_work_items_tab_ready",

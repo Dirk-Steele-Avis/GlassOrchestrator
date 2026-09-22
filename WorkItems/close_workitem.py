@@ -29,7 +29,11 @@ from playwright_prototype.config import (
     resolve_step_delay,
 )
 from playwright_prototype.session import ensure_profile_context
-from playwright_prototype.steps import COMPLAINT_TYPE_PATTERNS, close_open_work_item
+from playwright_prototype.steps import (
+    COMPLAINT_TYPE_PATTERNS,
+    COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR,
+    close_open_work_item,
+)
 from playwright_prototype.steps import navigate_to_mva as pw_navigate_to_mva
 from vendor_tracking.sheet_updater import RESOLVED_STATUSES
 
@@ -564,6 +568,7 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
             _, page = await ensure_profile_context(context)
             log.info("[PERF] Compass session ready in %.2fs", time.monotonic() - phase_started)
 
+            reuse_vehicle_search = False
             for target_index, target in enumerate(targets):
                 mva = target["mva"]
                 complaint_type = target["complaint_type"]
@@ -612,13 +617,19 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
                 started = time.monotonic()
 
                 try:
-                    # If the browser landed on a deep-link work item URL from the previous
-                    # MVA, the MVA input field won't be present. Navigate back to the base
-                    # health page first so _enter_mva can find the input field.
-                    if "/viewWorkItem/" in page.url or "/workItem/" in page.url:
-                        log.info("[CLOSE] %s - returning to base health page before navigation", mva)
+                    if reuse_vehicle_search:
+                        keyword_search = page.locator(COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR)
+                        if await keyword_search.count() != 1:
+                            raise RuntimeError(
+                                "Expected exactly one vehicle-page Keyword Search field after close"
+                            )
+                        await keyword_search.first.wait_for(state="visible", timeout=8_000)
+                        log.info("[CLOSE] %s - reusing current vehicle-page MVA search", mva)
+                    else:
+                        log.info("[CLOSE] %s - opening Compass homepage Vehicle Search", mva)
                         await page.goto(LOGIN_URL, wait_until="domcontentloaded")
                         await page.wait_for_timeout(step_delay_ms or 1000)
+                    reuse_vehicle_search = False
 
                     log.info("[CLOSE] %s - navigating to MVA", mva)
                     navigation_started = time.monotonic()
@@ -642,11 +653,12 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
                     results.append({"mva": mva, "result": RESULT_TIMEOUT, "detail": "navigation"})
                     continue
                 except (PlaywrightTimeoutError, Exception) as exc:
-                    log.error("[CLOSE] %s - navigation failed, skipping: %s", mva, exc)
+                    detail = str(exc)
+                    log.error("[CLOSE] %s - navigation failed; stopping batch: %s", mva, detail)
                     await _capture_playwright_screenshot(page, "nav_failure", mva)
                     await _debug_hold_if_configured(page, args, mva, "navigation failure")
-                    results.append({"mva": mva, "result": RESULT_NAV_FAILED, "detail": ""})
-                    continue
+                    results.append({"mva": mva, "result": RESULT_NAV_FAILED, "detail": detail})
+                    break
 
                 elapsed = time.monotonic() - started
                 close_timeout = float(args.timeout_seconds)
@@ -661,6 +673,7 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
                         if detail:
                             log.info("[CLOSE] %s -   detail: %s", mva, detail)
                         await _capture_playwright_screenshot(page, "closed", mva)
+                        reuse_vehicle_search = True
                     elif result == RESULT_NOT_FOUND:
                         log.warning("[CLOSE] %s - WORK ITEM COUNT: 0 (%s)", mva, complaint_type)
                         await _capture_playwright_screenshot(page, "not_found", mva)

@@ -1,8 +1,8 @@
 {
 	"_comment": "PROJECT-SPECIFIC TEMPLATE (COMMITTED) — copy needed values into config/project.local.json (gitignored) for real credentials and IDs.",
 	
-	"login_url_comment": "Palantir workspace URL for direct WWID entry. Format: https://[company].palantirfoundry.com/workspace/fleet-operations-pwa/health",
-	"login_url": "https://your-company.palantirfoundry.com/workspace/fleet-operations-pwa/health",
+	"login_url_comment": "Palantir tenant homepage URL. Format: https://[company].palantirfoundry.com/",
+	"login_url": "https://your-company.palantirfoundry.com/",
 	
 	"username_comment": "Login email/username for Palantir. Set via env var GLASS_LOGIN_USERNAME or here.",
 	"username": "YOUR_EMAIL@company.com",

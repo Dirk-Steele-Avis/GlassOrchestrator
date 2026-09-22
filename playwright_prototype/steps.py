@@ -37,9 +37,12 @@ COMPASS_VEHICLES_BUTTON_SELECTOR = "[data-test-id='workshop-inline-button']"
 COMPASS_SCAN_TAB_SELECTOR = 'button[role="tab"][data-key="scan"]'
 COMPASS_MVA_VIN_INPUT_SELECTOR = "[data-testid='mva-vin-input']"
 COMPASS_MVA_VIN_SUBMIT_SELECTOR = "[data-testid='mva-vin-submit']"
-COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR = "input[type='search'][placeholder*='Keyword Search']"
+COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR = (
+    "input[type='search'][placeholder='Keyword Search (other fields)']"
+)
 COMPASS_WORKSHOP_OBJECT_TABLE_SELECTOR = "[data-test-id='workshop-object-table']"
 COMPASS_WORKSHOP_OBJECT_TITLE_SELECTOR = "[data-test-id='workshop-object-title']"
+COMPASS_HOME_MVA_INPUT_SELECTOR = 'input[placeholder="MVA number"]'
 COMPASS_OVERVIEW_MVA_VALUE_SELECTOR = (
     "xpath=//div[@role='listitem']"
     "[.//div[contains(@class,'property-display-name')]"
@@ -267,11 +270,24 @@ async def _wait_for_vehicle_details_ready(page: Page, mva: str, timeout_ms: int 
     )
 
 
-async def _enter_mva(page: Page, mva: str) -> None:
+async def _enter_mva(page: Page, mva: str) -> Page:
     """Type an MVA into the strict Workshop search field and submit.
 
     No fallback selector chains are used by design.
     """
+    home_mva_input = page.locator(COMPASS_HOME_MVA_INPUT_SELECTOR)
+    if await home_mva_input.count() == 1 and await home_mva_input.first.is_visible(timeout=2_000):
+        search_button = page.get_by_role("button", name="Search", exact=True)
+        if await search_button.count() != 1:
+            raise RuntimeError("Compass homepage must contain exactly one Search button")
+        await home_mva_input.first.fill(mva)
+        await page.wait_for_timeout(DATA_ENTRY_SUBMIT_DELAY_MS)
+        async with page.context.expect_page(timeout=10_000) as new_page_info:
+            await search_button.first.click(timeout=5_000)
+        vehicle_page = await new_page_info.value
+        await vehicle_page.wait_for_load_state("domcontentloaded")
+        return vehicle_page
+
     # Prefer dedicated MVA/VIN input when present.
     mva_input = page.locator(COMPASS_MVA_VIN_INPUT_SELECTOR).first
     if await mva_input.is_visible(timeout=2_000):
@@ -284,7 +300,7 @@ async def _enter_mva(page: Page, mva: str) -> None:
         submit_btn = page.locator(COMPASS_MVA_VIN_SUBMIT_SELECTOR).first
         await submit_btn.wait_for(state="visible", timeout=5_000)
         await submit_btn.click(timeout=5_000)
-        return
+        return page
 
     # Keyword Search mode (confirmed in user-provided screenshot).
     by_mva = page.get_by_role("button", name=re.compile(r"^Search\s+by\s+MVA$", re.I)).first
@@ -300,6 +316,7 @@ async def _enter_mva(page: Page, mva: str) -> None:
     await keyword.fill(mva)
     await page.wait_for_timeout(DATA_ENTRY_SUBMIT_DELAY_MS)
     await keyword.press("Enter")
+    return page
 
 
 async def _select_vehicle_search_result(page: Page, mva: str) -> None:
@@ -583,7 +600,7 @@ async def navigate_to_mva(page: Page, mva: str) -> Page:
 
         page = await _open_vehicle_search_context(page, mva)
 
-        await _enter_mva(page, mva)
+        page = await _enter_mva(page, mva)
         await _select_vehicle_search_result(page, mva)
         await _wait_for_vehicle_details_ready(page, mva, timeout_ms=10_000)
         await _wait_for_open_work_items_tab_ready(page, mva, timeout_ms=30_000)
