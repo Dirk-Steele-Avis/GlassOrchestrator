@@ -87,11 +87,11 @@ class TestUT1_SuffixRegex:
 
     def test_combined_email_routes_bb_then_apo_and_tbk_to_avis(self):
         descriptions = [
-            ("0918bb", "02000521wstbk"),
-            ("0918bb", "61598106cam"),
-            ("0918bb", "Break"),
-            ("0918bb", "61147446wstbk"),
-            ("0918bb", "60092491ws"),
+            ("0918", "02000521wstbk"),
+            ("0918", "61598106cam"),
+            ("0918", "Break"),
+            ("0918", "61147446wstbk"),
+            ("0918", "60092491ws"),
         ]
 
         manifest, mva_list = parse_descriptions_to_manifest(
@@ -110,15 +110,43 @@ class TestUT1_SuffixRegex:
 
     def test_combined_email_rejects_multiple_break_delimiters(self):
         descriptions = [
-            ("0918bb", "02000521wstbk"),
-            ("0918bb", "break"),
-            ("0918bb", "61147446wstbk"),
-            ("0918bb", "BREAK"),
-            ("0918bb", "60092491ws"),
+            ("0918", "02000521wstbk"),
+            ("0918", "break"),
+            ("0918", "61147446wstbk"),
+            ("0918", "BREAK"),
+            ("0918", "60092491ws"),
         ]
 
         with pytest.raises(ValueError, match="exactly one 'break' delimiter"):
             parse_descriptions_to_manifest(descriptions, datetime(2026, 9, 18))
+
+    def test_combined_email_rejects_non_mmdd_type(self):
+        descriptions = [
+            ("0918bb", "02000521wstbk"),
+            ("0918bb", "break"),
+            ("0918bb", "61147446wstbk"),
+        ]
+
+        with pytest.raises(
+            ValueError,
+            match=r"row 1 has Type='0918bb'; expected MMDD format",
+        ):
+            parse_descriptions_to_manifest(descriptions, datetime(2026, 9, 18))
+
+    def test_combined_email_temporarily_accepts_0922bb_type(self):
+        descriptions = [
+            ("0922bb", "02000521wstbk"),
+            ("0922bb", "break"),
+            ("0922bb", "61147446wstbk"),
+        ]
+
+        manifest, mva_list = parse_descriptions_to_manifest(
+            descriptions, datetime(2026, 9, 22)
+        )
+
+        assert mva_list == ["02000521", "61147446"]
+        assert manifest["02000521"]["Location"] == "BB"
+        assert manifest["61147446"]["Location"] == "APO"
 
     def test_claim_then_turnback_suffix_is_normalized(self):
         """WSctbk is normalized to turnback+listed instead of rejected."""

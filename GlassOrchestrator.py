@@ -839,6 +839,7 @@ def _normalize_scan_text(raw_text: str) -> str:
 
 def _normalize_combined_location_groups(
     descriptions: list[tuple[str, str]],
+    email_date: datetime,
 ) -> list[tuple[str, str]]:
     """Map one Orca ``break`` delimiter to BB-before and APO-after groups."""
     delimiter_indexes = [
@@ -865,10 +866,15 @@ def _normalize_combined_location_groups(
         if index == delimiter_index:
             continue
 
-        type_match = re.fullmatch(r"(\d{4})BB", type_value.strip(), re.IGNORECASE)
+        normalized_type = type_value.strip()
+        if email_date.date() == datetime(2026, 9, 22).date() and normalized_type == "0922bb":
+            normalized_type = "0922"
+
+        type_match = re.fullmatch(r"(\d{4})", normalized_type)
         if not type_match:
             raise ValueError(
-                "Combined Orca email requires every Type value to use MMDDbb format"
+                "Combined Orca email row "
+                f"{index + 1} has Type={type_value!r}; expected MMDD format"
             )
         if date_prefix is None:
             date_prefix = type_match.group(1)
@@ -911,7 +917,7 @@ def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_da
                   Location, Action, Area, Claim#, WorkItem}
         mva_list: list of clean 8-digit MVA strings for the worker (errors excluded)
     """
-    descriptions = _normalize_combined_location_groups(descriptions)
+    descriptions = _normalize_combined_location_groups(descriptions, email_date)
     log.info("Parsing: Processing %d descriptions …", len(descriptions))
 
     manifest: dict[str, dict] = {}
