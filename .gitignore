@@ -69,6 +69,10 @@ outlook/pdfs/
 outlook/invoice_attachments/
 outlook/invoice_review.csv
 outlook/invoice_review.csv.tmp
+outlook/fpo_fieldpo_status.csv
+outlook/fpo_status_review_*.csv
+outlook/*FPO_INVOICE HOLD_Report*.xlsx
+outlook/FPO actions.pdf
 outlook/FieldPO_Closer/attachments/
 outlook/FieldPO_Closer/*.pdf
 outlook/FieldPO_Closer/vins.csv
