@@ -39,17 +39,11 @@ class LoginConfirmPage:
 
     def continue_as_current_user(self) -> None:
         wwid_input = self._page.locator(WWID_INPUT_SELECTOR).first
-        try:
-            wwid_input.wait_for(state="attached", timeout=10_000)
+        wwid_input.wait_for(state="attached", timeout=10_000)
 
-            log.info("LoginConfirm: filling fixed WWID")
-            wwid_input.fill(WWID)
-            if wwid_input.input_value() != WWID:
-                raise RuntimeError(
-                    "LoginConfirm: WWID input did not retain the expected value"
-                )
-        except Exception:
-            if not self._heading_is_visible():
-                log.info("LoginConfirm: dialog cleared during WWID entry")
-                return
-            raise
+        log.info("LoginConfirm: filling fixed WWID")
+        wwid_input.fill(WWID)
+        self._page.get_by_role(
+            "heading", name=HEADING_TEXT, exact=True
+        ).wait_for(state="hidden", timeout=10_000)
+        log.info("LoginConfirm: dialog cleared after WWID entry")

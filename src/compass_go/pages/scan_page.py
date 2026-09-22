@@ -94,6 +94,35 @@ class ScanPage:
         except Exception:
             return False
 
+    def prepare(self) -> None:
+        """Enter the Scan view and clear its first-run gate."""
+        nav = self._scan_nav()
+        if nav is not None and nav.get_attribute("aria-selected") != "true":
+            log.info("ScanPage.prepare: clicking bottom-nav Scan")
+            nav.click()
+
+        begin = self._page.get_by_role(
+            "button", name=BEGIN_SCANNING_NAME, exact=True
+        ).first
+        input_locator = self._page.get_by_label(INPUT_ARIA_LABEL).first
+        timeout_s = _resolve_input_timeout_s()
+        deadline = time.monotonic() + timeout_s
+
+        while time.monotonic() < deadline:
+            if begin.is_visible():
+                log.info("ScanPage.prepare: Begin Scanning visible - clicking")
+                begin.click()
+                self._wait_for_input_visible(input_locator, timeout_s=timeout_s)
+                return
+            if input_locator.is_visible():
+                return
+            time.sleep(OUTCOME_POLL_INTERVAL_S)
+
+        raise TimeoutError(
+            "ScanPage.prepare: neither Begin Scanning nor the MVA/VIN input "
+            f"became visible within {timeout_s}s"
+        )
+
     def submit(self, mva: str) -> "VehicleDetailsPage":
         from .vehicle_details_page import VehicleDetailsPage
 
@@ -102,27 +131,7 @@ class ScanPage:
         # the MVA input is absent until the back arrow is clicked.
         self._dismiss_stale_pre_submit_state()
 
-        # If the app landed on a non-Scan tab (e.g. Off Lot), click the
-        # bottom-nav Scan first so the MVA input can render.
-        nav = self._scan_nav()
-        if nav is not None and nav.get_attribute("aria-selected") != "true":
-            log.info("ScanPage.submit: clicking bottom-nav Scan")
-            try:
-                nav.click()
-            except Exception:
-                log.exception("ScanPage.submit: bottom-nav Scan click failed")
-        else:
-            log.info("ScanPage.submit: bottom-nav Scan already active or absent")
-
-        # Begin Scanning only appears in some first-run states. Check briefly;
-        # if it's not visible within 2s, assume we're already past it.
-        begin = self._page.get_by_role("button", name=BEGIN_SCANNING_NAME)
-        try:
-            begin.wait_for(state="visible", timeout=2_000)
-            log.info("ScanPage.submit: Begin Scanning visible — clicking")
-            begin.click()
-        except Exception:
-            log.info("ScanPage.submit: Begin Scanning not present — skipping")
+        self.prepare()
 
         container = self._page.locator(CONTAINER)
         input_locator = self._page.get_by_label(INPUT_ARIA_LABEL).first

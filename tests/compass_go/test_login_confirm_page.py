@@ -34,13 +34,16 @@ def test_is_displayed_rejects_heading_without_wwid_input():
 def test_continue_as_current_user_fills_fixed_wwid_once():
     page = MagicMock()
     wwid_input = page.locator.return_value.first
-    wwid_input.input_value.return_value = WWID
 
     LoginConfirmPage(page).continue_as_current_user()
 
     page.locator.assert_called_once_with(WWID_INPUT_SELECTOR)
     wwid_input.wait_for.assert_called_once_with(state="attached", timeout=10_000)
     wwid_input.fill.assert_called_once_with("764567")
+    page.get_by_role.return_value.wait_for.assert_called_once_with(
+        state="hidden", timeout=10_000
+    )
+    wwid_input.input_value.assert_not_called()
     page.keyboard.type.assert_not_called()
     page.keyboard.press.assert_not_called()
 
@@ -54,21 +57,19 @@ def test_continue_as_current_user_raises_when_input_is_missing():
         LoginConfirmPage(page).continue_as_current_user()
 
 
-def test_continue_as_current_user_raises_when_value_does_not_match():
+def test_continue_as_current_user_raises_when_dialog_does_not_clear():
     page = MagicMock()
-    page.locator.return_value.first.input_value.return_value = ""
-    page.get_by_role.return_value.is_visible.return_value = True
+    page.get_by_role.return_value.wait_for.side_effect = TimeoutError("still visible")
 
-    with pytest.raises(RuntimeError, match="did not retain"):
+    with pytest.raises(TimeoutError, match="still visible"):
         LoginConfirmPage(page).continue_as_current_user()
 
 
 def test_continue_as_current_user_accepts_dialog_auto_advance():
     page = MagicMock()
     wwid_input = page.locator.return_value.first
-    wwid_input.input_value.side_effect = TimeoutError("detached")
-    page.get_by_role.return_value.is_visible.return_value = False
 
     LoginConfirmPage(page).continue_as_current_user()
 
     wwid_input.fill.assert_called_once_with(WWID)
+    wwid_input.input_value.assert_not_called()

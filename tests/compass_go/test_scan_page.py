@@ -35,6 +35,28 @@ def test_is_displayed_true_when_begin_scanning_visible(page):
     assert ScanPage(page).is_displayed() is True
 
 
+def test_prepare_waits_for_delayed_begin_scanning_and_clicks_it(page, monkeypatch):
+    monkeypatch.setenv("COMPASS_GO_INPUT_TIMEOUT_S", "5")
+    page.set_content("<html><body><div id='root'></div></body></html>")
+    page.evaluate(
+        """() => {
+            setTimeout(() => {
+                document.getElementById('root').innerHTML = `
+                    <button type="button">Begin Scanning</button>`;
+                document.querySelector('button').addEventListener('click', () => {
+                    document.getElementById('root').innerHTML = `
+                        <input aria-label="Or enter MVA/VIN" type="text" />`;
+                    document.title = 'BEGIN_CLICKED';
+                });
+            }, 2200);
+        }"""
+    )
+
+    ScanPage(page).prepare()
+
+    assert page.title() == "BEGIN_CLICKED"
+
+
 def test_submit_clicks_begin_then_fills_input_and_clicks_enter(page):
     page.set_content(SCAN_VEHICLE_HTML)
     page.evaluate(

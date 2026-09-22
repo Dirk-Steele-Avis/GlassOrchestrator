@@ -136,10 +136,14 @@ def test_ensure_signed_in_handles_quick_fix_before_scan(monkeypatch):
     class _Scan:
         def __init__(self):
             self.calls = 0
+            self.prepare_calls = 0
 
         def is_displayed(self):
             self.calls += 1
             return self.calls >= 1 and quick_fix_calls["count"] > 1
+
+        def prepare(self):
+            self.prepare_calls += 1
 
     scan = _Scan()
     flow._scan = scan
@@ -150,6 +154,7 @@ def test_ensure_signed_in_handles_quick_fix_before_scan(monkeypatch):
 
     assert result is scan
     assert quick_fix_calls["count"] >= 2
+    assert scan.prepare_calls == 1
 
 
 def test_handle_quick_fix_raises_when_persistent_after_clear(monkeypatch):
