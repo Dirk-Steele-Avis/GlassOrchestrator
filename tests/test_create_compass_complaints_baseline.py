@@ -62,10 +62,79 @@ def _mock_processing_session(monkeypatch):
 
     monkeypatch.setattr(complaints, "sync_playwright", lambda: manager)
     monkeypatch.setattr(complaints, "_open_home_page", MagicMock())
-    monkeypatch.setattr(complaints, "_click_vehicles", MagicMock(return_value=page))
+    monkeypatch.setattr(complaints, "_open_vehicle_from_home", MagicMock(return_value=page))
     monkeypatch.setattr(complaints, "_wait_for_keyword_search_input", MagicMock())
     monkeypatch.setattr(complaints, "_search_mva", MagicMock())
     return page, context
+
+
+def test_open_home_page_uses_canonical_compass_homepage(monkeypatch):
+    page = MagicMock()
+    page.url = complaints.COMPASS_HOME_URL
+    page.title.return_value = "Compass Homepage"
+    handle_auth = MagicMock()
+    wait_until_ready = MagicMock()
+    monkeypatch.setattr(complaints, "_handle_msft_auth_if_needed", handle_auth)
+    monkeypatch.setattr(complaints, "_wait_for_compass_home_ready", wait_until_ready)
+
+    complaints._open_home_page(page)
+
+    assert complaints.COMPASS_HOME_URL == "https://avisbudget.palantirfoundry.com/"
+    page.goto.assert_called_once_with(complaints.COMPASS_HOME_URL)
+    page.wait_for_load_state.assert_called_once_with("domcontentloaded")
+    handle_auth.assert_called_once_with(page)
+    wait_until_ready.assert_called_once_with(page)
+
+
+def test_wait_for_compass_home_ready_allows_exact_consent_then_requires_controls():
+    page = MagicMock()
+    page.url = "https://compass-home.avisbudget.palantirfoundry.com/"
+    consent_text = MagicMock()
+    consent_text.count.side_effect = [1, 0]
+    read_scope = MagicMock()
+    read_scope.count.return_value = 1
+    write_scope = MagicMock()
+    write_scope.count.return_value = 1
+    page.get_by_text.side_effect = [consent_text, read_scope, write_scope, consent_text]
+    allow_button = MagicMock()
+    allow_button.count.return_value = 1
+    search_button = MagicMock()
+    search_button.count.return_value = 1
+    search_button.first.is_visible.return_value = True
+    page.get_by_role.side_effect = [allow_button, search_button, search_button]
+    mva_input = MagicMock()
+    mva_input.count.side_effect = [0, 1]
+    mva_input.first.is_visible.return_value = True
+    page.locator.return_value = mva_input
+
+    complaints._wait_for_compass_home_ready(page, timeout_s=1)
+
+    allow_button.click.assert_called_once_with(timeout=8_000)
+    page.locator.assert_called_with(complaints.COMPASS_HOME_MVA_INPUT_SELECTOR)
+
+
+def test_open_vehicle_from_home_submits_mva_and_returns_confirmed_popup(monkeypatch):
+    page = MagicMock()
+    mva_input = MagicMock()
+    mva_input.count.return_value = 1
+    page.locator.return_value = mva_input
+    search_button = MagicMock()
+    search_button.count.return_value = 1
+    page.get_by_role.return_value = search_button
+    candidate_page = MagicMock()
+    page.expect_popup.return_value.__enter__.return_value.value = candidate_page
+    select_result = MagicMock()
+    confirm_details = MagicMock()
+    monkeypatch.setattr(complaints, "_select_vehicle_search_result", select_result)
+    monkeypatch.setattr(complaints, "_wait_for_vehicle_details_mva", confirm_details)
+
+    result = complaints._open_vehicle_from_home(page, "059379600")
+
+    assert result is candidate_page
+    mva_input.first.fill.assert_called_once_with("059379600")
+    search_button.first.click.assert_called_once_with(timeout=5_000)
+    select_result.assert_called_once_with(candidate_page, "059379600")
+    confirm_details.assert_called_once_with(candidate_page, "059379600")
 
 
 def test_collect_candidates_filters_today_normalizes_mva_and_damage_type():
