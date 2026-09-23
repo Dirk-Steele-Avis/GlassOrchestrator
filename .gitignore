@@ -64,6 +64,9 @@ outlook/run_log.txt
 # Runtime diagnostics artifacts
 artifacts/
 
+# Generated operator reports
+reports/*.html
+
 # Outlook invoice and receipt downloads
 outlook/pdfs/
 outlook/invoice_attachments/

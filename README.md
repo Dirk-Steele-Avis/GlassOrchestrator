@@ -135,6 +135,23 @@ Intake covers incoming inventory email, spreadsheet updates, FieldPO next-action
 
 Closeout covers close candidate build, work-item closure, and the CompletedInvoices PO/invoice-side path.
 
+### Glass Damage Morning Report
+
+After intake is complete, run:
+
+```bash
+Run-Glass-Morning-Report.cmd
+```
+
+The command reads `GlassClaims` rows whose `Inventory Date` is today, regardless
+of the current sheet filter, saves a dated HTML file under `reports/`, and opens
+it in the default browser. Review the report, click **Copy report for Outlook**,
+and paste it into the body of a manually addressed email. The report workflow is
+read-only and never sends email.
+
+See [Docs/GlassMorningReportRequirements.md](Docs/GlassMorningReportRequirements.md)
+for the data, rendering, and failure contracts.
+
 To review invoices already in Outlook `Inbox/AGN/Invoice/Needs Review` and move
 emails whose exact FieldPO PO status is `APPROVED` to `Processed`, run:
 

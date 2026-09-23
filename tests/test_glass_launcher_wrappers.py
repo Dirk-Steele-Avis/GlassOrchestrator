@@ -30,3 +30,11 @@ def test_shared_bootstrap_exists() -> None:
     content = _read("Run-GlassBootstrap.cmd")
     assert "Installing Playwright browsers" in content
     assert "call %*" in content
+
+
+def test_morning_report_wrapper_generates_report_without_emailing() -> None:
+    content = _read("Run-Glass-Morning-Report.cmd")
+    assert "glass_morning_report.py" in content
+    assert "Run-GlassBootstrap.cmd" in content
+    assert "Copy report for Outlook" in content
+    assert "send" not in content.lower()
