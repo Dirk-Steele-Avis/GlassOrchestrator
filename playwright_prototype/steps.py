@@ -327,21 +327,25 @@ async def _select_vehicle_search_result(page: Page, mva: str) -> None:
     table = page.locator(COMPASS_WORKSHOP_OBJECT_TABLE_SELECTOR).first
     await table.wait_for(state="visible", timeout=20_000)
 
-    title = table.locator(COMPASS_WORKSHOP_OBJECT_TITLE_SELECTOR).filter(
+    titles = table.locator(COMPASS_WORKSHOP_OBJECT_TITLE_SELECTOR).filter(
         has_text=re.compile(rf"^\s*{re.escape(mva)}\s*$", re.I)
-    ).first
+    )
+    try:
+        await titles.first.wait_for(state="visible", timeout=20_000)
+    except Exception as exc:
+        result_count = await titles.count()
+        raise RuntimeError(
+            f"Expected one visible exact search result for MVA {mva}, found {result_count}"
+        ) from exc
 
-    if await title.count() == 0:
-        result_row = page.locator(
-            f"//div[contains(., '{mva}') and ancestor::*[contains(., 'Searched Vehicles List')]]"
-        ).first
-        await result_row.wait_for(state="visible", timeout=20_000)
-        await page.wait_for_timeout(UI_SETTLE_DELAY_MS)
-        await result_row.click(timeout=8_000)
-    else:
-        await title.wait_for(state="visible", timeout=20_000)
-        await page.wait_for_timeout(UI_SETTLE_DELAY_MS)
-        await title.click(timeout=8_000)
+    result_count = await titles.count()
+    if result_count != 1:
+        raise RuntimeError(
+            f"Expected one visible exact search result for MVA {mva}, found {result_count}"
+        )
+
+    await page.wait_for_timeout(UI_SETTLE_DELAY_MS)
+    await titles.first.click(timeout=8_000)
     await page.wait_for_timeout(UI_SETTLE_DELAY_MS)
 
 
