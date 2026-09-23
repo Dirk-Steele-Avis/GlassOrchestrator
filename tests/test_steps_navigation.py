@@ -73,6 +73,65 @@ def test_compass_home_vehicle_search_rejects_ambiguous_search_button():
     mva_input.fill.assert_not_called()
 
 
+def _make_vehicle_result_page(result_count=1, wait_error=None):
+    page = MagicMock()
+    add_button = MagicMock()
+    add_button.is_visible = AsyncMock(return_value=False)
+    add_button.first = add_button
+    page.get_by_role.return_value = add_button
+
+    table = MagicMock()
+    table.first = table
+    table.wait_for = AsyncMock()
+    titles = MagicMock()
+    titles.first = titles
+    titles.wait_for = AsyncMock(side_effect=wait_error)
+    titles.count = AsyncMock(return_value=result_count)
+    titles.click = AsyncMock()
+    table.locator.return_value.filter.return_value = titles
+    page.locator.return_value = table
+    page.wait_for_timeout = AsyncMock()
+    return page, table, titles
+
+
+def test_select_vehicle_search_result_waits_for_exact_table_title():
+    from playwright_prototype.steps import (
+        COMPASS_WORKSHOP_OBJECT_TABLE_SELECTOR,
+        UI_SETTLE_DELAY_MS,
+        _select_vehicle_search_result,
+    )
+
+    page, table, titles = _make_vehicle_result_page()
+
+    asyncio.run(_select_vehicle_search_result(page, "059157744"))
+
+    page.locator.assert_called_once_with(COMPASS_WORKSHOP_OBJECT_TABLE_SELECTOR)
+    table.wait_for.assert_awaited_once_with(state="visible", timeout=20_000)
+    titles.wait_for.assert_awaited_once_with(state="visible", timeout=20_000)
+    titles.click.assert_awaited_once_with(timeout=8_000)
+    assert page.wait_for_timeout.await_args_list == [
+        ((UI_SETTLE_DELAY_MS,), {}),
+        ((UI_SETTLE_DELAY_MS,), {}),
+    ]
+
+
+def test_select_vehicle_search_result_reports_missing_exact_title():
+    from playwright_prototype.steps import _select_vehicle_search_result
+
+    page, _, titles = _make_vehicle_result_page(
+        result_count=0,
+        wait_error=TimeoutError("result did not render"),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Expected one visible exact search result for MVA 059157744, found 0",
+    ):
+        asyncio.run(_select_vehicle_search_result(page, "059157744"))
+
+    titles.click.assert_not_awaited()
+
+
 def _make_open_work_items_page(*badge_values):
     page = MagicMock()
     tabs = MagicMock()
