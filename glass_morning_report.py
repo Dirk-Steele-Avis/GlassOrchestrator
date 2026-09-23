@@ -26,10 +26,11 @@ CONFIG_PATHS = (
     ROOT / "orchestrator_config.local.json",
     ROOT / "config" / "config.local.json",
 )
-HEADERS = (
-    "Inventory Date", "Original Date", "MVA", "Next Action", "VIN", "Make",
-    "Location", "Action", "Area", "Claim#", "WorkItemCreated",
+REQUIRED_HEADERS = (
+    "Inventory Date", "Original Date", "MVA", "VIN", "Make",
+    "Location", "Action", "Area", "Claim#",
 )
+OPTIONAL_HEADERS = ("Next Action", "WorkItemCreated")
 HOME_LOCATIONS = frozenset({"BB", "APO"})
 SECTION_ORDER = (
     "AGN (Replacements)", "AGN Repair", "Super Glass (Repairs)",
@@ -109,16 +110,23 @@ def _parse_action(value: str) -> tuple[str, str]:
 
 
 def build_rows(values: list[list[str]], *, today: date) -> list[ReportRow]:
-    """Build report rows whose Inventory Date equals today."""
+    """Build report rows whose Inventory Date equals today.
+
+    Next Action and WorkItemCreated are optional enrichment columns; a sheet
+    built strictly from the documented canonical schema still generates a
+    report, just without that enrichment.
+    """
     if not values:
         raise RuntimeError("GlassClaims is empty; expected a header row")
-    missing = [name for name in HEADERS if name not in values[0]]
+    header = values[0]
+    missing = [name for name in REQUIRED_HEADERS if name not in header]
     if missing:
         raise RuntimeError(f"GlassClaims is missing required column(s): {', '.join(missing)}")
-    indexes = {name: values[0].index(name) for name in HEADERS}
+    indexes = {name: header.index(name) for name in REQUIRED_HEADERS}
+    optional_indexes = {name: header.index(name) for name in OPTIONAL_HEADERS if name in header}
     rows: list[ReportRow] = []
     for source in values[1:]:
-        cells = source + [""] * max(0, len(values[0]) - len(source))
+        cells = source + [""] * max(0, len(header) - len(source))
         inventory = cells[indexes["Inventory Date"]].strip()
         if _parse_date(inventory) != today:
             continue
@@ -128,16 +136,19 @@ def build_rows(values: list[list[str]], *, today: date) -> list[ReportRow]:
         original = cells[indexes["Original Date"]].strip()
         original_key = _parse_date(original)
         verb, vendor = _parse_action(cells[indexes["Action"]])
+        next_action_idx = optional_indexes.get("Next Action")
+        work_item_idx = optional_indexes.get("WorkItemCreated")
         rows.append(ReportRow(
             inventory_date=_short_date(inventory),
             original_date=_short_date(original), original_key=original_key,
             age=max(0, (today - original_key).days) if original_key else None,
             mva=cells[indexes["MVA"]].strip(),
-            next_action=cells[indexes["Next Action"]].strip(), vin=vin,
+            next_action=cells[next_action_idx].strip() if next_action_idx is not None else "",
+            vin=vin,
             make=cells[indexes["Make"]].strip(),
             location=cells[indexes["Location"]].strip(), verb=verb, vendor=vendor,
             area=cells[indexes["Area"]].strip(), claim=cells[indexes["Claim#"]].strip(),
-            work_item=cells[indexes["WorkItemCreated"]].strip(),
+            work_item=cells[work_item_idx].strip() if work_item_idx is not None else "",
         ))
     return rows
 
@@ -223,7 +234,10 @@ def render_report(rows: list[ReportRow], *, today: date) -> str:
     """Render a standalone preview whose report table can be pasted into Outlook."""
     sections = build_sections(rows)
     photo = [row for row in rows if row.needs_photo or not row.verb]
-    stale = sorted([row for row in rows if row.age is not None and row.age >= STALE_DAYS], key=lambda row: row.age or 0, reverse=True)
+    stale = sorted(
+        [row for row in rows if row.vendor.upper() == "AVIS" and row.age is not None and row.age >= STALE_DAYS],
+        key=lambda row: row.age or 0, reverse=True,
+    )
     missing = [row for row in rows if "missing" in row.claim.lower()]
     fresh = [row for row in rows if row.original_key == today]
 

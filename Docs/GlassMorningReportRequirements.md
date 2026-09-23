@@ -17,9 +17,12 @@ paste into an Outlook email. It does not create or send an email.
 ## Data Contract
 
 - The source is the configured Google workbook and `GlassClaims` tab.
-- Required headers are `Inventory Date`, `Original Date`, `MVA`, `Next Action`,
-  `VIN`, `Make`, `Location`, `Action`, `Area`, `Claim#`, and
-  `WorkItemCreated`.
+- Required headers, matching the pipeline's canonical Google Sheet Contract,
+  are `Inventory Date`, `Original Date`, `MVA`, `VIN`, `Make`, `Location`,
+  `Action`, `Area`, and `Claim#`.
+- `Next Action` and `WorkItemCreated` are optional enrichment columns. When
+  present, their values populate the Next Action and Work item display
+  columns; when absent, the report still generates with those fields blank.
 - A row is included only when its `Inventory Date` equals the current local
   date. Sheet filters and manually hidden rows do not control eligibility.
 - Rows without a VIN are excluded so blank and summary rows do not appear.
@@ -41,8 +44,8 @@ paste into an Outlook email. It does not create or send an email.
 - Sections appear in this order when nonempty: AGN (Replacements), AGN Repair,
   Super Glass (Repairs), AVIS (TBK), Local Market, Other.
 - Rows are ordered oldest first within each section.
-- The attention summary reports photo/action issues, units open at least 14
-  days, missing claims, and units new today.
+- The attention summary reports photo/action issues, AVIS units open at least
+  14 days, missing claims, and units new today.
 - The report shall HTML-escape all values read from the sheet.
 - Report generation shall never send email automatically.
 

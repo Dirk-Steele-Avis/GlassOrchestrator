@@ -23,9 +23,36 @@ def test_build_rows_includes_only_today_and_excludes_blank_vin_rows() -> None:
     assert rows[0].age == 3
 
 
-def test_build_rows_requires_live_report_headers() -> None:
-    with pytest.raises(RuntimeError, match="Next Action, WorkItemCreated"):
-        build_rows([["Inventory Date", "Original Date", "MVA", "VIN", "Make", "Location", "Action", "Area", "Claim#"]], today=date(2026, 9, 23))
+def test_build_rows_requires_canonical_headers_but_not_optional_ones() -> None:
+    with pytest.raises(RuntimeError, match="Claim#"):
+        build_rows([["Inventory Date", "Original Date", "MVA", "VIN", "Make", "Location", "Action", "Area"]], today=date(2026, 9, 23))
+
+
+def test_build_rows_generates_report_without_optional_enrichment_columns() -> None:
+    canonical_headers = [
+        "Inventory Date", "Original Date", "MVA", "VIN", "Make",
+        "Location", "Action", "Area", "Claim#",
+    ]
+    values = [
+        canonical_headers,
+        ["09/23/2026", "09/23/2026", "11111111", "VIN1", "Toyota", "BB", "Replace(AGN)", "Windshield", "Missing"],
+    ]
+    rows = build_rows(values, today=date(2026, 9, 23))
+    assert len(rows) == 1
+    assert rows[0].next_action == ""
+    assert rows[0].work_item == ""
+
+
+def test_stale_metric_is_scoped_to_avis_rows() -> None:
+    values = [
+        HEADERS,
+        ["09/23/2026", "08/30/2026", "11111111", "FPO1", "VIN1", "Toyota", "BB", "Replace(AVIS)", "Windshield", "Missing", ""],
+        ["09/23/2026", "08/30/2026", "22222222", "FPO2", "VIN2", "Honda", "BB", "Replace(AGN)", "Windshield", "Missing", ""],
+    ]
+    output = render_report(build_rows(values, today=date(2026, 9, 23)), today=date(2026, 9, 23))
+    metric_cell = output.split("Avis units 14+ days old</div>")[1].split("</div></td>")[0]
+    assert "MVA 11111111" in metric_cell
+    assert "MVA 22222222" not in metric_cell
 
 
 def test_sections_follow_approved_order_and_oldest_first() -> None:
