@@ -129,3 +129,43 @@ def test_start_attempt_rejects_unknown_message(tmp_path):
 
     with pytest.raises(KeyError, match="Unknown invoice message ID"):
         repository.start_attempt("missing", "run-1", Stage.COMPASS)
+
+
+def test_review_history_returns_latest_failed_or_blocked_attempt(tmp_path):
+    repository = InvoiceRepository(tmp_path / "workflow.sqlite3")
+    repository.initialize()
+    repository.upsert_invoice(_invoice("message-1", "100"))
+    first_attempt = repository.start_attempt("message-1", "run-1", Stage.IDENTITY)
+    repository.finish_attempt(first_attempt, StageStatus.BLOCKED, "old reason")
+    latest_attempt = repository.start_attempt("message-1", "run-2", Stage.IDENTITY)
+    repository.finish_attempt(latest_attempt, StageStatus.FAILED, "current reason")
+
+    history = repository.get_review_history("message-1")
+
+    assert history is not None
+    assert history.stage == "identity"
+    assert history.status is StageStatus.FAILED
+    assert history.detail == "current reason"
+
+
+def test_review_history_uses_exact_record_last_error_without_attempt(tmp_path):
+    repository = InvoiceRepository(tmp_path / "workflow.sqlite3")
+    repository.initialize()
+    repository.upsert_invoice(_invoice("message-1", "100"))
+    repository.upsert_invoice(_invoice("message-2", "100"))
+    repository.block_duplicate_invoice_numbers()
+
+    history = repository.get_review_history("message-1")
+
+    assert history is not None
+    assert history.stage == "identity"
+    assert history.status is StageStatus.BLOCKED
+    assert history.detail == "Duplicate invoice number: 100"
+
+
+def test_review_history_missing_database_does_not_create_it(tmp_path):
+    database_path = tmp_path / "workflow.sqlite3"
+    repository = InvoiceRepository(database_path)
+
+    assert repository.get_review_history("message-1") is None
+    assert not database_path.exists()

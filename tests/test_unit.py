@@ -85,6 +85,87 @@ class TestUT1_SuffixRegex:
         assert m.group(3).lower() == "tbk"
         assert m.group(4) == ""
 
+    def test_combined_email_routes_bb_then_apo_and_tbk_to_avis(self):
+        descriptions = [
+            ("0918", "02000521wstbk"),
+            ("0918", "61598106cam"),
+            ("0918", "Break"),
+            ("0918", "61147446wstbk"),
+            ("0918", "60092491ws"),
+        ]
+
+        manifest, mva_list = parse_descriptions_to_manifest(
+            descriptions, datetime(2026, 9, 18)
+        )
+
+        assert mva_list == ["02000521", "61598106", "61147446", "60092491"]
+        assert manifest["02000521"]["Location"] == "BB"
+        assert manifest["61598106"]["Location"] == "BB"
+        assert manifest["61147446"]["Location"] == "APO"
+        assert manifest["60092491"]["Location"] == "APO"
+        assert manifest["02000521"]["Action"] == "Turnback"
+        assert manifest["02000521"]["_FORCE_AVIS_ORDER"] is True
+        assert manifest["61147446"]["Action"] == "Turnback"
+        assert manifest["61147446"]["_FORCE_AVIS_ORDER"] is True
+
+    def test_combined_email_rejects_multiple_break_delimiters(self):
+        descriptions = [
+            ("0918", "02000521wstbk"),
+            ("0918", "break"),
+            ("0918", "61147446wstbk"),
+            ("0918", "BREAK"),
+            ("0918", "60092491ws"),
+        ]
+
+        with pytest.raises(ValueError, match="exactly one 'break' delimiter"):
+            parse_descriptions_to_manifest(descriptions, datetime(2026, 9, 18))
+
+    def test_combined_email_rejects_non_mmdd_type(self):
+        descriptions = [
+            ("0918bb", "02000521wstbk"),
+            ("0918bb", "break"),
+            ("0918bb", "61147446wstbk"),
+        ]
+
+        with pytest.raises(
+            ValueError,
+            match=r"row 1 has Type='0918bb'; expected MMDD format",
+        ):
+            parse_descriptions_to_manifest(descriptions, datetime(2026, 9, 18))
+
+    def test_combined_email_temporarily_accepts_0922bb_type(self):
+        descriptions = [
+            ("0922bb", "02000521wstbk"),
+            ("0922bb", "break"),
+            ("0922bb", "61147446wstbk"),
+        ]
+
+        manifest, mva_list = parse_descriptions_to_manifest(
+            descriptions, datetime(2026, 9, 22)
+        )
+
+        assert mva_list == ["02000521", "61147446"]
+        assert manifest["02000521"]["Location"] == "BB"
+        assert manifest["61147446"]["Location"] == "APO"
+
+    def test_claim_then_turnback_suffix_is_normalized(self):
+        """WSctbk is normalized to turnback+listed instead of rejected."""
+        manifest, mva_list = parse_descriptions_to_manifest(
+            [("0910APO", "62155822WSctbk")], datetime(2026, 9, 10)
+        )
+        assert mva_list == ["62155822"]
+        assert manifest["62155822"]["Action"] == "Turnback"
+        assert manifest["62155822"]["Claim#"] == "Listed"
+
+    def test_claim_then_repair_suffix_is_normalized(self):
+        """WScr is normalized to repair+listed instead of rejected."""
+        manifest, mva_list = parse_descriptions_to_manifest(
+            [("0910APO", "59787534WScr")], datetime(2026, 9, 10)
+        )
+        assert mva_list == ["59787534"]
+        assert manifest["59787534"]["Action"] == "Repair"
+        assert manifest["59787534"]["Claim#"] == "Listed"
+
     def test_lowercase_scan_matches_case_insensitively(self):
         """59193750wsc → parser accepts scanner-lowercase area/suffix values."""
         manifest, mva_list = parse_descriptions_to_manifest(

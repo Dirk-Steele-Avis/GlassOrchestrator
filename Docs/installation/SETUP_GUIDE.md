@@ -96,6 +96,15 @@ This script will:
 .\Run-GlassOrchestrator.cmd
 ```
 
+For the simplified daily Glass flow, use these commands instead:
+
+```powershell
+.\Run-Glass-Intake.cmd
+.\Run-Glass-Closeout.cmd
+```
+
+`Run-GlassOrchestrator.cmd` and the older component launchers remain in the repository for reference and troubleshooting, but they are deprecated for normal daily use.
+
 ## Troubleshooting
 
 ### `py` not recognized

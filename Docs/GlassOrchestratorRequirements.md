@@ -20,7 +20,7 @@ GlassOrchestrator processes vehicle-glass scan exports from Gmail, retrieves veh
 The permanent scan format is:
 
 ```text
-<MVA><AREA>[r|war][c][ OEM]
+<MVA><AREA>[r|war|tbk][c][ OEM]
 ```
 
 - `MVA` is exactly eight digits.
@@ -29,6 +29,7 @@ The permanent scan format is:
 - Configured `legacy_area_aliases` temporarily normalize older orientation-first codes to canonical directional codes.
 - `r` means Repair when valid for the area.
 - `war` means Warranty.
+- `tbk` means Turnback and shall route the glass order to AVIS.
 - `c` means the claim is Listed.
 - ` OEM` is an optional terminal OEM marker preceded by one space.
 - Matching is case-insensitive.
@@ -46,6 +47,15 @@ Examples:
 | `62155855LFD OEM` | AVIS OEM left-front-door replacement, claim Missing |
 
 Bare OEM scans such as `62155855OEM` are invalid because they do not identify the glass area. Forms without the separating space, including `62155855WSOEM`, are also invalid.
+
+## Combined Location Email
+
+1. A single Orca export may contain both BB and APO scans.
+2. The Description value `break`, matched case-insensitively after trimming, shall delimit the two groups.
+3. Scans before `break` shall use location BB; scans after `break` shall use location APO.
+4. The delimiter shall not be processed as a scan.
+5. A combined export shall contain exactly one delimiter with at least one entry on each side.
+6. Every row in a combined export shall use the same `MMDD` Type value. A malformed combined export shall abort parsing with a precise error.
 
 ## OEM Requirements
 

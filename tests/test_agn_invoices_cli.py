@@ -1826,7 +1826,7 @@ def test_return_to_fieldpo_home_uses_verified_icon(monkeypatch):
     page.wait_for_url.assert_called_once_with("**/fieldpo/dashboard**", timeout=30000)
 
 
-def test_dry_run_logs_would_close_without_side_effects(monkeypatch):
+def test_dry_run_logs_would_close_without_side_effects(monkeypatch, capsys):
     logged = []
     invoice_date = date.today() - timedelta(days=14)
     monkeypatch.setattr(
@@ -1854,6 +1854,7 @@ def test_dry_run_logs_would_close_without_side_effects(monkeypatch):
     assert decisions[0]["decision"] == "WOULD_CLOSE"
     assert decisions[0]["reasons"] == []
     assert logged == decisions
+    assert "PO approval gates passed (dry run; no approval performed)." in capsys.readouterr().out
 
 
 def test_dry_run_logs_missing_pdf_as_skipped(monkeypatch):

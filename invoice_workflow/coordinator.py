@@ -12,9 +12,9 @@ from invoice_workflow.contracts import (
     Stage,
     StageStatus,
 )
+from invoice_workflow.failure_codes import classify_failure
 from invoice_workflow.run_logging import WorkflowRunLogger
 from invoice_workflow.store import InvoiceRepository
-
 
 _INVOICE_NUMBER_PATTERN = re.compile(r"\bInvoice\s+#(\d+)\b", re.IGNORECASE)
 
@@ -78,9 +78,7 @@ class CompletedInvoicesCoordinator:
             self._repository.list_terminal_identity_message_ids()
         )
         excluded_message_ids = (
-            frozenset()
-            if invoice_number is not None
-            else terminal_message_ids
+            frozenset() if invoice_number is not None else terminal_message_ids
         )
         scan = self._outlook_source.scan_parent_invoices(
             invoice_number=invoice_number,
@@ -98,7 +96,9 @@ class CompletedInvoicesCoordinator:
         )
         target_not_found = invoice_number is not None and not scan.invoices
         if target_not_found:
-            detail = f"Requested invoice {invoice_number} was not found in capture results"
+            detail = (
+                f"Requested invoice {invoice_number} was not found in capture results"
+            )
             code = "INVOICE_NOT_FOUND"
             failures.append(
                 FailureRecord(
@@ -116,7 +116,7 @@ class CompletedInvoicesCoordinator:
             )
         for failure in scan.failures:
             invoice_from_subject = _invoice_number_from_subject(failure.subject)
-            code = _classify_failure("capture", failure.detail)
+            code = classify_failure("capture", failure.detail)
             failures.append(
                 FailureRecord(
                     run_id=self._run_id,
@@ -331,7 +331,7 @@ class CompletedInvoicesCoordinator:
                     )
             else:
                 identities_blocked += 1
-                code = _classify_failure(str(Stage.IDENTITY), result.detail)
+                code = classify_failure(str(Stage.IDENTITY), result.detail)
                 failures.append(
                     FailureRecord(
                         run_id=self._run_id,
@@ -553,25 +553,4 @@ def _invoice_number_from_subject(subject: str) -> str:
 
 
 def _classify_failure(stage: str, detail: str) -> str:
-    normalized = detail.lower()
-    if "subject/pdf po mismatch" in normalized:
-        return "PO_SUBJECT_PDF_MISMATCH"
-    if "subject does not contain one exact po number" in normalized:
-        return "PO_FORMAT_INVALID"
-    if "pdf does not contain one exact po number" in normalized:
-        return "PO_FORMAT_INVALID"
-    if "expected exactly one pdf po number" in normalized:
-        return "PO_FORMAT_INVALID"
-    if "invalid exact po number" in normalized:
-        return "PO_FORMAT_INVALID"
-    if "vin mismatch" in normalized:
-        return "VIN_MISMATCH"
-    if "authorized amount mismatch" in normalized:
-        return "AMOUNT_MISMATCH"
-    if "mva mismatch" in normalized:
-        return "MVA_MISMATCH"
-    if stage == "capture":
-        return "CAPTURE_FAILED"
-    if stage == str(Stage.OUTLOOK):
-        return "OUTLOOK_FAILED"
-    return "IDENTITY_FAILED"
+    return classify_failure(stage, detail)

@@ -39,6 +39,9 @@ except ModuleNotFoundError as exc:  # pragma: no cover
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 from config.config_loader import get_config
+from playwright_prototype.config import LOGIN_URL
+from playwright_prototype.session import COMPASS_HOME_CONSENT_TEXT, COMPASS_HOME_MVA_INPUT_SELECTOR
+from src.compass_go.pages.login_confirm_page import LoginConfirmPage
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -49,9 +52,8 @@ ORCHESTRATOR_LOCAL_CONFIG_PATH = BASE_DIR / "orchestrator_config.local.json"
 SHARED_LOCAL_CONFIG_PATH = BASE_DIR / "config" / "config.local.json"
 
 LOG_FILE = BASE_DIR / "EnsureGlassWorkItems.log"
-COMPASS_HOME_URL = "https://avisbudget.palantirfoundry.com/workspace/module/view/latest/ri.workshop.main.module.d62ba12c-018c-41c1-8214-0749f6591b30"
+COMPASS_HOME_URL = LOGIN_URL
 COMPASS_GO_BASE_URL = "https://go.avisbudget.palantirfoundry.com"
-COMPASS_VEHICLES_BUTTON_SELECTOR = "[data-test-id='workshop-inline-button']"
 COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR = "input[type='search'][placeholder='Keyword Search (other fields)']"
 COMPASS_WORKSHOP_OBJECT_TABLE_SELECTOR = "[data-test-id='workshop-object-table']"
 COMPASS_WORKSHOP_OBJECT_TITLE_SELECTOR = "[data-test-id='workshop-object-title']"
@@ -184,8 +186,9 @@ def _runtime_compass_api_base_url(runtime_config: dict[str, Any]) -> str:
 
 def _prime_compass_go_scan_page(page, mva: str) -> None:
     try:
-        if "Confirm User" in (page.locator("body").inner_text(timeout=2000) or ""):
-            page.locator('input[autocomplete="one-time-code"]').first.fill("764567")
+        login_confirm = LoginConfirmPage(page)
+        if login_confirm.is_displayed():
+            login_confirm.continue_as_current_user()
             page.wait_for_timeout(3500)
 
         try:
@@ -602,12 +605,40 @@ def _has_open_glass_work_item(page) -> tuple[bool, str]:
         return False, f"work_item_check_failed: {exc}"
 
 
+def _wait_for_compass_home_ready(page, timeout_s: int = 30) -> None:
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        consent_text = page.get_by_text(COMPASS_HOME_CONSENT_TEXT, exact=True)
+        consent_count = consent_text.count()
+        if consent_count > 1:
+            raise RuntimeError("Expected exactly one Compass Homepage consent message")
+        if consent_count == 1:
+            for scope_text in ("Read Ontology data", "Write Ontology data"):
+                if page.get_by_text(scope_text, exact=True).count() != 1:
+                    raise RuntimeError(f"Compass Homepage consent is missing exact scope: {scope_text}")
+            allow_button = page.get_by_role("button", name="Allow", exact=True)
+            if allow_button.count() != 1:
+                raise RuntimeError("Expected exactly one Allow button on Compass Homepage consent")
+            log.info("Compass Homepage ontology consent detected; clicking Allow")
+            allow_button.click(timeout=8_000)
+
+        mva_input = page.locator(COMPASS_HOME_MVA_INPUT_SELECTOR)
+        search_button = page.get_by_role("button", name="Search", exact=True)
+        if mva_input.count() == 1 and search_button.count() == 1:
+            if mva_input.first.is_visible() and search_button.first.is_visible():
+                log.info("Compass Homepage ready: url=%s", page.url)
+                return
+        page.wait_for_timeout(500)
+
+    raise RuntimeError(f"Compass Homepage did not become ready within {timeout_s}s: url={page.url}")
+
+
 def _open_home_page(page) -> None:
     page.goto(COMPASS_HOME_URL)
     page.wait_for_load_state("domcontentloaded")
     _handle_msft_auth_if_needed(page)
     log.info("Compass page after goto: url=%s title=%s", page.url, page.title())
-    page.wait_for_timeout(SETTLE_WAIT_MS)
+    _wait_for_compass_home_ready(page)
 
 
 def _credentials() -> tuple[str, str, str]:
@@ -691,17 +722,22 @@ def _handle_msft_auth_if_needed(page) -> None:
         log.warning("Microsoft sign-in automation did not complete cleanly: %s", exc)
 
 
-def _click_vehicles(page):
-    vehicles_button = page.locator(COMPASS_VEHICLES_BUTTON_SELECTOR).filter(has_text="Vehicles").first
-    vehicles_button.wait_for(state="visible", timeout=10_000)
+def _open_vehicle_from_home(page, mva: str):
+    mva_input = page.locator(COMPASS_HOME_MVA_INPUT_SELECTOR)
+    if mva_input.count() != 1:
+        raise RuntimeError("Compass Homepage must contain exactly one MVA field")
+    search_button = page.get_by_role("button", name="Search", exact=True)
+    if search_button.count() != 1:
+        raise RuntimeError("Compass Homepage must contain exactly one Search button")
+
+    mva_input.first.fill(mva)
     with page.expect_popup(timeout=10_000) as popup_info:
-        vehicles_button.click()
+        search_button.first.click(timeout=5_000)
     candidate_page = popup_info.value
     candidate_page.wait_for_load_state("domcontentloaded")
-    log.info("Compass Vehicles click opened a popup/tab: %s", candidate_page.url)
-    candidate_page.wait_for_timeout(700)
-    candidate_page.wait_for_timeout(SETTLE_WAIT_MS)
-    _wait_for_keyword_search_input(candidate_page, timeout_s=20)
+    log.info("Compass Homepage MVA search opened vehicle tab: %s", candidate_page.url)
+    _select_vehicle_search_result(candidate_page, mva)
+    _wait_for_vehicle_details_mva(candidate_page, mva)
     return candidate_page
 
 
@@ -900,10 +936,21 @@ def _set_glass_damage_subcategory(scope, value: str = "Glass Damage") -> None:
         raise RuntimeError(f"Could not set Sub-Category to {value}")
 
 
-def _complaint_fields_for_area(area: str | None) -> tuple[str, str]:
-    if (area or "").strip().casefold() in {"rvm", "rear view mirror"}:
+def _complaint_fields_for_area(
+    area: str | None,
+    damage_expectation: str | None,
+) -> tuple[str, str]:
+    normalized_area = (area or "").strip().casefold()
+    if normalized_area in {"rvm", "rear view mirror"}:
         return "Mechanical Issue", "RVM"
-    return "Glass Damage", "Glass Damage"
+    if normalized_area.startswith("windshield"):
+        subcategory = _subcategory_for_damage_expectation(damage_expectation)
+        if subcategory is None:
+            raise RuntimeError("Windshield complaint requires a valid repair or replacement Action")
+        return subcategory, "Glass Damage"
+    if normalized_area:
+        return "Side/Rear Window Damage", "Glass Damage"
+    raise RuntimeError("Glass complaint requires an Area")
 
 
 def _create_complaint_only(
@@ -941,7 +988,7 @@ def _create_complaint_only(
         _set_glass_damage_category(scope)
         page.wait_for_timeout(600)
 
-        subcategory, description = _complaint_fields_for_area(area)
+        subcategory, description = _complaint_fields_for_area(area, damage_expectation)
 
         _set_glass_damage_subcategory(scope, subcategory)
         page.wait_for_timeout(600)
@@ -953,13 +1000,13 @@ def _create_complaint_only(
         submit = scope.locator("a[role='button']", has_text="Submit Complaint").first
         submit.wait_for(state="visible", timeout=10_000)
         log.info(
-            "Complaint form state before submit: drivable_yes=%s category_glass=%s subcategory_glass=%s",
+            "Complaint form state before submit: drivable_yes=%s category_glass=%s subcategory_selected=%s",
             scope.locator("input[type='radio'][value='Yes']").first.is_checked(),
             _complaint_form_region(scope, "Category")
             .locator("input[type='radio'][value='Glass Damage']")
             .first.is_checked(),
             _complaint_form_region(scope, "Sub-Category")
-            .locator("input[type='radio'][value='Glass Damage']")
+            .locator(f"input[type='radio'][value='{subcategory}']")
             .first.is_checked(),
         )
         log.info("MVA %s -> chosen sub-category=%s description=%s", mva, subcategory, description)
@@ -1087,6 +1134,7 @@ def _collect_candidates(values: list[list[str]], run_day: date) -> tuple[list[Ca
     mva_col = _find_col(headers, "MVA")
     damage_col = _find_col(
         headers,
+        "Action",
         "DamageType",
         "Damage Type",
         "Repair/Replace",
@@ -1187,8 +1235,7 @@ def _check_existing_open_glass_complaint(mva: str) -> tuple[bool, str]:
         try:
             page = context.new_page()
             _open_home_page(page)
-            page = _click_vehicles(page)
-            _search_mva(page, mva)
+            page = _open_vehicle_from_home(page, mva)
             result = _inspect_glass_complaint(page, mva)
 
             if result.exists:
@@ -1232,8 +1279,7 @@ def _create_glass_complaint_and_work_item(mva: str) -> tuple[bool, str]:
         try:
             page = context.new_page()
             _open_home_page(page)
-            page = _click_vehicles(page)
-            _search_mva(page, mva)
+            page = _open_vehicle_from_home(page, mva)
             return _create_complaint_only(page, mva, damage_expectation=None)
         except Exception as exc:
             return False, f"create_flow_failed: {exc}"
@@ -1264,20 +1310,17 @@ def _process_candidates(
         try:
             page = context.new_page()
             _open_home_page(page)
-            page = _click_vehicles(page)
-            log.info("Compass processing session initialized once; reusing keyword search between MVAs")
+            vehicle_search_initialized = False
+            log.info("Compass Homepage initialized; reusing vehicle-page keyword search after first MVA")
 
             for item in candidates:
                 try:
-                    # Keep processing in the same Vehicle Search context between MVAs.
-                    try:
+                    if not vehicle_search_initialized:
+                        page = _open_vehicle_from_home(page, item.mva)
+                        vehicle_search_initialized = True
+                    else:
                         _wait_for_keyword_search_input(page, timeout_s=6)
-                    except Exception:
-                        log.info("MVA %s -> keyword search not visible; reinitializing Vehicles context", item.mva)
-                        _open_home_page(page)
-                        page = _click_vehicles(page)
-
-                    _search_mva(page, item.mva)
+                        _search_mva(page, item.mva)
                     lookup = _resolve_glass_complaint_lookup(context, page, runtime_config, item.mva)
                     has_work_item, work_item_reason = _has_open_glass_work_item(page)
 

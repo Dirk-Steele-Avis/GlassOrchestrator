@@ -122,8 +122,54 @@ If you only need to set the login password, use:
 Run-Set-GlassPassword.cmd
 ```
 
+### Simplified Glass workflow
+
+The new day-to-day Glass flow is split into two commands:
+
+```bash
+Run-Glass-Intake.cmd
+Run-Glass-Closeout.cmd
+```
+
+Intake covers incoming inventory email, spreadsheet updates, FieldPO next-action, and complaint/work-item creation.
+
+Closeout covers close candidate build, work-item closure, and the CompletedInvoices PO/invoice-side path.
+
+To review invoices already in Outlook `Inbox/AGN/Invoice/Needs Review` and move
+emails whose exact FieldPO PO status is `APPROVED` to `Processed`, run:
+
+```bash
+Run-ReviewInvoices.cmd
+```
+
+Close `outlook/invoice_review.csv` in Excel before starting. The command verifies
+that the report can be replaced before it opens Outlook or FieldPO; a locked report
+stops the run before any email moves.
+
+The command includes only exact new-format subjects such as
+`[External] Invoice #5294412 (PO # FPO1131464)`. It rewrites
+`outlook/invoice_review.csv` with every matching message, its original recorded
+review reason when available, and the current FieldPO approval status and amount.
+Every approved PO authorizes moving that exact email to `Processed`, regardless of
+whether its amount matches. Amount-match-only emails remain in `Needs Review`.
+The command does not approve POs, close work orders, update workflow ledger state,
+or move old-format messages, receipts, or unresolved invoices.
+
+`Run-Glass-Closeout.cmd` supports two operator modes:
+
+```bash
+Run-Glass-Closeout.cmd --mva 058524185
+Run-Glass-Closeout.cmd
+```
+
+Use `--mva` for a single-target close and the default command for batch closeout.
+
+The older component scripts remain in the repository for reference and troubleshooting, but they are deprecated and no longer the primary daily commands.
+
 `Run-GlassOrchestrator.cmd` bootstraps the runtime by creating `.venv` (if missing),
 installing `requirements.txt`, then launching `GlassOrchestrator.py` with the venv interpreter.
+
+`Run-GlassOrchestrator.cmd`, `Run-FieldPOFillNextAction.cmd`, `Run-EnsureGlassWorkItems.cmd`, `Run-BuildCloseQueue.cmd`, `Run-CloseWorkItems.cmd`, `Run-CompletedInvoices.cmd`, and `Run-PayCompletedInvoices.cmd` are still available for reference and targeted troubleshooting, but the primary daily commands are now `Run-Glass-Intake.cmd` and `Run-Glass-Closeout.cmd`.
 
 Or run directly with the virtual environment interpreter:
 

@@ -220,9 +220,14 @@ class TestEmailSeenTiming:
         source_uid = b"12345"
         monkeypatch.setattr("GlassOrchestrator.NOTIFICATIONS_ENABLED", False)
 
+        payloads = [
+            ([("0425APO", "59340120WS")], datetime(2026, 4, 25), source_uid),
+            ([], datetime(2026, 4, 25), None),
+        ]
+
         monkeypatch.setattr(
             "GlassOrchestrator.fetch_input_descriptions",
-            lambda: ([("0425APO", "59340120WS")], datetime(2026, 4, 25), source_uid),
+            lambda: payloads.pop(0),
         )
         monkeypatch.setattr(
             "GlassOrchestrator.parse_descriptions_to_manifest",
@@ -248,9 +253,14 @@ class TestEmailSeenTiming:
     def test_does_not_mark_email_seen_on_failure(self, monkeypatch):
         source_uid = b"12345"
 
+        payloads = [
+            ([("0425APO", "59340120WS")], datetime(2026, 4, 25), source_uid),
+            ([], datetime(2026, 4, 25), None),
+        ]
+
         monkeypatch.setattr(
             "GlassOrchestrator.fetch_input_descriptions",
-            lambda: ([("0425APO", "59340120WS")], datetime(2026, 4, 25), source_uid),
+            lambda: payloads.pop(0),
         )
         monkeypatch.setattr(
             "GlassOrchestrator.parse_descriptions_to_manifest",
@@ -269,3 +279,47 @@ class TestEmailSeenTiming:
         run_pipeline()
 
         assert marked == []
+
+
+class TestUnreadDrainBehavior:
+    """Pipeline drains multiple unread source emails in one run."""
+
+    def test_processes_all_unread_payloads_in_single_run(self, monkeypatch):
+        monkeypatch.setattr("GlassOrchestrator.NOTIFICATIONS_ENABLED", False)
+
+        payloads = [
+            ([("0910APO", "59340120WS")], datetime(2026, 9, 10), b"1001"),
+            ([("0910BB", "59340121WS")], datetime(2026, 9, 10), b"1002"),
+            ([], datetime(2026, 9, 10), None),
+        ]
+
+        call_count = {"fetch": 0}
+
+        def fake_fetch_input_descriptions():
+            call_count["fetch"] += 1
+            return payloads.pop(0)
+
+        monkeypatch.setattr(
+            "GlassOrchestrator.fetch_input_descriptions",
+            fake_fetch_input_descriptions,
+        )
+        monkeypatch.setattr(
+            "GlassOrchestrator.parse_descriptions_to_manifest",
+            lambda descriptions, _dt: ({descriptions[0][1][:8]: {}}, [descriptions[0][1][:8]]),
+        )
+        monkeypatch.setattr("GlassOrchestrator.apply_cycle_day_tracking", lambda *_a, **_k: None)
+        monkeypatch.setattr("GlassOrchestrator.parse_glass_data_results", lambda *_a, **_k: None)
+        monkeypatch.setattr("GlassOrchestrator.validate_results_freshness", lambda *_a, **_k: None)
+        monkeypatch.setattr(
+            "GlassOrchestrator.merge_manifest_with_results",
+            lambda manifest: _merged_df(list(manifest.keys()), date="09/10/2026"),
+        )
+        monkeypatch.setattr("GlassOrchestrator.persist_new_rows", lambda df: df.iloc[0:0])
+
+        marked: list[bytes] = []
+        monkeypatch.setattr("GlassOrchestrator._mark_message_seen", lambda uid: marked.append(uid))
+
+        run_pipeline()
+
+        assert call_count["fetch"] == 3
+        assert marked == [b"1001", b"1002"]

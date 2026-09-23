@@ -2,7 +2,7 @@
 
 ## Objective
 
-Rename the bootstrap to `Run-CompletedInvoices.cmd` and use it as the only executable workflow entry point. One coordinator will compose importable Outlook, identity, Compass, FieldPO, persistence, and finalization modules. There will be no alternate production CLIs, fallback queues, heuristic matchers, or compatibility execution paths.
+Make `Run-CompletedInvoices.cmd` the canonical invoice-side engine used by the Glass closeout flow. The Glass operator path now enters through `Run-Glass-Closeout.cmd`, which invokes the CompletedInvoices workflow as the final closure stage. One coordinator still composes importable Outlook, identity, Compass, FieldPO, persistence, and finalization modules. There will be no alternate production CLIs, fallback queues, heuristic matchers, or compatibility execution paths.
 
 An invoice moves to Outlook `Processed` only after all three required outcomes are confirmed:
 
@@ -136,7 +136,13 @@ Log capture counts, exact identity values, validation results, action starts/res
 
 Browser-stage failures save screenshots under `log/completed_invoices/failures/<run_id>/`. Screenshot failure is logged and never replaces the original failure.
 
-Generate `outlook/invoice_review.csv` from blocked ledger records. It is reporting only and cannot authorize or control execution.
+Generate `outlook/invoice_review.csv` with `Run-ReviewInvoices.cmd`. The command
+inventories exact new-format messages currently in Outlook `Needs Review`, joins
+blocked ledger evidence only by exact `InternetMessageID`, and reads current
+FieldPO PO status and authorized amount. An exact `APPROVED` PO authorizes moving
+that same email to `Processed`, regardless of amount comparison. No other report
+result authorizes a move. The command cannot approve POs, close work orders, or
+update workflow ledger state.
 
 At startup, delete completed-invoice logs and failure screenshots older than 15 days by UTC modification time. Cleanup is restricted to `log/completed_invoices/`, logs every deletion/error, and does not alter workflow execution.
 
@@ -209,7 +215,8 @@ Deployment failback is manual release rollback only. Runtime never switches impl
 
 ## Approved Decisions
 
-- One executable entry point: `Run-CompletedInvoices.cmd`.
+- `Run-CompletedInvoices.cmd` remains the canonical invoice-side workflow engine.
+- `Run-Glass-Closeout.cmd` is the operator-facing Glass entry point for the closeout side.
 - Dry-run was a development-only validation tool and is not a final runtime feature. See `Docs/CompletedInvoicesDryRunDecision.md`.
 - Compass first, FieldPO second, Outlook finalization last.
 - Required completion: Compass work item closed, FieldPO PO approved, and FieldPO work order closed.

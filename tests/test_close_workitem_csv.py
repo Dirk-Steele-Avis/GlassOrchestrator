@@ -9,6 +9,28 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 
+def test_not_found_summary_displays_zero_work_item_count(monkeypatch):
+    from WorkItems import close_workitem
+
+    info = MagicMock()
+    monkeypatch.setattr(close_workitem.log, "info", info)
+
+    not_found, failed = close_workitem._log_summary([
+        {"mva": "022222222", "result": close_workitem.RESULT_NOT_FOUND, "detail": ""},
+    ])
+
+    assert (not_found, failed) == (1, 0)
+    assert any(
+        call.args == ("[CLOSE]   - Work item count 0: %d", 1)
+        for call in info.call_args_list
+    )
+    assert any(
+        call.args[0] == "[CLOSE]   %s  %12s  [%s]%s"
+        and call.args[2:4] == ("022222222", "work_item_count_0")
+        for call in info.call_args_list
+    )
+
+
 def _write_csv(tmp_path: Path, content: str) -> Path:
     p = tmp_path / "test.csv"
     p.write_text(content, encoding="utf-8")
@@ -74,6 +96,108 @@ class TestCloseMissingComplaint:
 
 
 class TestActiveCloseRunnerDisconnect:
+
+    def test_successful_close_reuses_exact_vehicle_keyword_search(self, monkeypatch):
+        from WorkItems import close_workitem
+
+        page = MagicMock()
+        page.url = "https://avisbudget.palantirfoundry.com/workspace/vehicle"
+        page.goto = AsyncMock()
+        page.wait_for_timeout = AsyncMock()
+        page.wait_for_load_state = AsyncMock()
+        keyword_search = MagicMock()
+        keyword_search.count = AsyncMock(return_value=1)
+        keyword_search.first.wait_for = AsyncMock()
+        page.locator.return_value = keyword_search
+        context = AsyncMock()
+        playwright = MagicMock()
+        playwright.chromium.launch_persistent_context = AsyncMock(return_value=context)
+        playwright_context = AsyncMock()
+        playwright_context.__aenter__ = AsyncMock(return_value=playwright)
+        playwright_context.__aexit__ = AsyncMock(return_value=None)
+        navigate = AsyncMock(return_value=page)
+
+        monkeypatch.setattr(close_workitem, "async_playwright", lambda: playwright_context)
+        monkeypatch.setattr(close_workitem, "_is_edge_running", lambda: False)
+        monkeypatch.setattr(close_workitem, "resolve_headless", lambda: False)
+        monkeypatch.setattr(close_workitem, "resolve_edge_user_data_dir", lambda: "profile")
+        monkeypatch.setattr(close_workitem, "resolve_edge_profile_directory", lambda: "Default")
+        monkeypatch.setattr(close_workitem, "resolve_step_delay", lambda: 0)
+        monkeypatch.setattr(
+            close_workitem,
+            "ensure_profile_context",
+            AsyncMock(return_value=(context, page)),
+        )
+        monkeypatch.setattr(close_workitem, "_ensure_live_page", AsyncMock(return_value=page))
+        monkeypatch.setattr(close_workitem, "pw_navigate_to_mva", navigate)
+        monkeypatch.setattr(
+            close_workitem,
+            "_playwright_close_work_item",
+            AsyncMock(return_value=(close_workitem.RESULT_CLOSED, "GLASS-GLASS")),
+        )
+        monkeypatch.setattr(close_workitem, "_capture_playwright_screenshot", AsyncMock())
+
+        args = argparse.Namespace(timeout_seconds=30, debug_hold_seconds=0)
+        targets = [
+            {"mva": "011111111", "complaint_type": "Glass"},
+            {"mva": "022222222", "complaint_type": "Glass"},
+        ]
+
+        results = asyncio.run(close_workitem._run_playwright_close_async(args, targets))
+
+        assert [result["result"] for result in results] == [
+            close_workitem.RESULT_CLOSED,
+            close_workitem.RESULT_CLOSED,
+        ]
+        page.goto.assert_awaited_once_with(close_workitem.LOGIN_URL, wait_until="domcontentloaded")
+        page.locator.assert_called_once_with(close_workitem.COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR)
+        keyword_search.first.wait_for.assert_awaited_once_with(state="visible", timeout=8_000)
+        assert navigate.await_count == 2
+
+    def test_navigation_failure_stops_remaining_mvas(self, monkeypatch):
+        from WorkItems import close_workitem
+
+        page = AsyncMock()
+        page.url = "https://compass-home.avisbudget.palantirfoundry.com/"
+        context = AsyncMock()
+        playwright = MagicMock()
+        playwright.chromium.launch_persistent_context = AsyncMock(return_value=context)
+        playwright_context = AsyncMock()
+        playwright_context.__aenter__ = AsyncMock(return_value=playwright)
+        playwright_context.__aexit__ = AsyncMock(return_value=None)
+        navigate = AsyncMock(side_effect=RuntimeError("post-search contract changed"))
+
+        monkeypatch.setattr(close_workitem, "async_playwright", lambda: playwright_context)
+        monkeypatch.setattr(close_workitem, "_is_edge_running", lambda: False)
+        monkeypatch.setattr(close_workitem, "resolve_headless", lambda: False)
+        monkeypatch.setattr(close_workitem, "resolve_edge_user_data_dir", lambda: "profile")
+        monkeypatch.setattr(close_workitem, "resolve_edge_profile_directory", lambda: "Default")
+        monkeypatch.setattr(close_workitem, "resolve_step_delay", lambda: 0)
+        monkeypatch.setattr(
+            close_workitem,
+            "ensure_profile_context",
+            AsyncMock(return_value=(context, page)),
+        )
+        monkeypatch.setattr(close_workitem, "_ensure_live_page", AsyncMock(return_value=page))
+        monkeypatch.setattr(close_workitem, "pw_navigate_to_mva", navigate)
+        monkeypatch.setattr(close_workitem, "_capture_playwright_screenshot", AsyncMock())
+
+        args = argparse.Namespace(timeout_seconds=30, debug_hold_seconds=0)
+        targets = [
+            {"mva": "011111111", "complaint_type": "Glass"},
+            {"mva": "022222222", "complaint_type": "Glass"},
+        ]
+
+        results = asyncio.run(close_workitem._run_playwright_close_async(args, targets))
+
+        assert results == [
+            {
+                "mva": "011111111",
+                "result": close_workitem.RESULT_NAV_FAILED,
+                "detail": "post-search contract changed",
+            }
+        ]
+        assert navigate.await_count == 1
 
     def test_browser_disconnect_returns_partial_results_without_cleanup_crash(self, monkeypatch):
         from WorkItems import close_workitem

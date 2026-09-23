@@ -29,9 +29,18 @@ pytestmark = [
 pytest.importorskip("playwright.sync_api")
 
 from src.compass_go.auth_flow import AuthFlow
+from src.compass_go.pages.scan_page import INPUT_ARIA_LABEL
 from src.compass_go.scrape_flow import ScrapeFlow
 from src.compass_go.session import CompassGoSession
 from src.compass_go.writer import ResultsWriter
+
+
+def test_confirm_user_wwid_auto_advances():
+    with CompassGoSession().page() as page:
+        scan = AuthFlow(page).ensure_signed_in()
+        scan.page.get_by_label(INPUT_ARIA_LABEL).first.wait_for(
+            state="visible", timeout=20_000
+        )
 
 
 def test_single_mva_produces_results_row(tmp_path: Path):

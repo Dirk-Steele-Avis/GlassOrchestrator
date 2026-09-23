@@ -1458,6 +1458,8 @@ def step_dry_run_review(check_results, min_age_days=None):
         append_closure_decision(record)
         decisions.append(record)
         reason_text = ", ".join(reasons) if reasons else "all closure requirements met"
+        if not reasons:
+            print("  PO approval gates passed (dry run; no approval performed).")
         print(
             f"  {decision}: VIN {record['vin']} | MVA {record['mva'] or 'UNKNOWN'} "
             f"| {reason_text}"

@@ -203,7 +203,9 @@ class AuthFlow:
                 continue
 
             if self._scan.is_displayed():
-                log.info("Auth: ScanPage ready (state=%s)", last_state)
+                log.info("Auth: preparing ScanPage (state=%s)", last_state)
+                self._scan.prepare()
+                log.info("Auth: ScanPage ready")
                 return self._scan
 
             if self._login.is_displayed():

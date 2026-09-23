@@ -29,7 +29,11 @@ from playwright_prototype.config import (
     resolve_step_delay,
 )
 from playwright_prototype.session import ensure_profile_context
-from playwright_prototype.steps import COMPLAINT_TYPE_PATTERNS, close_open_work_item
+from playwright_prototype.steps import (
+    COMPLAINT_TYPE_PATTERNS,
+    COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR,
+    close_open_work_item,
+)
 from playwright_prototype.steps import navigate_to_mva as pw_navigate_to_mva
 from vendor_tracking.sheet_updater import RESOLVED_STATUSES
 
@@ -494,8 +498,8 @@ async def _playwright_close_work_item(page: "Page", mva: str, complaint_type: st
     try:
         detail = await close_open_work_item(page, mva, complaint_type=complaint_type)
         return RESULT_CLOSED, detail
-    except LookupError:
-        log.warning("[CLOSE] %s - no open %s work item row found", mva, complaint_type)
+    except LookupError as exc:
+        log.warning("[CLOSE] %s - no work item found: %s", mva, exc)
         return RESULT_NOT_FOUND, ""
 
 
@@ -564,6 +568,7 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
             _, page = await ensure_profile_context(context)
             log.info("[PERF] Compass session ready in %.2fs", time.monotonic() - phase_started)
 
+            reuse_vehicle_search = False
             for target_index, target in enumerate(targets):
                 mva = target["mva"]
                 complaint_type = target["complaint_type"]
@@ -612,13 +617,19 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
                 started = time.monotonic()
 
                 try:
-                    # If the browser landed on a deep-link work item URL from the previous
-                    # MVA, the MVA input field won't be present. Navigate back to the base
-                    # health page first so _enter_mva can find the input field.
-                    if "/viewWorkItem/" in page.url or "/workItem/" in page.url:
-                        log.info("[CLOSE] %s - returning to base health page before navigation", mva)
+                    if reuse_vehicle_search:
+                        keyword_search = page.locator(COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR)
+                        if await keyword_search.count() != 1:
+                            raise RuntimeError(
+                                "Expected exactly one vehicle-page Keyword Search field after close"
+                            )
+                        await keyword_search.first.wait_for(state="visible", timeout=8_000)
+                        log.info("[CLOSE] %s - reusing current vehicle-page MVA search", mva)
+                    else:
+                        log.info("[CLOSE] %s - opening Compass homepage Vehicle Search", mva)
                         await page.goto(LOGIN_URL, wait_until="domcontentloaded")
                         await page.wait_for_timeout(step_delay_ms or 1000)
+                    reuse_vehicle_search = False
 
                     log.info("[CLOSE] %s - navigating to MVA", mva)
                     navigation_started = time.monotonic()
@@ -642,11 +653,12 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
                     results.append({"mva": mva, "result": RESULT_TIMEOUT, "detail": "navigation"})
                     continue
                 except (PlaywrightTimeoutError, Exception) as exc:
-                    log.error("[CLOSE] %s - navigation failed, skipping: %s", mva, exc)
+                    detail = str(exc)
+                    log.error("[CLOSE] %s - navigation failed; stopping batch: %s", mva, detail)
                     await _capture_playwright_screenshot(page, "nav_failure", mva)
                     await _debug_hold_if_configured(page, args, mva, "navigation failure")
-                    results.append({"mva": mva, "result": RESULT_NAV_FAILED, "detail": ""})
-                    continue
+                    results.append({"mva": mva, "result": RESULT_NAV_FAILED, "detail": detail})
+                    break
 
                 elapsed = time.monotonic() - started
                 close_timeout = float(args.timeout_seconds)
@@ -661,8 +673,9 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
                         if detail:
                             log.info("[CLOSE] %s -   detail: %s", mva, detail)
                         await _capture_playwright_screenshot(page, "closed", mva)
+                        reuse_vehicle_search = True
                     elif result == RESULT_NOT_FOUND:
-                        log.warning("[CLOSE] %s - NOT FOUND: no open %s work item to close", mva, complaint_type)
+                        log.warning("[CLOSE] %s - WORK ITEM COUNT: 0 (%s)", mva, complaint_type)
                         await _capture_playwright_screenshot(page, "not_found", mva)
                     results.append({"mva": mva, "result": result, "detail": detail})
                 except asyncio.TimeoutError:
@@ -711,7 +724,7 @@ def _log_summary(results: list[dict]) -> tuple[int, int]:
     log.info("[CLOSE] %s", "=" * 50)
     log.info("[CLOSE] CLOSE SUMMARY - %d MVA(s)", len(results))
     log.info("[CLOSE]   + Closed:    %d", closed_count)
-    log.info("[CLOSE]   - Not found: %d", not_found_count)
+    log.info("[CLOSE]   - Work item count 0: %d", not_found_count)
     log.info("[CLOSE]   - Timeout:   %d", timeout_count)
     if timeout_count > 0:
         log.info(
@@ -726,7 +739,8 @@ def _log_summary(results: list[dict]) -> tuple[int, int]:
         status_icon = "+" if r["result"] == RESULT_CLOSED else ("-" if r["result"] == RESULT_NOT_FOUND else "!")
         detail = r.get("detail", "")
         detail_suffix = f"  ({detail})" if detail else ""
-        log.info("[CLOSE]   %s  %12s  [%s]%s", status_icon, r["mva"], r["result"], detail_suffix)
+        display_result = "work_item_count_0" if r["result"] == RESULT_NOT_FOUND else r["result"]
+        log.info("[CLOSE]   %s  %12s  [%s]%s", status_icon, r["mva"], display_result, detail_suffix)
     log.info("[CLOSE] %s", "=" * 50)
 
     return not_found_count, failed_count

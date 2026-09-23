@@ -17,6 +17,7 @@ htmlcov/
 data/GlassDataParser.csv
 data/mva_cycle_tracker.json
 data/vendor_tracking_decisions.jsonl
+data/close_workitem_history.csv
 data/close_workitem_processed.json
 data/invoice_workflow.sqlite3
 data/invoice_workflow.sqlite3-wal
@@ -66,7 +67,19 @@ artifacts/
 # Outlook invoice and receipt downloads
 outlook/pdfs/
 outlook/invoice_attachments/
+outlook/check_fpo_status.py
+outlook/invoice_review.csv
+outlook/invoice_review.csv.tmp
+outlook/fpo_fieldpo_status.csv
+outlook/fpo_status_review_*.csv
+outlook/*FPO_INVOICE HOLD_Report*.xlsx
+outlook/FPO actions.pdf
+outlook/FieldPO_Closer/attachments/
+outlook/FieldPO_Closer/*.pdf
+outlook/FieldPO_Closer/vins.csv
 outlook/direct_approval_results.jsonl
+outlook/closure_decisions.jsonl
+outlook/invoices_queue.csv
 outlook/po_numbers.txt
 
 # Local invoice workflow runtime artifacts
@@ -74,6 +87,9 @@ data/completed_invoices.db
 data/completed_invoices.lock
 data/*.db
 data/*.lock
+
+# Operator-reviewed work item queues
+WorkItems/close_workitem.csv
 
 # Local CSV overrides and per-machine working copies
 *.local.csv

@@ -17,6 +17,7 @@ import logging
 import os
 import re
 import smtplib
+import socket
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -334,7 +335,7 @@ class OutboundEmail:
 
 def fetch_input_descriptions() -> tuple[list[tuple[str, str]], datetime, bytes | None]:
     """
-        Connect to Gmail via IMAP, fetch the latest UNSEEN email from the
+        Connect to Gmail via IMAP, fetch the oldest UNSEEN email from the
     target sender, and extract:
       - A list of (type_value, description) tuples from the email table
       - The Date header parsed as a datetime object
@@ -350,7 +351,9 @@ def fetch_input_descriptions() -> tuple[list[tuple[str, str]], datetime, bytes |
             return [], datetime.now(), None
 
         log.info("Input: Found %d unseen message(s)", len(unseen_ids))
-        source_uid = unseen_ids[-1]
+        # Process oldest-first so one run can safely drain all unseen messages
+        # while preserving chronological order.
+        source_uid = unseen_ids[0]
         latest_message, internal_sent_at = _fetch_message_by_id(mail, source_uid)
         descriptions, sent_at = _extract_descriptions_from_message(
             latest_message,
@@ -794,14 +797,96 @@ def _extract_scan_tokens(raw_text: str) -> list[str]:
 
 def _normalize_scan_text(raw_text: str) -> str:
     """Canonicalize scanner text before applying the strict scan regex."""
+    def _normalize_suffix_order(token: str) -> str:
+        """Normalize scanner suffix order to damage-then-claim when needed."""
+        if len(token) < 8:
+            return token
+
+        mva = token[:8]
+        remainder = token[8:]
+        area_codes = sorted(
+            set(list(AREAS.keys()) + list(LEGACY_AREA_ALIASES.keys())),
+            key=len,
+            reverse=True,
+        )
+
+        matched_area = ""
+        for area_code in area_codes:
+            if remainder.startswith(area_code):
+                matched_area = area_code
+                break
+        if not matched_area:
+            return token
+
+        suffix = remainder[len(matched_area):]
+        reordered_suffix = {
+            "CR": "RC",
+            "CWAR": "WARC",
+            "CTBK": "TBKC",
+        }.get(suffix, suffix)
+        return f"{mva}{matched_area}{reordered_suffix}"
+
     collapsed = " ".join(str(raw_text).strip().split())
     if not collapsed:
         return ""
 
     upper = collapsed.upper()
     if upper.endswith(" OEM"):
-        return f"{re.sub(r'\s+', '', upper[:-4])} OEM"
-    return re.sub(r"\s+", "", upper)
+        normalized = _normalize_suffix_order(re.sub(r"\s+", "", upper[:-4]))
+        return f"{normalized} OEM"
+    return _normalize_suffix_order(re.sub(r"\s+", "", upper))
+
+
+def _normalize_combined_location_groups(
+    descriptions: list[tuple[str, str]],
+    email_date: datetime,
+) -> list[tuple[str, str]]:
+    """Map one Orca ``break`` delimiter to BB-before and APO-after groups."""
+    delimiter_indexes = [
+        index
+        for index, (_, description) in enumerate(descriptions)
+        if description.strip().casefold() == "break"
+    ]
+    if not delimiter_indexes:
+        return descriptions
+    if len(delimiter_indexes) != 1:
+        raise ValueError(
+            "Combined Orca email must contain exactly one 'break' delimiter"
+        )
+
+    delimiter_index = delimiter_indexes[0]
+    if delimiter_index == 0 or delimiter_index == len(descriptions) - 1:
+        raise ValueError(
+            "Combined Orca email 'break' delimiter must separate BB and APO scans"
+        )
+
+    normalized: list[tuple[str, str]] = []
+    date_prefix: str | None = None
+    for index, (type_value, description) in enumerate(descriptions):
+        if index == delimiter_index:
+            continue
+
+        normalized_type = type_value.strip()
+        if email_date.date() == datetime(2026, 9, 22).date() and normalized_type == "0922bb":
+            normalized_type = "0922"
+
+        type_match = re.fullmatch(r"(\d{4})", normalized_type)
+        if not type_match:
+            raise ValueError(
+                "Combined Orca email row "
+                f"{index + 1} has Type={type_value!r}; expected MMDD format"
+            )
+        if date_prefix is None:
+            date_prefix = type_match.group(1)
+        elif type_match.group(1) != date_prefix:
+            raise ValueError(
+                "Combined Orca email requires one shared MMDD date for both locations"
+            )
+
+        location = "BB" if index < delimiter_index else "APO"
+        normalized.append((f"{date_prefix}{location}", description))
+
+    return normalized
 
 
 # ─── Parsing & Normalization ─────────────────────────────────────────────────
@@ -832,6 +917,7 @@ def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_da
                   Location, Action, Area, Claim#, WorkItem}
         mva_list: list of clean 8-digit MVA strings for the worker (errors excluded)
     """
+    descriptions = _normalize_combined_location_groups(descriptions, email_date)
     log.info("Parsing: Processing %d descriptions …", len(descriptions))
 
     manifest: dict[str, dict] = {}
@@ -1538,7 +1624,7 @@ def _send_email(message: OutboundEmail) -> None:
 # ─── Pipeline Orchestrator ────────────────────────────────────────────────────
 
 
-def run_pipeline() -> None:
+def run_pipeline() -> int | None:
     """Execute the end-to-end pipeline with step-level error handling."""
     # Broad exception handling is intentional here to fail-fast by stage
     # while preserving a stable top-level orchestrator process.
@@ -1547,96 +1633,117 @@ def run_pipeline() -> None:
     log.info("GlassOrchestrator pipeline starting")
     log.info("=" * 60)
 
-    # Step 1: Input acquisition
-    try:
-        input_payload = fetch_input_descriptions()
-        descriptions, email_date, source_uid = _normalize_input_payload(input_payload)
-    except Exception as exc:
-        log.error("Input acquisition failed — %s", exc, exc_info=True)
-        return
-
-    if not descriptions:
-        log.info("Pipeline complete — no descriptions to process")
-        return
-
-    # Step 2: Parsing
-    try:
-        manifest, mva_list = parse_descriptions_to_manifest(descriptions, email_date)
-    except Exception as exc:
-        log.error("Parsing failed — %s", exc, exc_info=True)
-        return
-
-    if not manifest:
-        log.info("Pipeline complete — no valid MVAs after parsing")
-        return
-
-    # Step 2b: Cycle-day tracking (local JSON state)
-    try:
-        apply_cycle_day_tracking(manifest, mva_list, email_date)
-    except Exception as exc:
-        # Tracking should not block operational processing.
-        log.error("Cycle tracking failed — %s", exc, exc_info=True)
-
-    # Step 3: Worker
-    try:
-        parse_glass_data_results(mva_list)
-    except subprocess.CalledProcessError as exc:
-        log.error("Worker failed — non-zero exit code %d. "
-                   "Pipeline ABORTED. No data will be persisted.", exc.returncode)
-        return
-    except Exception as exc:
-        log.error("Worker failed — %s. Pipeline ABORTED.", exc, exc_info=True)
-        return
-
-    # Step 4: Validate worker output freshness
-    try:
-        validate_results_freshness(RESULTS_PATH)
-    except RuntimeError as exc:
-        log.error("Worker output validation failed — %s. Pipeline ABORTED.", exc)
-        return
-
-    # Step 5: Merge
-    try:
-        df_merged = merge_manifest_with_results(manifest)
-    except Exception as exc:
-        log.error("Merge failed — %s", exc, exc_info=True)
-        return
-
-    # Step 6: Persist
-    try:
-        df_new_rows = persist_new_rows(df_merged)
-        log.info("Persistence: %d new row(s) written", len(df_new_rows))
-    except Exception as exc:
-        log.error("Persistence failed — %s", exc, exc_info=True)
-        return
-
-    # Step 7: Notify when explicitly enabled
-    if NOTIFICATIONS_ENABLED:
+    processed_messages = 0
+    while True:
+        # Step 1: Input acquisition
         try:
-            from core.eligibility import is_notification_eligible
-            eligible_rows = df_new_rows[df_new_rows.apply(lambda r: is_notification_eligible(r.to_dict()), axis=1)]
-            notify_order_items(eligible_rows)
+            input_payload = fetch_input_descriptions()
+            descriptions, email_date, source_uid = _normalize_input_payload(input_payload)
         except Exception as exc:
-            log.error("Notification failed — %s", exc, exc_info=True)
-            # Notification failure is non-fatal for data persistence; pipeline ends here
+            if isinstance(exc, socket.gaierror):
+                log.error(
+                    "NETWORK UNAVAILABLE: Could not resolve %s. Check Wi-Fi/internet and DNS, then run intake again.",
+                    IMAP_SERVER,
+                )
+                return 1
+            log.error("Input acquisition failed — %s", exc, exc_info=True)
+            return 1
+
+        if not descriptions:
+            if processed_messages == 0:
+                log.info("Pipeline complete — no descriptions to process")
+            else:
+                log.info("Pipeline complete — processed %d unread message(s)", processed_messages)
+                log.info("=" * 60)
+                log.info("GlassOrchestrator pipeline completed successfully")
+                log.info("=" * 60)
             return
-    else:
-        log.info("Notification: Disabled by configuration")
 
-    # Step 8: Mark source email as read only after successful completion.
-    if source_uid is not None:
+        # If input-acquisition stubs omit UID support, keep legacy single-payload behavior.
+        is_uidless_payload = source_uid is None
+
+        # Step 2: Parsing
         try:
-            _mark_message_seen(source_uid)
-            log.info("Input: Marked source email as read (uid=%s)", source_uid.decode(errors="ignore"))
+            manifest, mva_list = parse_descriptions_to_manifest(descriptions, email_date)
         except Exception as exc:
-            log.warning("Input: Failed to mark source email as read — %s", exc)
+            log.error("Parsing failed — %s", exc, exc_info=True)
+            return
 
-    log.info("=" * 60)
-    log.info("GlassOrchestrator pipeline completed successfully")
-    log.info("=" * 60)
+        if not manifest:
+            log.info("Pipeline complete — no valid MVAs after parsing")
+            return
+
+        # Step 2b: Cycle-day tracking (local JSON state)
+        try:
+            apply_cycle_day_tracking(manifest, mva_list, email_date)
+        except Exception as exc:
+            # Tracking should not block operational processing.
+            log.error("Cycle tracking failed — %s", exc, exc_info=True)
+
+        # Step 3: Worker
+        try:
+            parse_glass_data_results(mva_list)
+        except subprocess.CalledProcessError as exc:
+            log.error("Worker failed — non-zero exit code %d. "
+                      "Pipeline ABORTED. No data will be persisted.", exc.returncode)
+            return
+        except Exception as exc:
+            log.error("Worker failed — %s. Pipeline ABORTED.", exc, exc_info=True)
+            return
+
+        # Step 4: Validate worker output freshness
+        try:
+            validate_results_freshness(RESULTS_PATH)
+        except RuntimeError as exc:
+            log.error("Worker output validation failed — %s. Pipeline ABORTED.", exc)
+            return
+
+        # Step 5: Merge
+        try:
+            df_merged = merge_manifest_with_results(manifest)
+        except Exception as exc:
+            log.error("Merge failed — %s", exc, exc_info=True)
+            return
+
+        # Step 6: Persist
+        try:
+            df_new_rows = persist_new_rows(df_merged)
+            log.info("Persistence: %d new row(s) written", len(df_new_rows))
+        except Exception as exc:
+            log.error("Persistence failed — %s", exc, exc_info=True)
+            return
+
+        # Step 7: Notify when explicitly enabled
+        if NOTIFICATIONS_ENABLED:
+            try:
+                from core.eligibility import is_notification_eligible
+                eligible_rows = df_new_rows[df_new_rows.apply(lambda r: is_notification_eligible(r.to_dict()), axis=1)]
+                notify_order_items(eligible_rows)
+            except Exception as exc:
+                log.error("Notification failed — %s", exc, exc_info=True)
+                # Notification failure is non-fatal for data persistence; pipeline ends here
+                return
+        else:
+            log.info("Notification: Disabled by configuration")
+
+        # Step 8: Mark source email as read only after successful completion.
+        if source_uid is not None:
+            try:
+                _mark_message_seen(source_uid)
+                log.info("Input: Marked source email as read (uid=%s)", source_uid.decode(errors="ignore"))
+            except Exception as exc:
+                log.warning("Input: Failed to mark source email as read — %s", exc)
+
+        processed_messages += 1
+        if is_uidless_payload:
+            log.info("Pipeline complete — processed 1 payload (legacy input mode)")
+            log.info("=" * 60)
+            log.info("GlassOrchestrator pipeline completed successfully")
+            log.info("=" * 60)
+            return
 
 
 # ─── Entry Point ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    run_pipeline()
+    sys.exit(run_pipeline() or 0)

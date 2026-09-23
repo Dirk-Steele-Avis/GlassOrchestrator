@@ -57,11 +57,41 @@ class OutlookInvoiceSource:
             raise ValueError("invoice_number must contain only digits")
 
         folder = self._get_invoice_folder()
+        return self._scan_folder(
+            folder,
+            invoice_number=invoice_number,
+            max_invoices=max_invoices,
+            excluded_message_ids=excluded_message_ids,
+            exact_subject_only=False,
+        )
+
+    def scan_needs_review_invoices(self) -> OutlookScanResult:
+        """Read exact new-format invoices currently in Needs Review."""
+        folder = self._get_existing_child_folder("Needs Review")
+        return self._scan_folder(
+            folder,
+            invoice_number=None,
+            max_invoices=None,
+            excluded_message_ids=frozenset(),
+            exact_subject_only=True,
+        )
+
+    def _scan_folder(
+        self,
+        folder: Any,
+        *,
+        invoice_number: str | None,
+        max_invoices: int | None,
+        excluded_message_ids: frozenset[str],
+        exact_subject_only: bool,
+    ) -> OutlookScanResult:
         candidates: list[tuple[Any, str | None]] = []
         for message in list(folder.Items):
             if getattr(message, "Class", None) != 43:
                 continue
             subject = str(getattr(message, "Subject", "") or "")
+            if exact_subject_only and _EXACT_SUBJECT_PATTERN.fullmatch(subject.strip()) is None:
+                continue
             number_match = _INVOICE_NUMBER_PATTERN.search(subject)
             if number_match is None:
                 continue
@@ -211,6 +241,20 @@ class OutlookInvoiceSource:
         if len(matches) != 1:
             raise LookupError(
                 f"Expected exactly one Outlook {folder_name} folder, found {len(matches)}"
+            )
+        return matches[0]
+
+    def _get_existing_child_folder(self, folder_name: str) -> Any:
+        invoice_folder = self._get_invoice_folder()
+        matches = [
+            folder
+            for folder in invoice_folder.Folders
+            if str(folder.Name) == folder_name
+        ]
+        if len(matches) != 1:
+            raise LookupError(
+                f"Expected exactly one existing Outlook {folder_name} folder, "
+                f"found {len(matches)}"
             )
         return matches[0]
 

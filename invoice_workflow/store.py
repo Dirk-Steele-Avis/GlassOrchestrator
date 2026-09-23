@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Iterator
 
-from invoice_workflow.contracts import ParsedInvoice, Stage, StageStatus
+from invoice_workflow.contracts import ParsedInvoice, ReviewHistory, Stage, StageStatus
 
 SCHEMA_VERSION = 1
 BUSY_TIMEOUT_MS = 5_000
@@ -311,6 +311,47 @@ class InvoiceRepository:
                 (internet_message_id,),
             ).fetchone()
         return _row_to_state(row) if row is not None else None
+
+    def get_review_history(self, internet_message_id: str) -> ReviewHistory | None:
+        """Return failure evidence for one exact message without creating state."""
+        if not self.database_path.is_file():
+            return None
+        with self.connection() as connection:
+            attempt = connection.execute(
+                """
+                SELECT stage, status, detail
+                FROM attempts
+                WHERE internet_message_id = ? AND status IN (?, ?)
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (
+                    internet_message_id,
+                    StageStatus.BLOCKED,
+                    StageStatus.FAILED,
+                ),
+            ).fetchone()
+            if attempt is not None:
+                return ReviewHistory(
+                    stage=str(attempt["stage"]),
+                    status=StageStatus(str(attempt["status"])),
+                    detail=str(attempt["detail"]),
+                )
+            invoice = connection.execute(
+                """
+                SELECT identity_status, last_error
+                FROM invoices
+                WHERE internet_message_id = ?
+                """,
+                (internet_message_id,),
+            ).fetchone()
+        if invoice is None or not str(invoice["last_error"]):
+            return None
+        return ReviewHistory(
+            stage=str(Stage.IDENTITY),
+            status=StageStatus(str(invoice["identity_status"])),
+            detail=str(invoice["last_error"]),
+        )
 
     def list_terminal_identity_message_ids(self) -> tuple[str, ...]:
         with self.connection() as connection:
