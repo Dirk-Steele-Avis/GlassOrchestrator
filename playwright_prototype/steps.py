@@ -36,12 +36,20 @@ _OPEN_WORK_ITEMS_BADGE_TEXT_PATTERN = re.compile(r"^\d+$")
 COMPASS_VEHICLES_BUTTON_SELECTOR = "[data-test-id='workshop-inline-button']"
 COMPASS_SCAN_TAB_SELECTOR = 'button[role="tab"][data-key="scan"]'
 COMPASS_MVA_VIN_INPUT_SELECTOR = "[data-testid='mva-vin-input']"
-COMPASS_MVA_VIN_SUBMIT_SELECTOR = "[data-testid='mva-vin-submit']"
 COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR = (
     "input[type='search'][placeholder='Keyword Search (other fields)']"
 )
 COMPASS_WORKSHOP_OBJECT_TABLE_SELECTOR = "[data-test-id='workshop-object-table']"
 COMPASS_WORKSHOP_OBJECT_TITLE_SELECTOR = "[data-test-id='workshop-object-title']"
+COMPASS_ACTIVE_FILTER_SELECTOR = "span.bp6-tag[role='button']:has(b)"
+COMPASS_FILTER_CLEAR_SELECTOR = "svg[data-icon='cross']"
+COMPASS_MVA_FILTER_INPUT_SELECTOR = (
+    "div.bp6-popover-content:visible "
+    "input.bp6-multi-select-tag-input-input:visible"
+)
+COMPASS_MVA_FILTER_OPTION_SELECTOR = (
+    "div.bp6-popover-content:visible li[role='option']:visible"
+)
 COMPASS_HOME_MVA_INPUT_SELECTOR = 'input[placeholder="MVA number"]'
 COMPASS_OVERVIEW_MVA_VALUE_SELECTOR = (
     "xpath=//div[@role='listitem']"
@@ -270,6 +278,65 @@ async def _wait_for_vehicle_details_ready(page: Page, mva: str, timeout_ms: int 
     )
 
 
+async def _clear_vehicle_search_filters(page: Page) -> None:
+    active_filters = page.locator(COMPASS_ACTIVE_FILTER_SELECTOR)
+    cleared: list[str] = []
+    active_count = await active_filters.count()
+
+    while active_count:
+        active_filter = active_filters.first
+        filter_text = " ".join((await active_filter.inner_text()).split())
+        await active_filter.hover()
+        clear = active_filter.locator(COMPASS_FILTER_CLEAR_SELECTOR)
+        if await clear.count() != 1 or not await clear.first.is_visible():
+            raise RuntimeError(
+                f"Active Compass filter {filter_text!r} must expose exactly one clear control"
+            )
+        await clear.first.click(timeout=5_000)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            next_count = await active_filters.count()
+            if next_count == active_count - 1:
+                active_count = next_count
+                break
+            await page.wait_for_timeout(100)
+        else:
+            raise RuntimeError(f"Active Compass filter {filter_text!r} did not clear")
+        cleared.append(filter_text)
+
+    keyword = page.locator(COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR)
+    if await keyword.count() != 1:
+        raise RuntimeError("Compass vehicle search must contain exactly one keyword field")
+    await keyword.first.wait_for(state="visible", timeout=8_000)
+    await keyword.first.fill("")
+    log.info("[STEPS] Compass vehicle search filters cleared: %s", cleared)
+
+
+async def _search_by_mva_filter(page: Page, mva: str) -> None:
+    await _clear_vehicle_search_filters(page)
+
+    by_mva = page.get_by_role("button", name=re.compile(r"^Search\s+by\s+MVA$", re.I))
+    if await by_mva.count() != 1:
+        raise RuntimeError("Compass vehicle search must contain exactly one Search by MVA button")
+    await by_mva.first.wait_for(state="visible", timeout=8_000)
+    await by_mva.first.click(timeout=5_000)
+
+    filter_input = page.locator(COMPASS_MVA_FILTER_INPUT_SELECTOR)
+    await filter_input.first.wait_for(state="visible", timeout=8_000)
+    if await filter_input.count() != 1:
+        raise RuntimeError("Search by MVA must open exactly one MVA filter input")
+    await filter_input.first.fill("")
+    await filter_input.first.fill(mva)
+
+    exact_options = page.locator(COMPASS_MVA_FILTER_OPTION_SELECTOR).filter(
+        has_text=re.compile(rf"^\s*{re.escape(mva)}\s*$")
+    )
+    await exact_options.first.wait_for(state="visible", timeout=8_000)
+    if await exact_options.count() != 1:
+        raise RuntimeError(f"Search by MVA must return exactly one filter option for {mva}")
+    await exact_options.first.click(timeout=5_000)
+
+
 async def _enter_mva(page: Page, mva: str) -> Page:
     """Type an MVA into the strict Workshop search field and submit.
 
@@ -288,34 +355,7 @@ async def _enter_mva(page: Page, mva: str) -> Page:
         await vehicle_page.wait_for_load_state("domcontentloaded")
         return vehicle_page
 
-    # Prefer dedicated MVA/VIN input when present.
-    mva_input = page.locator(COMPASS_MVA_VIN_INPUT_SELECTOR).first
-    if await mva_input.is_visible(timeout=2_000):
-        await mva_input.click(timeout=5_000)
-        await mva_input.press("Control+a")
-        await mva_input.press("Backspace")
-        await mva_input.fill(mva)
-        await page.wait_for_timeout(DATA_ENTRY_SUBMIT_DELAY_MS)
-
-        submit_btn = page.locator(COMPASS_MVA_VIN_SUBMIT_SELECTOR).first
-        await submit_btn.wait_for(state="visible", timeout=5_000)
-        await submit_btn.click(timeout=5_000)
-        return page
-
-    # Keyword Search mode (confirmed in user-provided screenshot).
-    by_mva = page.get_by_role("button", name=re.compile(r"^Search\s+by\s+MVA$", re.I)).first
-    keyword = page.locator(COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR).first
-
-    await by_mva.wait_for(state="visible", timeout=8_000)
-    await by_mva.click(timeout=5_000)
-
-    await keyword.wait_for(state="visible", timeout=8_000)
-    await keyword.click(timeout=5_000)
-    await keyword.press("Control+a")
-    await keyword.press("Backspace")
-    await keyword.fill(mva)
-    await page.wait_for_timeout(DATA_ENTRY_SUBMIT_DELAY_MS)
-    await keyword.press("Enter")
+    await _search_by_mva_filter(page, mva)
     return page
 
 

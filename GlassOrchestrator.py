@@ -738,29 +738,11 @@ def _get_name_index_from_cells(cells: list[str]) -> int | None:
     return cells.index("Name")
 
 
-def _extract_location_from_type(type_value: str | None) -> str:
-    """
-    Extract location suffix (APO or BB) from Type column value.
-    
-    Format: MMDD + location suffix (e.g., '0420APO' → 'APO', '0420BB' → 'BB')
-    Returns the configured LOCATION default if extraction fails.
-    """
-    if not type_value:
-        return LOCATION
-    # Extract suffix after 4-digit date prefix
-    type_value = type_value.strip()
-    if len(type_value) > 4:
-        suffix = type_value[4:].upper()
-        if suffix in ("APO", "BB"):
-            return suffix
-    return LOCATION
-
-
 def _extract_arrival_date_from_type(type_value: str | None, fallback_date: datetime) -> str:
     """Extract Inventory Date from Type MMDD prefix, else use fallback date.
 
     Examples:
-      - '0502APO' -> '05/02/<fallback year>'
+            - '0502' -> '05/02/<fallback year>'
       - missing/invalid MMDD -> fallback_date formatted as MM/DD/YYYY
     """
     fallback = fallback_date.strftime("%m/%d/%Y")
@@ -769,8 +751,7 @@ def _extract_arrival_date_from_type(type_value: str | None, fallback_date: datet
 
     cleaned = type_value.strip().upper()
 
-    # Strict schema: MMDD + location suffix (APO|BB), e.g. 0502APO.
-    strict = re.match(r"^(\d{2})(\d{2})(APO|BB)$", cleaned)
+    strict = re.fullmatch(r"(\d{2})(\d{2})", cleaned)
     if not strict:
         return fallback
 
@@ -839,52 +820,47 @@ def _normalize_scan_text(raw_text: str) -> str:
 
 def _normalize_combined_location_groups(
     descriptions: list[tuple[str, str]],
-    email_date: datetime,
-) -> list[tuple[str, str]]:
-    """Map one Orca ``break`` delimiter to BB-before and APO-after groups."""
+) -> list[tuple[str, str, str]]:
+    """Validate date-only Types and assign locations around the Orca delimiter."""
     delimiter_indexes = [
         index
         for index, (_, description) in enumerate(descriptions)
         if description.strip().casefold() == "break"
     ]
-    if not delimiter_indexes:
-        return descriptions
-    if len(delimiter_indexes) != 1:
+    if len(delimiter_indexes) > 1:
         raise ValueError(
             "Combined Orca email must contain exactly one 'break' delimiter"
         )
 
-    delimiter_index = delimiter_indexes[0]
-    if delimiter_index == 0 or delimiter_index == len(descriptions) - 1:
+    delimiter_index = delimiter_indexes[0] if delimiter_indexes else None
+    if delimiter_index in (0, len(descriptions) - 1):
         raise ValueError(
             "Combined Orca email 'break' delimiter must separate BB and APO scans"
         )
 
-    normalized: list[tuple[str, str]] = []
+    normalized: list[tuple[str, str, str]] = []
     date_prefix: str | None = None
     for index, (type_value, description) in enumerate(descriptions):
+        normalized_type = type_value.strip()
+        type_match = re.fullmatch(r"\d{3,4}", normalized_type)
+        if not type_match:
+            raise ValueError(
+                "Orca email row "
+                f"{index + 1} has Type={type_value!r}; expected MDD or MMDD date without location"
+            )
+        normalized_date = normalized_type.zfill(4)
+        if date_prefix is None:
+            date_prefix = normalized_date
+        elif normalized_date != date_prefix:
+            raise ValueError(
+                "Orca email requires one shared MDD or MMDD date"
+            )
+
         if index == delimiter_index:
             continue
 
-        normalized_type = type_value.strip()
-        if email_date.date() == datetime(2026, 9, 22).date() and normalized_type == "0922bb":
-            normalized_type = "0922"
-
-        type_match = re.fullmatch(r"(\d{4})", normalized_type)
-        if not type_match:
-            raise ValueError(
-                "Combined Orca email row "
-                f"{index + 1} has Type={type_value!r}; expected MMDD format"
-            )
-        if date_prefix is None:
-            date_prefix = type_match.group(1)
-        elif type_match.group(1) != date_prefix:
-            raise ValueError(
-                "Combined Orca email requires one shared MMDD date for both locations"
-            )
-
-        location = "BB" if index < delimiter_index else "APO"
-        normalized.append((f"{date_prefix}{location}", description))
+        location = "BB" if delimiter_index is not None and index < delimiter_index else "APO"
+        normalized.append((normalized_date, description, location))
 
     return normalized
 
@@ -909,7 +885,7 @@ def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_da
 
     Args:
         descriptions: List of (type_value, description) tuples from email parsing.
-                      type_value is the email Type column (e.g., '0420APO').
+                      type_value is the date-only email Type column (e.g., '0420').
         email_date: Email Date header as datetime
 
     Returns:
@@ -917,7 +893,7 @@ def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_da
                   Location, Action, Area, Claim#, WorkItem}
         mva_list: list of clean 8-digit MVA strings for the worker (errors excluded)
     """
-    descriptions = _normalize_combined_location_groups(descriptions, email_date)
+    normalized_descriptions = _normalize_combined_location_groups(descriptions)
     log.info("Parsing: Processing %d descriptions …", len(descriptions))
 
     manifest: dict[str, dict] = {}
@@ -925,10 +901,9 @@ def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_da
     missing_type_count = 0
     default_work_item = RUNTIME_CONFIG.get("work_item_default_flag", "verified")
 
-    for type_value, desc in descriptions:
+    for type_value, desc, location in normalized_descriptions:
         raw = desc.strip()
         normalized_scan = _normalize_scan_text(raw)
-        location = _extract_location_from_type(type_value)
         inventory_date = _extract_arrival_date_from_type(type_value, email_date)
         if not type_value:
             missing_type_count += 1

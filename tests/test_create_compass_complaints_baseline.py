@@ -556,14 +556,60 @@ def test_select_vehicle_search_result_waits_for_exact_result():
     ]
 
 
+def test_clear_vehicle_search_filters_removes_active_filters_and_keyword(monkeypatch):
+    page = MagicMock()
+    active_filters = MagicMock()
+    active_filter = MagicMock()
+    clear = MagicMock()
+    keyword = MagicMock()
+    page.locator.return_value = active_filters
+    active_filters.count.side_effect = [1, 0]
+    active_filters.first = active_filter
+    active_filter.inner_text.return_value = "Search by VIN\nKNDP..."
+    active_filter.locator.return_value = clear
+    clear.count.return_value = 1
+    clear.first.is_visible.return_value = True
+    monkeypatch.setattr(complaints, "_wait_for_keyword_search_input", lambda _page: keyword)
+
+    complaints._clear_vehicle_search_filters(page)
+
+    active_filter.hover.assert_called_once_with()
+    clear.first.click.assert_called_once_with(timeout=5000)
+    keyword.fill.assert_called_once_with("")
+
+
+def test_clear_vehicle_search_filters_requires_one_clear_control(monkeypatch):
+    page = MagicMock()
+    active_filters = MagicMock()
+    active_filter = MagicMock()
+    clear = MagicMock()
+    page.locator.return_value = active_filters
+    active_filters.count.return_value = 1
+    active_filters.first = active_filter
+    active_filter.inner_text.return_value = "Search by VIN\nKNDP..."
+    active_filter.locator.return_value = clear
+    clear.count.return_value = 0
+    monkeypatch.setattr(complaints, "_wait_for_keyword_search_input", MagicMock())
+
+    with pytest.raises(RuntimeError, match="must expose exactly one clear control"):
+        complaints._clear_vehicle_search_filters(page)
+
+
 def test_search_mva_requires_confirmed_vehicle_details(monkeypatch):
     page = MagicMock()
     by_mva = MagicMock()
     page.get_by_role.return_value.first = by_mva
-    keyword = MagicMock()
+    filter_input = MagicMock()
+    filter_input.count.return_value = 1
+    options = MagicMock()
+    exact_options = MagicMock()
+    exact_options.count.return_value = 1
+    options.filter.return_value = exact_options
+    page.locator.side_effect = [filter_input, options]
+    clear_filters = MagicMock()
     select_result = MagicMock()
     confirm_details = MagicMock(side_effect=RuntimeError("MVA mismatch"))
-    monkeypatch.setattr(complaints, "_wait_for_keyword_search_input", lambda _page: keyword)
+    monkeypatch.setattr(complaints, "_clear_vehicle_search_filters", clear_filters)
     monkeypatch.setattr(complaints, "_select_vehicle_search_result", select_result)
     monkeypatch.setattr(complaints, "_wait_for_vehicle_details_mva", confirm_details)
 
@@ -573,9 +619,11 @@ def test_search_mva_requires_confirmed_vehicle_details(monkeypatch):
     except RuntimeError as exc:
         assert str(exc) == "MVA mismatch"
 
+    clear_filters.assert_called_once_with(page)
     by_mva.click.assert_called_once_with(timeout=5000)
-    keyword.fill.assert_called_once_with("059379600")
-    keyword.press.assert_called_once_with("Enter")
+    filter_input.first.fill.assert_any_call("")
+    filter_input.first.fill.assert_any_call("059379600")
+    exact_options.first.click.assert_called_once_with(timeout=5000)
     select_result.assert_called_once_with(page, "059379600")
     confirm_details.assert_called_once_with(page, "059379600")
 

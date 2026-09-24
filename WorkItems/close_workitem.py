@@ -31,7 +31,6 @@ from playwright_prototype.config import (
 from playwright_prototype.session import ensure_profile_context
 from playwright_prototype.steps import (
     COMPLAINT_TYPE_PATTERNS,
-    COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR,
     close_open_work_item,
 )
 from playwright_prototype.steps import navigate_to_mva as pw_navigate_to_mva
@@ -618,12 +617,6 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
 
                 try:
                     if reuse_vehicle_search:
-                        keyword_search = page.locator(COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR)
-                        if await keyword_search.count() != 1:
-                            raise RuntimeError(
-                                "Expected exactly one vehicle-page Keyword Search field after close"
-                            )
-                        await keyword_search.first.wait_for(state="visible", timeout=8_000)
                         log.info("[CLOSE] %s - reusing current vehicle-page MVA search", mva)
                     else:
                         log.info("[CLOSE] %s - opening Compass homepage Vehicle Search", mva)

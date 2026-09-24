@@ -57,6 +57,14 @@ COMPASS_GO_BASE_URL = "https://go.avisbudget.palantirfoundry.com"
 COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR = "input[type='search'][placeholder='Keyword Search (other fields)']"
 COMPASS_WORKSHOP_OBJECT_TABLE_SELECTOR = "[data-test-id='workshop-object-table']"
 COMPASS_WORKSHOP_OBJECT_TITLE_SELECTOR = "[data-test-id='workshop-object-title']"
+COMPASS_ACTIVE_FILTER_SELECTOR = "span.bp6-tag[role='button']:has(b)"
+COMPASS_FILTER_CLEAR_SELECTOR = "svg[data-icon='cross']"
+COMPASS_MVA_FILTER_INPUT_SELECTOR = (
+    "div.bp6-popover-content:visible input.bp6-multi-select-tag-input-input:visible"
+)
+COMPASS_MVA_FILTER_OPTION_SELECTOR = (
+    "div.bp6-popover-content:visible li[role='option']:visible"
+)
 COMPASS_DETAILS_PANEL_TABLE_SELECTOR = "[data-test-id='ov-full-object-view-tabs-content'] [data-test-id='workshop-object-table']"
 COMPASS_OVERVIEW_MVA_ROW_SELECTOR = (
     "xpath=//div[@role='listitem']"
@@ -807,15 +815,60 @@ def _select_vehicle_search_result(page, mva: str) -> None:
     raise RuntimeError(f"Expected one exact search result for MVA {mva}, found {result_count}")
 
 
+def _clear_vehicle_search_filters(page) -> None:
+    active_filters = page.locator(COMPASS_ACTIVE_FILTER_SELECTOR)
+    cleared: list[str] = []
+    active_count = active_filters.count()
+
+    while active_count:
+        active_filter = active_filters.first
+        filter_text = " ".join(active_filter.inner_text().split())
+        active_filter.hover()
+        clear = active_filter.locator(COMPASS_FILTER_CLEAR_SELECTOR)
+        if clear.count() != 1 or not clear.first.is_visible():
+            raise RuntimeError(
+                f"Active Compass filter {filter_text!r} must expose exactly one clear control"
+            )
+        clear.first.click(timeout=5000)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            next_count = active_filters.count()
+            if next_count == active_count - 1:
+                active_count = next_count
+                break
+            page.wait_for_timeout(100)
+        else:
+            raise RuntimeError(f"Active Compass filter {filter_text!r} did not clear")
+        cleared.append(filter_text)
+
+    keyword = _wait_for_keyword_search_input(page)
+    keyword.fill("")
+    log.info("Compass vehicle search filters cleared: %s", cleared)
+
+
 def _search_mva(page, mva: str) -> None:
+    _clear_vehicle_search_filters(page)
+
     by_mva = page.get_by_role("button", name=re.compile(r"^Search\s+by\s+MVA$", re.I)).first
     by_mva.wait_for(state="visible", timeout=8000)
     by_mva.click(timeout=5000)
 
-    keyword = _wait_for_keyword_search_input(page)
-    keyword.click()
-    keyword.fill(mva)
-    keyword.press("Enter")
+    filter_input = page.locator(COMPASS_MVA_FILTER_INPUT_SELECTOR)
+    filter_input.first.wait_for(state="visible", timeout=8000)
+    if filter_input.count() != 1:
+        raise RuntimeError("Search by MVA must open exactly one MVA filter input")
+    filter_input.first.fill("")
+    filter_input.first.fill(mva)
+
+    exact_options = page.locator(COMPASS_MVA_FILTER_OPTION_SELECTOR).filter(
+        has_text=re.compile(rf"^\s*{re.escape(mva)}\s*$")
+    )
+    exact_options.first.wait_for(state="visible", timeout=8000)
+    if exact_options.count() != 1:
+        raise RuntimeError(
+            f"Search by MVA must return exactly one filter option for {mva}"
+        )
+    exact_options.first.click(timeout=5000)
 
     _select_vehicle_search_result(page, mva)
     _wait_for_vehicle_details_mva(page, mva)

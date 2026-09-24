@@ -117,8 +117,8 @@ class TestSmoke2_AllDuplicateMVAs:
 
     # Scans using the new Orca format — WS area, no flags
     _SCANS = [
-        ("0425APO", "59340120WS"),
-        ("0425APO", "59340121WS"),
+        ("0425", "59340120WS"),
+        ("0425", "59340121WS"),
     ]
     _MVAS = ["59340120", "59340121"]
     _DATE = datetime(2026, 4, 25)
@@ -221,7 +221,7 @@ class TestEmailSeenTiming:
         monkeypatch.setattr("GlassOrchestrator.NOTIFICATIONS_ENABLED", False)
 
         payloads = [
-            ([("0425APO", "59340120WS")], datetime(2026, 4, 25), source_uid),
+            ([("0425", "59340120WS")], datetime(2026, 4, 25), source_uid),
             ([], datetime(2026, 4, 25), None),
         ]
 
@@ -254,7 +254,7 @@ class TestEmailSeenTiming:
         source_uid = b"12345"
 
         payloads = [
-            ([("0425APO", "59340120WS")], datetime(2026, 4, 25), source_uid),
+            ([("0425", "59340120WS")], datetime(2026, 4, 25), source_uid),
             ([], datetime(2026, 4, 25), None),
         ]
 
@@ -288,8 +288,8 @@ class TestUnreadDrainBehavior:
         monkeypatch.setattr("GlassOrchestrator.NOTIFICATIONS_ENABLED", False)
 
         payloads = [
-            ([("0910APO", "59340120WS")], datetime(2026, 9, 10), b"1001"),
-            ([("0910BB", "59340121WS")], datetime(2026, 9, 10), b"1002"),
+            ([("0910", "59340120WS")], datetime(2026, 9, 10), b"1001"),
+            ([("0910", "59340121WS")], datetime(2026, 9, 10), b"1002"),
             ([], datetime(2026, 9, 10), None),
         ]
 

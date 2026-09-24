@@ -8,7 +8,7 @@ Focus:
 
 import asyncio
 import logging
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -71,6 +71,102 @@ def test_compass_home_vehicle_search_rejects_ambiguous_search_button():
         asyncio.run(_enter_mva(page, "059733310"))
 
     mva_input.fill.assert_not_called()
+
+
+def test_clear_vehicle_search_filters_removes_every_filter_and_keyword():
+    from playwright_prototype.steps import (
+        COMPASS_ACTIVE_FILTER_SELECTOR,
+        COMPASS_FILTER_CLEAR_SELECTOR,
+        COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR,
+        _clear_vehicle_search_filters,
+    )
+
+    page = MagicMock()
+    active_filters = MagicMock()
+    active_filter = MagicMock()
+    clear = MagicMock()
+    keyword = MagicMock()
+
+    active_filters.count = AsyncMock(side_effect=[2, 1, 0])
+    active_filters.first = active_filter
+    active_filter.inner_text = AsyncMock(
+        side_effect=["Search by MVA 011111111", "Search by VIN TESTVIN"]
+    )
+    active_filter.hover = AsyncMock()
+    active_filter.locator.return_value = clear
+    clear.count = AsyncMock(return_value=1)
+    clear.first = clear
+    clear.is_visible = AsyncMock(return_value=True)
+    clear.click = AsyncMock()
+    keyword.count = AsyncMock(return_value=1)
+    keyword.first = keyword
+    keyword.wait_for = AsyncMock()
+    keyword.fill = AsyncMock()
+    page.locator.side_effect = lambda selector: {
+        COMPASS_ACTIVE_FILTER_SELECTOR: active_filters,
+        COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR: keyword,
+    }[selector]
+    page.wait_for_timeout = AsyncMock()
+
+    asyncio.run(_clear_vehicle_search_filters(page))
+
+    assert active_filter.hover.await_count == 2
+    assert active_filter.locator.call_args_list == [
+        call(COMPASS_FILTER_CLEAR_SELECTOR),
+        call(COMPASS_FILTER_CLEAR_SELECTOR),
+    ]
+    assert clear.click.await_count == 2
+    keyword.wait_for.assert_awaited_once_with(state="visible", timeout=8_000)
+    keyword.fill.assert_awaited_once_with("")
+
+
+def test_reused_vehicle_search_selects_exact_mva_filter_option():
+    from playwright_prototype.steps import (
+        COMPASS_HOME_MVA_INPUT_SELECTOR,
+        COMPASS_MVA_FILTER_INPUT_SELECTOR,
+        COMPASS_MVA_FILTER_OPTION_SELECTOR,
+        _enter_mva,
+    )
+
+    page = MagicMock()
+    home_input = MagicMock()
+    home_input.count = AsyncMock(return_value=0)
+    filter_input = MagicMock()
+    filter_input.first = filter_input
+    filter_input.wait_for = AsyncMock()
+    filter_input.count = AsyncMock(return_value=1)
+    filter_input.fill = AsyncMock()
+    options = MagicMock()
+    exact_options = MagicMock()
+    options.filter.return_value = exact_options
+    exact_options.first = exact_options
+    exact_options.wait_for = AsyncMock()
+    exact_options.count = AsyncMock(return_value=1)
+    exact_options.click = AsyncMock()
+    by_mva = MagicMock()
+    by_mva.count = AsyncMock(return_value=1)
+    by_mva.first = by_mva
+    by_mva.wait_for = AsyncMock()
+    by_mva.click = AsyncMock()
+    page.locator.side_effect = lambda selector: {
+        COMPASS_HOME_MVA_INPUT_SELECTOR: home_input,
+        COMPASS_MVA_FILTER_INPUT_SELECTOR: filter_input,
+        COMPASS_MVA_FILTER_OPTION_SELECTOR: options,
+    }[selector]
+    page.get_by_role.return_value = by_mva
+
+    with patch(
+        "playwright_prototype.steps._clear_vehicle_search_filters",
+        new=AsyncMock(),
+    ) as clear_filters:
+        result = asyncio.run(_enter_mva(page, "059733310"))
+
+    assert result is page
+    clear_filters.assert_awaited_once_with(page)
+    by_mva.wait_for.assert_awaited_once_with(state="visible", timeout=8_000)
+    by_mva.click.assert_awaited_once_with(timeout=5_000)
+    assert filter_input.fill.await_args_list == [call(""), call("059733310")]
+    exact_options.click.assert_awaited_once_with(timeout=5_000)
 
 
 def _make_open_work_items_page(*badge_values):

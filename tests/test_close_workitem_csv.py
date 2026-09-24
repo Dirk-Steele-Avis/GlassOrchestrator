@@ -150,8 +150,6 @@ class TestActiveCloseRunnerDisconnect:
             close_workitem.RESULT_CLOSED,
         ]
         page.goto.assert_awaited_once_with(close_workitem.LOGIN_URL, wait_until="domcontentloaded")
-        page.locator.assert_called_once_with(close_workitem.COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR)
-        keyword_search.first.wait_for.assert_awaited_once_with(state="visible", timeout=8_000)
         assert navigate.await_count == 2
 
     def test_navigation_failure_stops_remaining_mvas(self, monkeypatch):

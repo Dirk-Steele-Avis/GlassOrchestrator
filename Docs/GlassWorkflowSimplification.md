@@ -22,6 +22,7 @@ What it does:
 Behavior:
 
 - If FieldPO next-action fails, the workflow continues to complaint/work-item creation.
+- Before each reused Compass vehicle search, all retained filter pills and the keyword field are cleared; the next MVA is selected through the dedicated `Search by MVA` filter.
 - Any arguments are forwarded to the complaint/work-item creation step.
 
 ### 2. Closeout
