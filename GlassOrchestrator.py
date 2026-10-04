@@ -833,9 +833,9 @@ def _normalize_combined_location_groups(
         )
 
     delimiter_index = delimiter_indexes[0] if delimiter_indexes else None
-    if delimiter_index in (0, len(descriptions) - 1):
+    if not descriptions or (delimiter_index is not None and len(descriptions) == 1):
         raise ValueError(
-            "Combined Orca email 'break' delimiter must separate BB and APO scans"
+            "Orca email must contain at least one scan"
         )
 
     normalized: list[tuple[str, str, str]] = []

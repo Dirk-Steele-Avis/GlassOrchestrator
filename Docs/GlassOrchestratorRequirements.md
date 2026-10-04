@@ -54,10 +54,10 @@ Bare OEM scans such as `62155855OEM` are invalid because they do not identify th
 2. The Description value `break`, matched case-insensitively after trimming, shall delimit the two groups.
 3. Scans before `break` shall use location BB; scans after `break` shall use location APO.
 4. The delimiter shall not be processed as a scan.
-5. A combined export shall contain exactly one delimiter with at least one entry on each side.
+5. A combined export shall contain exactly one delimiter and at least one scan overall. The delimiter may be the first row when BB has no scans or the last row when APO has no scans.
 6. Type shall contain only the inventory date as numeric `MDD` or `MMDD`; it shall not contain a location suffix.
 7. Every row shall use the same Type date. A three-digit value shall be left-padded to `MMDD` before date parsing.
-8. When BB has no scans, the email shall omit the delimiter and every scan shall use location APO.
+8. An email without a delimiter shall assign every scan to location APO. When BB has no scans, a delimiter at the top shall also assign every scan to APO.
 9. A malformed email shall abort parsing with a precise error.
 
 ## OEM Requirements

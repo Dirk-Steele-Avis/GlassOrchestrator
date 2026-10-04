@@ -107,6 +107,37 @@ class TestUT1_SuffixRegex:
         assert manifest["61147446"]["Action"] == "Turnback"
         assert manifest["61147446"]["_FORCE_AVIS_ORDER"] is True
 
+    @pytest.mark.parametrize("delimiter_at_top", [True, False])
+    def test_combined_email_allows_empty_location(self, delimiter_at_top):
+        descriptions = [
+            ("1004", "61147446wstbk"),
+            ("1004", "60092491ws"),
+        ]
+        descriptions.insert(0 if delimiter_at_top else len(descriptions), ("1004", " Break "))
+
+        manifest, mva_list = parse_descriptions_to_manifest(
+            descriptions, datetime(2026, 10, 4)
+        )
+
+        assert mva_list == ["61147446", "60092491"]
+        assert set(manifest) == set(mva_list)
+        for entry in manifest.values():
+            assert entry["Location"] == ("APO" if delimiter_at_top else "BB")
+            assert entry["Inventory Date"] == "10/04/2026"
+
+    @pytest.mark.parametrize("descriptions", [[], [("1004", "break")]])
+    def test_email_without_scans_is_rejected(self, descriptions):
+        with pytest.raises(ValueError, match="must contain at least one scan"):
+            parse_descriptions_to_manifest(descriptions, datetime(2026, 10, 4))
+
+    @pytest.mark.parametrize("delimiter_at_top", [True, False])
+    def test_edge_break_rejects_mixed_dates(self, delimiter_at_top):
+        descriptions = [("1004", "60092491ws")]
+        descriptions.insert(0 if delimiter_at_top else len(descriptions), ("1005", "break"))
+
+        with pytest.raises(ValueError, match="requires one shared MDD or MMDD date"):
+            parse_descriptions_to_manifest(descriptions, datetime(2026, 10, 4))
+
     def test_email_without_break_routes_all_scans_to_apo(self):
         descriptions = [
             ("924", "61751340src"),
