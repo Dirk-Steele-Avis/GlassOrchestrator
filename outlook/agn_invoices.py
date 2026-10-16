@@ -77,6 +77,7 @@ ATTACHMENT_DIR = os.path.join(BASE_DIR, "pdfs")
 QUEUE_CSV = os.path.join(BASE_DIR, "invoices_queue.csv")
 DEFAULT_PO_LIST_FILE = os.path.join(BASE_DIR, "po_numbers.txt")
 DIRECT_APPROVAL_LOG_FILE = os.path.join(BASE_DIR, "direct_approval_results.jsonl")
+PO_APPROVAL_AUDIT_FILE = os.path.join(BASE_DIR, "po_approval_audit.jsonl")
 BROWSER_PROFILE_DIR = os.path.join(BASE_DIR, "browser_profile")
 CONFIG_FILE = os.path.join(BASE_DIR, "agn_invoices_config.json")
 
@@ -1016,6 +1017,79 @@ def append_direct_approval_result(record):
         result_log.write(json.dumps(record, sort_keys=True) + "\n")
 
 
+def _print_po_audit(record):
+    record = {
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        **record,
+    }
+    encoded_record = json.dumps(record, sort_keys=True, default=str)
+    with open(PO_APPROVAL_AUDIT_FILE, "a", encoding="utf-8") as audit_file:
+        audit_file.write(encoded_record + "\n")
+
+    outcome_labels = {
+        "approved": "APPROVAL CONFIRMED",
+        "already_approved": "ALREADY APPROVED; ORIGIN UNKNOWN",
+        "blocked": "NOT APPROVED; BLOCKED",
+        "approval_failed": "APPROVAL FAILED",
+        "approval_result_mismatch": "APPROVAL RESULT NEEDS REVIEW",
+        "user_declined": "USER DECLINED",
+    }
+    parts = [outcome_labels.get(record.get("outcome"), str(record.get("outcome", "UNKNOWN")))]
+    parts.append(f"Invoice #{record.get('invoice_number') or 'unknown'}")
+    parts.append(f"PO {record.get('po_number') or 'unknown'}")
+    if record.get("vin"):
+        parts.append(f"VIN {record['vin']}")
+    if record.get("mva"):
+        parts.append(f"MVA {record['mva']}")
+
+    invoice_amount = record.get("invoice_amount")
+    live_amount = record.get("live_authorized_amount", record.get("authorized_amount"))
+    if invoice_amount not in (None, ""):
+        amount_text = f"invoice {_format_audit_amount(invoice_amount)}"
+        if live_amount not in (None, ""):
+            live_match = record.get("live_amount_match", record.get("amount_match"))
+            amount_result = (
+                "MATCH" if live_match is True else "MISMATCH" if live_match is False else "NOT CHECKED"
+            )
+            amount_text += f" vs authorized {_format_audit_amount(live_amount)} ({amount_result})"
+        parts.append(amount_text)
+
+    if record.get("queued_authorized_amount") not in (None, ""):
+        queued_match = str(record.get("queued_amount_match", "")).lower()
+        queued_result = {
+            "true": "MATCH",
+            "false": "MISMATCH",
+        }.get(queued_match, "NOT CHECKED")
+        parts.append(
+            f"earlier check {_format_audit_amount(record['queued_authorized_amount'])} "
+            f"({queued_result})"
+        )
+    if record.get("price_mismatch_exception"):
+        parts.append(f"mismatch exception SKU {record.get('invoice_sku') or 'unknown'}")
+    if record.get("execution_mode"):
+        parts.append(f"mode {record['execution_mode']}")
+    if "work_order_closed" in record:
+        parts.append("work order closed" if record["work_order_closed"] else "work order left open")
+    if record.get("reasons"):
+        parts.append("reason: " + ", ".join(record["reasons"]))
+    elif record.get("reason"):
+        parts.append("reason: " + str(record["reason"]))
+    if record.get("detail"):
+        parts.append(str(record["detail"]))
+
+    print("[PO AUDIT] " + " | ".join(parts), flush=True)
+
+
+def _format_audit_amount(value):
+    amount = _parse_amount(value)
+    return f"${amount:,.2f}" if amount is not None else str(value or "unknown")
+
+
+def _invoice_number_from_subject(subject):
+    match = re.search(r"(?:Invoice|Job)\s*#\s*(\d+)", subject or "", re.IGNORECASE)
+    return match.group(1) if match else ""
+
+
 def _normalize_person_name(value):
     return str(value or "").strip().casefold()
 
@@ -1287,11 +1361,33 @@ def step_check(
                             check_result,
                             min_age_days=min_age_days,
                         )
+                    audit_record = {
+                        "source": "agn_invoices.step_check",
+                        "execution_mode": "interactive" if confirm_each else "automatic",
+                        "invoice_number": _invoice_number_from_subject(row.get("subject", "")),
+                        "po_number": po_number,
+                        "vin": vin,
+                        "mva": mva,
+                        "work_order_created_by": work_order_created_by,
+                        "invoice_amount": invoice_amount,
+                        "authorized_amount": auth_amount,
+                        "amount_match": match,
+                        "invoice_sku": strict_result.get("invoice_sku") or "",
+                        "price_mismatch_exception": bool(
+                            strict_result.get("excluded_price_sku") and not match
+                        ),
+                    }
                     if strict_result["reasons"]:
                         print(
                             "  Manual review required: "
                             + ", ".join(strict_result["reasons"])
                         )
+                        _print_po_audit({
+                            **audit_record,
+                            "outcome": "blocked",
+                            "approval_action": False,
+                            "reasons": strict_result["reasons"],
+                        })
                         log_progress(row, "skipped", ",".join(strict_result["reasons"]))
                         continue
                     if strict_result.get("excluded_price_sku") and not match:
@@ -1307,6 +1403,12 @@ def step_check(
                             approval_kwargs["allow_open_if_closure_unavailable"] = True
                         approved = approve_displayed_po(page, vin, **approval_kwargs)
                     except Exception as exc:
+                        _print_po_audit({
+                            **audit_record,
+                            "outcome": "approval_failed",
+                            "approval_action": True,
+                            "detail": f"{type(exc).__name__}: {exc}",
+                        })
                         row["status"] = "approve_failed"
                         approval_failure = RuntimeError(
                             f"Approval run stopped after failure for VIN {vin}: {exc}"
@@ -1316,9 +1418,20 @@ def step_check(
                         break
                     if approved is None:
                         print("  Skipped by user. No approval or closure action was performed.")
+                        _print_po_audit({
+                            **audit_record,
+                            "outcome": "user_declined",
+                            "approval_action": False,
+                        })
                         log_progress(row, "skipped", "user_declined")
                         continue
                     row["status"] = "approved"
+                    _print_po_audit({
+                        **audit_record,
+                        "outcome": "approved",
+                        "approval_action": True,
+                        "work_order_closed": bool(approved),
+                    })
                     finalize_outlook_invoice(row)
                     if approved:
                         print("  Approved and closed.")
@@ -1673,24 +1786,85 @@ def approve_one_vin(page, invoice_row, request_permission=True):
         "mva": mva,
         "work_order_created_by": work_order_created_by,
     })
+    audit_record = {
+        "source": "agn_invoices.step_approve",
+        "execution_mode": "interactive" if request_permission else "automatic",
+        "invoice_number": _invoice_number_from_subject(invoice_row.get("subject", "")),
+        "po_number": po_number,
+        "vin": vin,
+        "mva": mva,
+        "work_order_created_by": work_order_created_by,
+        "invoice_amount": strict_result.get("invoice_amount", invoice_row.get("invoice_amount", "")),
+        "queued_authorized_amount": invoice_row.get("auth_amount", ""),
+        "queued_amount_match": invoice_row.get("match", ""),
+        "invoice_sku": strict_result.get("invoice_sku") or "",
+        "price_mismatch_exception": bool(strict_result.get("excluded_price_sku")),
+    }
     if strict_result["reasons"]:
+        _print_po_audit({
+            **audit_record,
+            "outcome": "blocked",
+            "approval_action": False,
+            "reasons": strict_result["reasons"],
+        })
         return False, work_order_created_by, strict_result["reasons"]
 
     if po_number:
         click_into_po(page, po_number)
     else:
         click_into_po(page)
-    status_text, _ = read_po_status_and_amount(page)
+    status_text, live_auth_amount = read_po_status_and_amount(page)
+    live_amount_match = (
+        _parse_amount(strict_result.get("invoice_amount", invoice_row.get("invoice_amount", "")))
+        == _parse_amount(live_auth_amount)
+    )
+    audit_record.update({
+        "status_before_action": status_text,
+        "live_authorized_amount": live_auth_amount,
+        "live_amount_match": live_amount_match,
+    })
     if status_text == "APPROVED":
+        _print_po_audit({
+            **audit_record,
+            "outcome": "already_approved",
+            "approval_action": False,
+            "prior_approval_source": "unknown_from_current_FieldPO_state",
+        })
         return False, work_order_created_by, ["already_approved"]
     if status_text != "IN PROGRESS":
+        _print_po_audit({
+            **audit_record,
+            "outcome": "blocked",
+            "approval_action": False,
+            "reasons": [f"unexpected_po_status:{status_text}"],
+        })
         return False, work_order_created_by, ["unexpected_po_status"]
     approval_kwargs = {"request_permission": request_permission}
     if po_number:
         approval_kwargs["expected_po_number"] = po_number
-    approved = approve_displayed_po(page, vin, **approval_kwargs)
+    try:
+        approved = approve_displayed_po(page, vin, **approval_kwargs)
+    except Exception as exc:
+        _print_po_audit({
+            **audit_record,
+            "outcome": "approval_failed",
+            "approval_action": True,
+            "detail": f"{type(exc).__name__}: {exc}",
+        })
+        raise
     if approved is None:
+        _print_po_audit({
+            **audit_record,
+            "outcome": "user_declined",
+            "approval_action": False,
+        })
         return None, work_order_created_by, ["user_declined"]
+    _print_po_audit({
+        **audit_record,
+        "outcome": "approved",
+        "approval_action": True,
+        "work_order_closed": bool(approved),
+    })
     return True, work_order_created_by, []
 
 

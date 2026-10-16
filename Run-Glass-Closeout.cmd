@@ -93,15 +93,15 @@ exit /b 2
 :run
 if /i "%MODE%"=="mva" (
   echo Running Glass closeout for MVA %TARGET_MVA%...
-  call ".\Run-GlassBootstrap.cmd" .\.venv\Scripts\python.exe WorkItems\close_workitem.py --mvas "%TARGET_MVA%"
+  call ".\Run-GlassBootstrap.cmd" .\.venv\Scripts\python.exe WorkItems\close_workitem.py --mvas "%TARGET_MVA%" --concise-console --results-json data\glass_closeout_work_items.json
   if errorlevel 1 exit /b %errorlevel%
 ) else (
   if defined CLOSE_CSV (
     echo Running Glass closeout from reviewed CSV %CLOSE_CSV%...
     if defined MAX_ROWS (
-      call ".\Run-GlassBootstrap.cmd" .\.venv\Scripts\python.exe WorkItems\close_workitem.py --csv "%CLOSE_CSV%" --max-rows %MAX_ROWS%
+      call ".\Run-GlassBootstrap.cmd" .\.venv\Scripts\python.exe WorkItems\close_workitem.py --csv "%CLOSE_CSV%" --max-rows %MAX_ROWS% --concise-console --results-json data\glass_closeout_work_items.json
     ) else (
-      call ".\Run-GlassBootstrap.cmd" .\.venv\Scripts\python.exe WorkItems\close_workitem.py --csv "%CLOSE_CSV%"
+      call ".\Run-GlassBootstrap.cmd" .\.venv\Scripts\python.exe WorkItems\close_workitem.py --csv "%CLOSE_CSV%" --concise-console --results-json data\glass_closeout_work_items.json
     )
     if errorlevel 1 exit /b %errorlevel%
   ) else (
@@ -114,9 +114,9 @@ if /i "%MODE%"=="mva" (
     if errorlevel 1 exit /b %errorlevel%
 
     if defined MAX_ROWS (
-      call ".\Run-GlassBootstrap.cmd" .\.venv\Scripts\python.exe WorkItems\close_workitem.py --max-rows %MAX_ROWS%
+      call ".\Run-GlassBootstrap.cmd" .\.venv\Scripts\python.exe WorkItems\close_workitem.py --max-rows %MAX_ROWS% --concise-console --results-json data\glass_closeout_work_items.json
     ) else (
-      call ".\Run-GlassBootstrap.cmd" .\.venv\Scripts\python.exe WorkItems\close_workitem.py
+      call ".\Run-GlassBootstrap.cmd" .\.venv\Scripts\python.exe WorkItems\close_workitem.py --concise-console --results-json data\glass_closeout_work_items.json
     )
     if errorlevel 1 exit /b %errorlevel%
   )
@@ -127,7 +127,7 @@ if defined MAX_INVOICES set "INVOICE_ARGS=%INVOICE_ARGS% --max-invoices %MAX_INV
 if defined INVOICE_NUMBER set "INVOICE_ARGS=%INVOICE_ARGS% --invoice-number %INVOICE_NUMBER%"
 if "%SWEEP_TERMINAL%"=="1" set "INVOICE_ARGS=%INVOICE_ARGS% --sweep-terminal-to-needs-review"
 
-call ".\Run-GlassBootstrap.cmd" .\.venv\Scripts\python.exe -m invoice_workflow.cli %INVOICE_ARGS%
+call ".\Run-GlassBootstrap.cmd" .\.venv\Scripts\python.exe -m invoice_workflow.cli %INVOICE_ARGS% --work-item-results data\glass_closeout_work_items.json
 set "RUN_EXIT=%errorlevel%"
 echo.
 echo Exit code: %RUN_EXIT%

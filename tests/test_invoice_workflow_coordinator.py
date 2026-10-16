@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 from invoice_workflow.contracts import (
     CaptureFailure,
+    FieldPOIdentitySnapshot,
     IdentityResult,
     OutlookScanResult,
     ParsedInvoice,
@@ -50,6 +51,13 @@ def test_live_run_captures_and_records_exact_identity(tmp_path):
     resolver.resolve.return_value = IdentityResult(
         StageStatus.COMPLETE,
         identity=_identity(invoice),
+        fieldpo_snapshot=FieldPOIdentitySnapshot(
+            po_number="FPO1131464",
+            vin=invoice.vin,
+            mva="061093642",
+            authorized_amount=invoice.invoice_amount,
+        ),
+        sheet_mvas=("061093642",),
     )
     repository = InvoiceRepository(tmp_path / "workflow.db")
     with WorkflowRunLogger(tmp_path / "logs", "run-1") as logger:
@@ -63,6 +71,9 @@ def test_live_run_captures_and_records_exact_identity(tmp_path):
     assert summary.identities_complete == 1
     assert summary.needs_review_moved == 0
     assert summary.needs_review_failed == 0
+    assert summary.invoice_outcomes[0].fieldpo_po_number == "FPO1131464"
+    assert summary.invoice_outcomes[0].fieldpo_vin == invoice.vin
+    assert summary.invoice_outcomes[0].fieldpo_mva == "061093642"
     state = repository.get_invoice(invoice.internet_message_id)
     assert state.identity_status is StageStatus.COMPLETE
     assert state.mva == "061093642"

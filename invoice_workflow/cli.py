@@ -6,6 +6,7 @@ import argparse
 import csv
 import json
 from contextlib import ExitStack
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -53,23 +54,172 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Review log: {logger.path}")
             return 1
 
-        print(
-            "Completed-invoice live run: "
-            f"captured={summary.captured}, "
-            f"capture_failures={summary.capture_failures}, "
-            f"identity_complete={summary.identities_complete}, "
-            f"identity_blocked={summary.identities_blocked}, "
-            f"outlook_moved={summary.outlook_moved}, "
-            f"outlook_failed={summary.outlook_failed}, "
-            f"needs_review_moved={summary.needs_review_moved}, "
-            f"needs_review_failed={summary.needs_review_failed}"
-        )
+        if args.sweep_terminal_to_needs_review:
+            print("Invoice review sweep")
+            print(f"  Moved to Needs Review: {summary.needs_review_moved}")
+            print(f"  Move failures: {summary.needs_review_failed}")
+        else:
+            work_item_results = (
+                _load_work_item_results(args.work_item_results)
+                if args.work_item_results
+                else {}
+            )
+            _print_live_summary(summary, work_item_results)
         _print_failure_summary(summary)
         quarantine_csv = _write_quarantine_csv(summary, LOG_ROOT)
         if quarantine_csv is not None:
             print(f"Quarantine CSV: {quarantine_csv}")
         print(f"Review log: {logger.path}")
         return summary.exit_code
+
+
+def _print_live_summary(
+    summary: RunSummary,
+    work_item_results: dict[tuple[str, str], dict[str, str]] | None = None,
+) -> None:
+    total_found = summary.captured + summary.capture_failures
+    print("Invoice closeout results")
+    print(
+        f"  Invoices found: {total_found} "
+        f"({summary.captured} parsed, {summary.capture_failures} need invoice review)"
+    )
+    print(
+        f"  PO, VIN, MVA, and amount checks: {summary.identities_complete} passed, "
+        f"{summary.identities_blocked} need review"
+    )
+    print(
+        f"  Invoice emails: {summary.outlook_moved} moved to Processed, "
+        f"{summary.needs_review_moved} moved to Needs Review"
+    )
+    if summary.outlook_failed or summary.needs_review_failed:
+        print(
+            f"  Email move failures: Processed={summary.outlook_failed}, "
+            f"Needs Review={summary.needs_review_failed}"
+        )
+    print("  PO approval: Not performed by this workflow")
+    print("  Complaint creation: Not part of closeout")
+    print("  Work-item creation: Not part of closeout; existing items are closed earlier")
+
+    if not summary.invoice_outcomes:
+        return
+    print("  Per-invoice results:")
+    work_item_results = work_item_results or {}
+    outlook_failures = {
+        failure.invoice_number
+        for failure in summary.failures
+        if failure.stage == "outlook"
+    }
+    for invoice in summary.invoice_outcomes:
+        invoice_pdf_po = _compare_required(
+            invoice.po_number,
+            invoice.pdf_po_number,
+        )
+        invoice_fieldpo_po = _compare_optional(
+            invoice.po_number,
+            invoice.fieldpo_po_number,
+        )
+        amount_status = _compare_amount(
+            invoice.invoice_amount,
+            invoice.authorized_amount,
+        )
+        vin_status = _compare_optional(invoice.vin, invoice.fieldpo_vin)
+        mva_status = _compare_optional(invoice.mva, invoice.fieldpo_mva)
+
+        if invoice.outlook_status == "complete":
+            email_status = "Processed"
+        elif invoice.invoice_number in outlook_failures:
+            email_status = "move failed"
+        elif invoice.identity_status in {"blocked", "failed"}:
+            email_status = "Needs Review"
+        else:
+            email_status = "not moved"
+
+        work_item = work_item_results.get((invoice.mva, "Glass"))
+        if work_item is None:
+            work_item_status = "NOT CHECKED"
+        else:
+            work_item_status = work_item["status"].replace("_", " ").upper()
+            if work_item["detail"]:
+                work_item_status += f" ({work_item['detail']})"
+
+        print(
+            f"    Invoice #{invoice.invoice_number} | MVA {invoice.mva or 'unknown'}"
+        )
+        print(
+            f"      PO: email {invoice.po_number or 'missing'} / "
+            f"PDF {invoice.pdf_po_number or 'missing'} [{invoice_pdf_po}]; "
+            f"FieldPO {invoice.fieldpo_po_number or 'not read'} "
+            f"[{invoice_fieldpo_po}]"
+        )
+        print(
+            f"      Amount: invoice ${invoice.invoice_amount} / "
+            f"authorized {('$' + invoice.authorized_amount) if invoice.authorized_amount else 'not read'} "
+            f"[{amount_status}]"
+        )
+        print(
+            f"      VIN: invoice {invoice.vin or 'missing'} / "
+            f"FieldPO {invoice.fieldpo_vin or 'not read'} [{vin_status}]"
+        )
+        print(
+            f"      MVA: Sheet {invoice.mva or 'not found'} / "
+            f"FieldPO {invoice.fieldpo_mva or 'not read'} [{mva_status}]"
+        )
+        print(f"      Work item: {work_item_status}")
+        print("      PO approval: NOT CHECKED")
+        print("      Complaint: NOT CHECKED")
+        print(f"      Invoice email: {email_status}")
+        if invoice.detail:
+            print(f"      Review reason: {invoice.detail}")
+
+
+def _compare_required(left: str, right: str) -> str:
+    if not left or not right:
+        return "MISMATCH"
+    return "MATCH" if left == right else "MISMATCH"
+
+
+def _compare_optional(left: str, right: str) -> str:
+    if not left or not right:
+        return "NOT CHECKED"
+    return "MATCH" if left == right else "MISMATCH"
+
+
+def _compare_amount(invoice_amount: str, authorized_amount: str) -> str:
+    if not authorized_amount:
+        return "NOT CHECKED"
+    try:
+        invoice_value = Decimal(invoice_amount)
+        authorized_value = Decimal(authorized_amount)
+    except InvalidOperation:
+        return "MISMATCH"
+    return "MATCH" if invoice_value == authorized_value else "MISMATCH"
+
+
+def _load_work_item_results(
+    path: str | Path,
+) -> dict[tuple[str, str], dict[str, str]]:
+    with Path(path).open("r", encoding="utf-8") as result_file:
+        payload = json.load(result_file)
+    if not isinstance(payload, list):
+        raise ValueError("Work-item results must be a JSON list")
+
+    results = {}
+    for row in payload:
+        if not isinstance(row, dict):
+            raise ValueError("Each work-item result must be a JSON object")
+        mva = str(row.get("mva", "")).strip()
+        complaint_type = str(row.get("complaint_type", "")).strip()
+        status = str(row.get("status", "")).strip()
+        if not mva or not complaint_type or not status:
+            raise ValueError("Work-item result is missing MVA, complaint type, or status")
+        key = (mva, complaint_type)
+        if key in results:
+            raise ValueError(f"Duplicate work-item result for MVA {mva} ({complaint_type})")
+        results[key] = {
+            "status": status,
+            "detail": str(row.get("detail", "")).strip(),
+        }
+    return results
 
 
 def _run_live(
@@ -177,6 +327,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--max-invoices", type=_positive_int)
     parser.add_argument("--invoice-number", type=_invoice_number)
     parser.add_argument("--sweep-terminal-to-needs-review", action="store_true")
+    parser.add_argument("--work-item-results", type=Path)
     return parser.parse_args(argv)
 
 

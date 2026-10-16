@@ -10,6 +10,7 @@ import csv
 from datetime import date, datetime
 import inspect
 import json
+import logging
 import os
 import re
 import subprocess
@@ -511,6 +512,15 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
     """
     workflow_started = time.monotonic()
     results: list[dict] = []
+
+    def result_record(target: dict, status: str, detail: str = "") -> dict:
+        return {
+            "mva": target["mva"],
+            "complaint_type": target["complaint_type"],
+            "result": status,
+            "detail": detail,
+        }
+
     headless = resolve_headless()
     edge_user_data_dir = resolve_edge_user_data_dir()
     edge_profile_directory = resolve_edge_profile_directory()
@@ -670,17 +680,17 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
                     elif result == RESULT_NOT_FOUND:
                         log.warning("[CLOSE] %s - WORK ITEM COUNT: 0 (%s)", mva, complaint_type)
                         await _capture_playwright_screenshot(page, "not_found", mva)
-                    results.append({"mva": mva, "result": result, "detail": detail})
+                    results.append(result_record(target, result, detail))
                 except asyncio.TimeoutError:
                     log.error("[CLOSE] %s - timed out after %ss during close", mva, args.timeout_seconds)
                     await _capture_playwright_screenshot(page, "timeout", mva)
                     await _debug_hold_if_configured(page, args, mva, "close timeout")
-                    results.append({"mva": mva, "result": RESULT_TIMEOUT, "detail": "close"})
+                    results.append(result_record(target, RESULT_TIMEOUT, "close"))
                 except Exception as exc:
                     log.error("[CLOSE] %s - error during close: %s", mva, exc)
                     await _capture_playwright_screenshot(page, "error", mva)
                     await _debug_hold_if_configured(page, args, mva, "close error")
-                    results.append({"mva": mva, "result": RESULT_ERROR, "detail": ""})
+                    results.append(result_record(target, RESULT_ERROR))
         finally:
             try:
                 await context.close()
@@ -739,6 +749,80 @@ def _log_summary(results: list[dict]) -> tuple[int, int]:
     return not_found_count, failed_count
 
 
+def _configure_concise_console() -> None:
+    for handler in logging.getLogger().handlers:
+        if isinstance(handler, logging.StreamHandler) and not isinstance(
+            handler, logging.FileHandler
+        ):
+            handler.setLevel(logging.WARNING)
+
+
+def _print_console_summary(results: list[dict]) -> None:
+    closed_count = sum(1 for result in results if result["result"] == RESULT_CLOSED)
+    not_found_count = sum(
+        1 for result in results if result["result"] == RESULT_NOT_FOUND
+    )
+    failed_count = sum(
+        1
+        for result in results
+        if result["result"] in {RESULT_NAV_FAILED, RESULT_ERROR, RESULT_TIMEOUT}
+    )
+    not_attempted_count = sum(
+        1 for result in results if result["result"] == "not_attempted"
+    )
+    print(
+        "[CLOSEOUT] Work items: "
+        f"{len(results)} target(s); {closed_count} closed, "
+        f"{not_found_count} not found, {failed_count} failed, "
+        f"{not_attempted_count} not attempted."
+    )
+    for result in results:
+        status = result["result"].replace("_", " ").upper()
+        detail = str(result.get("detail", "")).strip()
+        if result["result"] == RESULT_NOT_FOUND:
+            detail = detail or "No open work item found."
+        elif result["result"] == RESULT_CLOSED:
+            detail = detail or "Work item closed."
+        detail_suffix = f" | {detail}" if detail else ""
+        print(
+            f"[CLOSEOUT] MVA {result['mva']} | {status}{detail_suffix}"
+        )
+
+
+def _write_results_json(
+    path: str,
+    results: list[dict],
+    targets: list[dict] | None = None,
+) -> None:
+    if not path:
+        return
+    if targets is not None and len(results) != len(targets):
+        raise ValueError(
+            f"Expected {len(targets)} work-item results, received {len(results)}"
+        )
+    result_path = Path(path)
+    result_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = []
+    for index, result in enumerate(results):
+        target = targets[index] if targets is not None else None
+        if target is not None and result["mva"] != target["mva"]:
+            raise ValueError(
+                f"Work-item result MVA {result['mva']} does not match target {target['mva']}"
+            )
+        complaint_type = (
+            target["complaint_type"]
+            if target is not None
+            else result["complaint_type"]
+        )
+        payload.append({
+            "mva": result["mva"],
+            "complaint_type": complaint_type,
+            "status": result["result"],
+            "detail": result.get("detail", ""),
+        })
+    result_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Close open glass work items from an operator-reviewed CSV."
@@ -750,6 +834,8 @@ def main() -> None:
     parser.add_argument("--max-rows", type=int, default=None, help="Cap reviewed CSV targets to the first N rows")
     parser.add_argument("--csv", dest="csv_path", default=str(DEFAULT_CLOSE_CSV), help="Reviewed CSV with required mva and Type columns")
     parser.add_argument("--mvas", type=str, default="", help="Comma/space-separated MVA list to process explicitly (overrides CSV source)")
+    parser.add_argument("--concise-console", action="store_true", help="Keep browser progress in the log and print a readable close summary")
+    parser.add_argument("--results-json", default="", help="Write exact MVA closure outcomes to this JSON file")
 
     args = parser.parse_args()
 
@@ -762,8 +848,13 @@ def main() -> None:
 
     agentic_env = os.getenv("GLASS_AGENTIC", "").strip().lower() in {"1", "true", "yes"}
     should_pause = sys.stdin.isatty() and args.pause and not agentic_env
+    if args.concise_console:
+        _configure_concise_console()
     targets = _build_targets(args)
     if not targets:
+        _write_results_json(args.results_json, [])
+        if args.concise_console:
+            _print_console_summary([])
         return
 
     log.info("[CLOSE] %s", "=" * 50)
@@ -778,6 +869,9 @@ def main() -> None:
             log.info("[CLOSE] Retired %d handled target(s) from the review CSV", retired_count)
 
     _, failed_count = _log_summary(results)
+    _write_results_json(args.results_json, results, targets)
+    if args.concise_console:
+        _print_console_summary(results)
     if failed_count > 0:
         sys.exit(1)
 

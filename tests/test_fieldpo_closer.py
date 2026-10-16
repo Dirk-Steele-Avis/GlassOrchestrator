@@ -1,9 +1,12 @@
 from decimal import Decimal
 from importlib.util import module_from_spec, spec_from_file_location
+import json
 from pathlib import Path
 import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+
+import pytest
 
 
 MODULE_PATH = (
@@ -17,6 +20,15 @@ fieldpo_closer = module_from_spec(SPEC)
 assert SPEC.loader is not None
 sys.modules[SPEC.name] = fieldpo_closer
 SPEC.loader.exec_module(fieldpo_closer)
+
+
+@pytest.fixture(autouse=True)
+def isolate_po_approval_audit(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        fieldpo_closer.agn_invoices,
+        "PO_APPROVAL_AUDIT_FILE",
+        str(tmp_path / "po_approval_audit.jsonl"),
+    )
 
 COMBINED_MODULE_PATH = (
     Path(__file__).resolve().parents[1]
@@ -153,7 +165,7 @@ def test_fieldpo_invoice_group_closes_only_final_po(monkeypatch):
     ]
 
 
-def test_fieldpo_invoice_closes_and_moves_only_after_strict_gates(monkeypatch):
+def test_fieldpo_invoice_closes_and_moves_only_after_strict_gates(monkeypatch, tmp_path):
     invoice = _invoice()
     page = MagicMock()
     page.get_by_text.return_value.all_inner_texts.return_value = ["FPO1131464"]
@@ -183,6 +195,48 @@ def test_fieldpo_invoice_closes_and_moves_only_after_strict_gates(monkeypatch):
     assert result == "Success"
     approve.assert_called_once()
     source.move_to_processed.assert_called_once_with("<invoice@example>")
+    audit = json.loads((tmp_path / "po_approval_audit.jsonl").read_text(encoding="utf-8"))
+    assert audit["source"] == "outlook.FieldPO_Closer"
+    assert audit["outcome"] == "approved"
+    assert audit["approval_action"] is True
+    assert audit["amount_match"] is True
+    assert audit["work_order_closed"] is True
+
+
+def test_fieldpo_invoice_blocks_live_amount_mismatch(monkeypatch, tmp_path):
+    invoice = _invoice()
+    page = MagicMock()
+    page.get_by_text.return_value.all_inner_texts.return_value = ["FPO1131464"]
+    monkeypatch.setattr(
+        fieldpo_closer.agn_invoices,
+        "go_to_active_work_order_tab",
+        lambda current_page, vin: "057935872",
+    )
+    monkeypatch.setattr(fieldpo_closer.agn_invoices, "po_exists", lambda page, po: True)
+    monkeypatch.setattr(
+        fieldpo_closer.agn_invoices,
+        "read_work_order_created_by",
+        lambda page: "Steele, Dirk",
+    )
+    monkeypatch.setattr(fieldpo_closer.agn_invoices, "click_into_po", lambda page, po: None)
+    monkeypatch.setattr(
+        fieldpo_closer.agn_invoices,
+        "read_po_status_and_amount",
+        lambda page: ("IN PROGRESS", "400.00"),
+    )
+    approve = MagicMock()
+    monkeypatch.setattr(fieldpo_closer.agn_invoices, "approve_displayed_po", approve)
+
+    result = fieldpo_closer.process_fieldpo_invoice(page, invoice, MagicMock())
+
+    assert result == "Review"
+    approve.assert_not_called()
+    audit = json.loads((tmp_path / "po_approval_audit.jsonl").read_text(encoding="utf-8"))
+    assert audit["outcome"] == "blocked"
+    assert audit["reason"] == "amount_mismatch"
+    assert audit["invoice_amount"] == "340.00"
+    assert audit["authorized_amount"] == "400.00"
+    assert audit["approval_action"] is False
 
 
 def test_fieldpo_invoice_flags_other_listed_po_before_opening_target(monkeypatch):

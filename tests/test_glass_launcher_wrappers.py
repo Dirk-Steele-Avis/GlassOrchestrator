@@ -26,6 +26,13 @@ def test_closeout_wrapper_supports_mva_and_batch_modes() -> None:
     assert "--max-invoices" in content
 
 
+def test_closeout_wrapper_passes_invoice_work_item_results() -> None:
+    content = _read("Run-Glass-Closeout.cmd")
+    assert content.count("--concise-console") == 5
+    assert content.count("--results-json data\\glass_closeout_work_items.json") == 5
+    assert "--work-item-results data\\glass_closeout_work_items.json" in content
+
+
 def test_shared_bootstrap_exists() -> None:
     content = _read("Run-GlassBootstrap.cmd")
     assert "Installing Playwright browsers" in content

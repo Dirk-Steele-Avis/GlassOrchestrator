@@ -34,6 +34,23 @@ class FailureRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class InvoiceRunOutcome:
+    invoice_number: str
+    po_number: str
+    pdf_po_number: str
+    fieldpo_po_number: str
+    vin: str
+    fieldpo_vin: str
+    mva: str
+    fieldpo_mva: str
+    invoice_amount: str
+    authorized_amount: str
+    identity_status: str
+    outlook_status: str
+    detail: str
+
+
+@dataclass(frozen=True, slots=True)
 class RunSummary:
     run_id: str
     captured: int
@@ -46,6 +63,7 @@ class RunSummary:
     needs_review_failed: int
     failures: tuple[FailureRecord, ...]
     exit_code: int
+    invoice_outcomes: tuple[InvoiceRunOutcome, ...] = ()
 
 
 class CompletedInvoicesCoordinator:
@@ -147,6 +165,7 @@ class CompletedInvoicesCoordinator:
         duplicate_numbers = set(self._repository.block_duplicate_invoice_numbers())
         identities_complete = 0
         identities_blocked = 0
+        identity_results = {}
         for invoice in scan.invoices:
             if invoice.internet_message_id in terminal_message_ids:
                 identities_blocked += 1
@@ -264,6 +283,7 @@ class CompletedInvoicesCoordinator:
                 needs_review_failed = failed
                 continue
 
+            identity_results[invoice.internet_message_id] = result
             identity = result.identity
             self._repository.finish_attempt(
                 attempt_id,
@@ -380,6 +400,36 @@ class CompletedInvoicesCoordinator:
             f"needs_review_failed={needs_review_failed} "
             f"exit_code={exit_code}"
         )
+        invoice_outcomes = []
+        for invoice in scan.invoices:
+            state = self._repository.get_invoice(invoice.internet_message_id)
+            identity_result = identity_results.get(invoice.internet_message_id)
+            fieldpo = identity_result.fieldpo_snapshot if identity_result else None
+            sheet_mvas = identity_result.sheet_mvas if identity_result else ()
+            sheet_mva = sheet_mvas[0] if len(set(sheet_mvas)) == 1 else ""
+            invoice_outcomes.append(InvoiceRunOutcome(
+                invoice_number=invoice.invoice_number,
+                po_number=invoice.subject_po_number,
+                pdf_po_number=invoice.pdf_po_number,
+                fieldpo_po_number=fieldpo.po_number if fieldpo else "",
+                vin=invoice.vin,
+                fieldpo_vin=fieldpo.vin if fieldpo else "",
+                mva=state.mva if state is not None and state.mva else sheet_mva,
+                fieldpo_mva=fieldpo.mva if fieldpo else "",
+                invoice_amount=str(invoice.invoice_amount),
+                authorized_amount=(
+                    str(fieldpo.authorized_amount)
+                    if fieldpo
+                    else state.authorized_amount if state is not None else ""
+                ),
+                identity_status=(
+                    state.identity_status.value if state is not None else "unknown"
+                ),
+                outlook_status=(
+                    state.outlook_status.value if state is not None else "unknown"
+                ),
+                detail=state.last_error if state is not None else "",
+            ))
         return RunSummary(
             run_id=self._run_id,
             captured=len(scan.invoices),
@@ -392,6 +442,7 @@ class CompletedInvoicesCoordinator:
             needs_review_failed=needs_review_failed,
             failures=tuple(failures),
             exit_code=exit_code,
+            invoice_outcomes=tuple(invoice_outcomes),
         )
 
     def run_sweep_terminal_to_needs_review(

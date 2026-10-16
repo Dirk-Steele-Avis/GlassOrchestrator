@@ -2,7 +2,9 @@
 import argparse
 import asyncio
 from datetime import date
+import io
 import json
+import logging
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -29,6 +31,63 @@ def test_not_found_summary_displays_zero_work_item_count(monkeypatch):
         and call.args[2:4] == ("022222222", "work_item_count_0")
         for call in info.call_args_list
     )
+
+
+def test_concise_console_summary_emits_readable_stage_and_mva_results(capsys):
+    from WorkItems import close_workitem
+
+    close_workitem._print_console_summary([
+        {"mva": "022222222", "result": close_workitem.RESULT_NOT_FOUND, "detail": ""},
+        {"mva": "033333333", "result": close_workitem.RESULT_CLOSED, "detail": "marked complete"},
+    ])
+
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == (
+        "[CLOSEOUT] Work items: 2 target(s); 1 closed, 1 not found, "
+        "0 failed, 0 not attempted."
+    )
+    assert lines[1] == "[CLOSEOUT] MVA 022222222 | NOT FOUND | No open work item found."
+    assert lines[2] == "[CLOSEOUT] MVA 033333333 | CLOSED | marked complete"
+
+
+def test_write_results_json_preserves_complaint_type_and_outcome(tmp_path):
+    from WorkItems import close_workitem
+
+    path = tmp_path / "closeout-results.json"
+    close_workitem._write_results_json(
+        str(path),
+        [{
+            "mva": "058889320",
+            "complaint_type": "Glass",
+            "result": close_workitem.RESULT_CLOSED,
+            "detail": "GLASS-GLASS",
+        }],
+    )
+
+    assert json.loads(path.read_text(encoding="utf-8")) == [
+        {
+            "mva": "058889320",
+            "complaint_type": "Glass",
+            "status": "closed",
+            "detail": "GLASS-GLASS",
+        },
+    ]
+
+
+def test_concise_console_keeps_info_in_file_handler(tmp_path, monkeypatch):
+    from WorkItems import close_workitem
+
+    root_logger = logging.getLogger()
+    console_handler = logging.StreamHandler(io.StringIO())
+    file_handler = logging.FileHandler(tmp_path / "close.log", encoding="utf-8")
+    monkeypatch.setattr(root_logger, "handlers", [console_handler, file_handler])
+    try:
+        close_workitem._configure_concise_console()
+        assert console_handler.level == logging.WARNING
+        assert file_handler.level == logging.NOTSET
+    finally:
+        console_handler.close()
+        file_handler.close()
 
 
 def _write_csv(tmp_path: Path, content: str) -> Path:

@@ -1,5 +1,6 @@
 """Tests for the AGN invoice command-line interface."""
 
+import json
 import sys
 from datetime import date, timedelta
 from pathlib import Path
@@ -8,6 +9,43 @@ from unittest.mock import MagicMock
 import pytest
 
 from outlook import agn_invoices
+
+
+@pytest.fixture(autouse=True)
+def isolate_po_approval_audit(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        agn_invoices,
+        "PO_APPROVAL_AUDIT_FILE",
+        str(tmp_path / "po_approval_audit.jsonl"),
+    )
+
+
+def test_po_audit_console_is_readable_and_jsonl_remains_structured(capsys, tmp_path):
+    agn_invoices._print_po_audit({
+        "source": "agn_invoices.step_approve",
+        "execution_mode": "automatic",
+        "invoice_number": "5463789",
+        "po_number": "FPO1131464",
+        "invoice_amount": "340.00",
+        "live_authorized_amount": "400.00",
+        "live_amount_match": False,
+        "queued_authorized_amount": "340.00",
+        "queued_amount_match": "True",
+        "outcome": "approved",
+        "approval_action": True,
+        "work_order_closed": True,
+    })
+
+    output = capsys.readouterr().out.strip()
+    assert output.startswith("[PO AUDIT] APPROVAL CONFIRMED | Invoice #5463789")
+    assert "invoice $340.00 vs authorized $400.00 (MISMATCH)" in output
+    assert "earlier check $340.00 (MATCH)" in output
+    assert "work order closed" in output
+    assert not output.startswith("[PO AUDIT] {")
+
+    audit = json.loads((tmp_path / "po_approval_audit.jsonl").read_text(encoding="utf-8"))
+    assert audit["live_amount_match"] is False
+    assert audit["outcome"] == "approved"
 
 
 def test_load_excluded_standard_price_skus_is_strict_and_normalizes():
@@ -1541,7 +1579,7 @@ def test_approval_decline_holds_visible_po_and_does_not_click_approve(monkeypatc
     page.get_by_role.assert_not_called()
 
 
-def test_approval_returns_already_approved_without_clicking_approve(monkeypatch):
+def test_approval_returns_already_approved_without_clicking_approve(monkeypatch, tmp_path):
     page = MagicMock()
     monkeypatch.setattr(
         agn_invoices,
@@ -1571,9 +1609,13 @@ def test_approval_returns_already_approved_without_clicking_approve(monkeypatch)
 
     assert result == (False, "Steele, Dirk", ["already_approved"])
     page.get_by_role.assert_not_called()
+    audit = json.loads((tmp_path / "po_approval_audit.jsonl").read_text(encoding="utf-8"))
+    assert audit["outcome"] == "already_approved"
+    assert audit["approval_action"] is False
+    assert audit["prior_approval_source"] == "unknown_from_current_FieldPO_state"
 
 
-def test_approval_checks_close_work_order_before_confirming(monkeypatch):
+def test_approval_checks_close_work_order_before_confirming(monkeypatch, tmp_path):
     page = MagicMock()
     approve_button = MagicMock()
     checkbox_section = MagicMock()
@@ -1621,6 +1663,11 @@ def test_approval_checks_close_work_order_before_confirming(monkeypatch):
     ]
     filtered_section.locator.assert_called_once_with("input.checkboxInput[type='checkbox']")
     success_message.wait_for.assert_called_once_with(state="visible", timeout=30000)
+    audit = json.loads((tmp_path / "po_approval_audit.jsonl").read_text(encoding="utf-8"))
+    assert audit["outcome"] == "approved"
+    assert audit["approval_action"] is True
+    assert audit["live_authorized_amount"] == "340.00"
+    assert audit["live_amount_match"] is True
 
 
 def test_approval_fails_when_success_message_does_not_confirm_closure(monkeypatch):

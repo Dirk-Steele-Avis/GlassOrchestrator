@@ -43,6 +43,8 @@ class StrictIdentityResolver:
             return IdentityResult(
                 StageStatus.BLOCKED,
                 detail=f"Sheet contains invalid MVA values for VIN {invoice.vin}",
+                fieldpo_snapshot=fieldpo,
+                sheet_mvas=sheet_mvas,
             )
         distinct_sheet_mvas = tuple(dict.fromkeys(sheet_mvas))
         if len(distinct_sheet_mvas) != 1:
@@ -52,6 +54,8 @@ class StrictIdentityResolver:
                     f"Expected exactly one distinct Sheet MVA for VIN {invoice.vin}, "
                     f"found {len(distinct_sheet_mvas)}"
                 ),
+                fieldpo_snapshot=fieldpo,
+                sheet_mvas=sheet_mvas,
             )
         sheet_mva = distinct_sheet_mvas[0]
         if fieldpo.po_number != invoice.subject_po_number:
@@ -61,6 +65,8 @@ class StrictIdentityResolver:
                     f"FieldPO PO mismatch: expected {invoice.subject_po_number}, "
                     f"found {fieldpo.po_number}"
                 ),
+                fieldpo_snapshot=fieldpo,
+                sheet_mvas=sheet_mvas,
             )
         if fieldpo.vin != invoice.vin:
             return IdentityResult(
@@ -69,6 +75,8 @@ class StrictIdentityResolver:
                     f"FieldPO VIN mismatch: expected {invoice.vin}, "
                     f"found {fieldpo.vin}"
                 ),
+                fieldpo_snapshot=fieldpo,
+                sheet_mvas=sheet_mvas,
             )
         if fieldpo.mva != sheet_mva:
             return IdentityResult(
@@ -77,6 +85,8 @@ class StrictIdentityResolver:
                     f"FieldPO MVA mismatch: expected {sheet_mva}, "
                     f"found {fieldpo.mva}"
                 ),
+                fieldpo_snapshot=fieldpo,
+                sheet_mvas=sheet_mvas,
             )
         if fieldpo.authorized_amount != invoice.invoice_amount:
             return IdentityResult(
@@ -85,6 +95,8 @@ class StrictIdentityResolver:
                     f"Authorized amount mismatch: invoice {invoice.invoice_amount}, "
                     f"FieldPO {fieldpo.authorized_amount}"
                 ),
+                fieldpo_snapshot=fieldpo,
+                sheet_mvas=sheet_mvas,
             )
 
         return IdentityResult(
@@ -98,6 +110,8 @@ class StrictIdentityResolver:
                 invoice_amount=invoice.invoice_amount,
                 authorized_amount=fieldpo.authorized_amount,
             ),
+            fieldpo_snapshot=fieldpo,
+            sheet_mvas=sheet_mvas,
         )
 
 

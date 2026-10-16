@@ -76,6 +76,8 @@ class IdentityResult:
     status: StageStatus
     identity: ValidatedIdentity | None = None
     detail: str = ""
+    fieldpo_snapshot: FieldPOIdentitySnapshot | None = None
+    sheet_mvas: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

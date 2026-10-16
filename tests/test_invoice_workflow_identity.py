@@ -114,3 +114,5 @@ def test_fieldpo_mismatch_blocks(fieldpo_overrides, expected):
 
     assert result.status is StageStatus.BLOCKED
     assert expected in result.detail
+    assert result.fieldpo_snapshot is not None
+    assert result.sheet_mvas == ("061093642",)
