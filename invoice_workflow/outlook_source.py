@@ -50,15 +50,18 @@ class OutlookInvoiceSource:
         invoice_number: str | None = None,
         max_invoices: int | None = None,
         excluded_message_ids: frozenset[str] = frozenset(),
+        include_processed: bool = False,
     ) -> OutlookScanResult:
         if max_invoices is not None and max_invoices <= 0:
             raise ValueError("max_invoices must be greater than zero")
         if invoice_number is not None and not invoice_number.isdigit():
             raise ValueError("invoice_number must contain only digits")
 
-        folder = self._get_invoice_folder()
-        return self._scan_folder(
-            folder,
+        folders = [self._get_invoice_folder()]
+        if include_processed:
+            folders.append(self._get_existing_child_folder("Processed"))
+        return self._scan_folders(
+            tuple(folders),
             invoice_number=invoice_number,
             max_invoices=max_invoices,
             excluded_message_ids=excluded_message_ids,
@@ -68,17 +71,17 @@ class OutlookInvoiceSource:
     def scan_needs_review_invoices(self) -> OutlookScanResult:
         """Read exact new-format invoices currently in Needs Review."""
         folder = self._get_existing_child_folder("Needs Review")
-        return self._scan_folder(
-            folder,
+        return self._scan_folders(
+            (folder,),
             invoice_number=None,
             max_invoices=None,
             excluded_message_ids=frozenset(),
             exact_subject_only=True,
         )
 
-    def _scan_folder(
+    def _scan_folders(
         self,
-        folder: Any,
+        folders: tuple[Any, ...],
         *,
         invoice_number: str | None,
         max_invoices: int | None,
@@ -86,24 +89,25 @@ class OutlookInvoiceSource:
         exact_subject_only: bool,
     ) -> OutlookScanResult:
         candidates: list[tuple[Any, str | None]] = []
-        for message in list(folder.Items):
-            if getattr(message, "Class", None) != 43:
-                continue
-            subject = str(getattr(message, "Subject", "") or "")
-            if exact_subject_only and _EXACT_SUBJECT_PATTERN.fullmatch(subject.strip()) is None:
-                continue
-            number_match = _INVOICE_NUMBER_PATTERN.search(subject)
-            if number_match is None:
-                continue
-            if invoice_number is not None and number_match.group(1) != invoice_number:
-                continue
-            try:
-                message_id = _internet_message_id(message)
-            except Exception:
-                message_id = None
-            if message_id in excluded_message_ids:
-                continue
-            candidates.append((message, message_id))
+        for folder in folders:
+            for message in list(folder.Items):
+                if getattr(message, "Class", None) != 43:
+                    continue
+                subject = str(getattr(message, "Subject", "") or "")
+                if exact_subject_only and _EXACT_SUBJECT_PATTERN.fullmatch(subject.strip()) is None:
+                    continue
+                number_match = _INVOICE_NUMBER_PATTERN.search(subject)
+                if number_match is None:
+                    continue
+                if invoice_number is not None and number_match.group(1) != invoice_number:
+                    continue
+                try:
+                    message_id = _internet_message_id(message)
+                except Exception:
+                    message_id = None
+                if message_id in excluded_message_ids:
+                    continue
+                candidates.append((message, message_id))
 
         candidates.sort(key=lambda candidate: _received_at(candidate[0]))
         if max_invoices is not None:
@@ -151,6 +155,9 @@ class OutlookInvoiceSource:
                 f"Exact InternetMessageID is not present in this run: {internet_message_id}"
             )
         target_folder = self._get_child_folder(folder_name)
+        current_parent = getattr(message, "Parent", None)
+        if str(getattr(current_parent, "Name", "") or "") == folder_name:
+            return
         moved = message.Move(target_folder)
         moved_parent = str(getattr(getattr(moved, "Parent", None), "Name", "") or "")
         if moved_parent != folder_name:

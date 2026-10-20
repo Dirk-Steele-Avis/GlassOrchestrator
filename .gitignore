@@ -81,6 +81,7 @@ outlook/FPO actions.pdf
 outlook/FieldPO_Closer/attachments/
 outlook/FieldPO_Closer/*.pdf
 outlook/FieldPO_Closer/vins.csv
+outlook/FieldPO_Closer/pos.csv
 outlook/direct_approval_results.jsonl
 outlook/po_approval_audit.jsonl
 outlook/closure_decisions.jsonl

@@ -3,6 +3,9 @@ from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+
+from invoice_workflow import invoice_parser
 from invoice_workflow.invoice_parser import InvoicePdfData
 from invoice_workflow.outlook_source import (
     INTERNET_MESSAGE_ID_PROPERTY,
@@ -11,7 +14,7 @@ from invoice_workflow.outlook_source import (
 
 
 def _folder_tree(messages):
-    processed = SimpleNamespace(Name="Processed")
+    processed = SimpleNamespace(Name="Processed", Items=[])
     needs_review = SimpleNamespace(Name="Needs Review", Items=[])
     invoice = SimpleNamespace(
         Name="Invoice",
@@ -54,6 +57,42 @@ def _message(
     return message
 
 
+def _mock_pdf_text(monkeypatch, text):
+    pdf = MagicMock()
+    pdf.__enter__.return_value.pages = [SimpleNamespace(extract_text=lambda: text)]
+    monkeypatch.setattr(invoice_parser.pdfplumber, "open", lambda path: pdf)
+
+
+def test_invoice_parser_allows_missing_vin_only_when_requested(monkeypatch):
+    _mock_pdf_text(
+        monkeypatch,
+        "Invoice #5294412\nPO # FPO1131464\nSubtotal $340.00",
+    )
+
+    with pytest.raises(invoice_parser.InvoicePdfParseError, match="exactly one VIN"):
+        invoice_parser.parse_invoice_pdf("invoice.pdf")
+
+    invoice = invoice_parser.parse_invoice_pdf(
+        "invoice.pdf",
+        allow_missing_vin=True,
+    )
+
+    assert invoice.po_number == "FPO1131464"
+    assert invoice.vin == ""
+    assert invoice.amount == Decimal("340.00")
+
+
+def test_invoice_parser_rejects_multiple_vins(monkeypatch):
+    _mock_pdf_text(
+        monkeypatch,
+        "Invoice #5294412\nPO # FPO1131464\n"
+        "VIN 1C4SJSBP6SS537975\nVIN 1FTFW1ET1EFA23456\nSubtotal $340.00",
+    )
+
+    with pytest.raises(invoice_parser.InvoicePdfParseError, match="at most one VIN"):
+        invoice_parser.parse_invoice_pdf("invoice.pdf", allow_missing_vin=True)
+
+
 def test_scan_captures_only_exact_invoice_messages(tmp_path):
     invoice = _message("[External] Invoice #5294412 (PO # FPO1131464)")
     receipt = _message("[External] Receipt for Job #5294412")
@@ -83,6 +122,67 @@ def test_scan_captures_only_exact_invoice_messages(tmp_path):
         INTERNET_MESSAGE_ID_PROPERTY
     )
     receipt.PropertyAccessor.GetProperty.assert_not_called()
+
+
+def test_scan_parent_includes_processed_child_folder(tmp_path):
+    invoice = _message(
+        "[External] Invoice #5294412 (PO # FPO1131464)",
+        "<parent@example>",
+    )
+    processed_invoice = _message(
+        "[External] Invoice #5294413 (PO # FPO1131465)",
+        "<processed@example>",
+    )
+    namespace, processed, _ = _folder_tree([invoice])
+    processed.Items.append(processed_invoice)
+    source = OutlookInvoiceSource(
+        namespace,
+        account_name="Dirk.Steele@avisbudget.com",
+        attachment_directory=tmp_path,
+        pdf_parser=lambda path: InvoicePdfData(
+            po_number="FPO1131464",
+            vin="1C4SJSBP6SS537975",
+            amount=Decimal("340.00"),
+        ),
+    )
+
+    default_result = source.scan_parent_invoices()
+    assert [invoice.internet_message_id for invoice in default_result.invoices] == [
+        "<parent@example>"
+    ]
+
+    result = source.scan_parent_invoices(include_processed=True)
+
+    assert {invoice.internet_message_id for invoice in result.invoices} == {
+        "<parent@example>",
+        "<processed@example>",
+    }
+    assert result.failures == ()
+
+
+def test_move_to_processed_does_not_move_message_already_there(tmp_path):
+    processed_invoice = _message(
+        "[External] Invoice #5294412 (PO # FPO1131464)",
+        "<processed@example>",
+    )
+    namespace, processed, _ = _folder_tree([])
+    processed.Items.append(processed_invoice)
+    processed_invoice.Parent = processed
+    source = OutlookInvoiceSource(
+        namespace,
+        account_name="Dirk.Steele@avisbudget.com",
+        attachment_directory=tmp_path,
+        pdf_parser=lambda path: InvoicePdfData(
+            po_number="FPO1131464",
+            vin="1C4SJSBP6SS537975",
+            amount=Decimal("340.00"),
+        ),
+    )
+    source.scan_parent_invoices(include_processed=True)
+
+    source.move_to_processed("<processed@example>")
+
+    processed_invoice.Move.assert_not_called()
 
 
 def test_scan_needs_review_reads_only_exact_new_format_without_moves(tmp_path):

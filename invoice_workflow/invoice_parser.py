@@ -21,7 +21,11 @@ class InvoicePdfParseError(ValueError):
     """Raised when one required invoice value cannot be parsed exactly."""
 
 
-def parse_invoice_pdf(path: str | Path) -> InvoicePdfData:
+def parse_invoice_pdf(
+    path: str | Path,
+    *,
+    allow_missing_vin: bool = False,
+) -> InvoicePdfData:
     with pdfplumber.open(path) as pdf:
         text = "\n".join(page.extract_text() or "" for page in pdf.pages)
 
@@ -38,8 +42,11 @@ def parse_invoice_pdf(path: str | Path) -> InvoicePdfData:
         )
 
     vin_matches = set(re.findall(r"\b([A-HJ-NPR-Z0-9]{17})\b", text.upper()))
-    if len(vin_matches) != 1:
-        raise InvoicePdfParseError(f"Expected exactly one VIN, found {len(vin_matches)}")
+    if len(vin_matches) > 1 or (not vin_matches and not allow_missing_vin):
+        expectation = "at most one" if allow_missing_vin else "exactly one"
+        raise InvoicePdfParseError(
+            f"Expected {expectation} VIN, found {len(vin_matches)}"
+        )
 
     amount_matches = re.findall(r"(?im)^\s*Subtotal\s*\$?([\d,]+\.\d{2})\s*$", text)
     if len(amount_matches) != 1:
@@ -53,6 +60,6 @@ def parse_invoice_pdf(path: str | Path) -> InvoicePdfData:
 
     return InvoicePdfData(
         po_number=next(iter(po_matches)),
-        vin=next(iter(vin_matches)),
+        vin=next(iter(vin_matches), ""),
         amount=amount,
     )

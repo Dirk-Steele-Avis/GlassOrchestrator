@@ -39,6 +39,11 @@ def test_shared_bootstrap_exists() -> None:
     assert "call %*" in content
 
 
+def test_fieldpo_closer_wrapper_forwards_explicit_mode() -> None:
+    content = _read("Run-FieldPO_Closer.cmd")
+    assert "FieldPO_Closer.py %*" in content
+
+
 def test_morning_report_wrapper_generates_report_without_emailing() -> None:
     content = _read("Run-Glass-Morning-Report.cmd")
     assert "glass_morning_report.py" in content
