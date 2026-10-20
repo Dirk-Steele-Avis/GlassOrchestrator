@@ -172,6 +172,37 @@ whether its amount matches. Amount-match-only emails remain in `Needs Review`.
 The command does not approve POs, close work orders, update workflow ledger state,
 or move old-format messages, receipts, or unresolved invoices.
 
+### Standalone FieldPO Closer
+
+`Run-FieldPO_Closer.cmd` compares queued POs with Outlook invoices and closes a
+FieldPO PO only when the exact invoice and FieldPO checks pass. Choose the input
+mode explicitly:
+
+```bash
+Run-FieldPO_Closer.cmd --mode po
+Run-FieldPO_Closer.cmd --mode vin
+```
+
+PO mode reads the local `outlook/FieldPO_Closer/pos.csv` queue with columns
+`PO,VIN,Result`. It looks up each PO directly in FieldPO and records the VIN,
+even when no invoice is found. A missing invoice remains `Missing Invoice`; the
+PO is not closed, and the PO/VIN row is available for manual vendor follow-up.
+The closer does not email the vendor. If an invoice is found, its subject PO and
+PDF PO must both match the queued PO. If the invoice contains a VIN, it must
+match FieldPO's VIN. The closer then checks the exact FieldPO PO, work-order
+owner, status, and authorized amount before approving the PO and closing the
+work order. Mismatches, ambiguous invoices, and failed checks are marked
+`Review` and are not closed. Successful invoice emails are moved to `Processed`.
+
+Blank and `Missing Invoice` results are eligible for closeout. `Success` and
+`Review` rows are not retried for closeout, although PO mode fills a blank VIN
+for those rows without approving or closing anything.
+
+VIN mode reads `outlook/FieldPO_Closer/vins.csv` with columns `VIN,Result` and
+retains the VIN-based input path. The mode is required; the closer never guesses
+which queue format was intended. This standalone tool is for targeted work and
+troubleshooting, not the primary `Run-Glass-Closeout.cmd` workflow.
+
 `Run-Glass-Closeout.cmd` supports two operator modes:
 
 ```bash
