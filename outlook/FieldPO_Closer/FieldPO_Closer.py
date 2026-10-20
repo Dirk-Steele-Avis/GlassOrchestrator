@@ -140,118 +140,39 @@ def process_fieldpo_invoice(
 ) -> str:
     subject_po = str(invoice.subject_po_number).strip().upper()
     pdf_po = str(invoice.pdf_po_number).strip().upper()
-    audit = {
-        "source": "outlook.FieldPO_Closer",
-        "execution_mode": "automatic",
-        "invoice_number": str(getattr(invoice, "invoice_number", "")),
-        "po_number": subject_po,
-        "vin": invoice.vin,
-        "invoice_amount": str(invoice.invoice_amount),
-    }
     if not subject_po or subject_po != pdf_po:
-        agn_invoices._print_po_audit({
-            **audit,
-            "outcome": "blocked",
-            "approval_action": False,
-            "reason": "subject_pdf_po_mismatch",
-            "pdf_po_number": pdf_po,
-        })
         return "Review"
 
     found_mva = agn_invoices.go_to_active_work_order_tab(page, invoice.vin)
     if not found_mva or not agn_invoices.po_exists(page, subject_po):
-        agn_invoices._print_po_audit({
-            **audit,
-            "outcome": "blocked",
-            "approval_action": False,
-            "reason": "mva_or_exact_po_not_found",
-            "mva": found_mva or "",
-        })
         return "Review"
-    audit["mva"] = found_mva
 
     listed_pos = _listed_po_numbers(page)
     if listed_pos != (expected_po_numbers or {subject_po}):
-        agn_invoices._print_po_audit({
-            **audit,
-            "outcome": "blocked",
-            "approval_action": False,
-            "reason": "listed_po_set_mismatch",
-            "listed_po_numbers": sorted(listed_pos),
-        })
         return "Review"
 
     created_by = agn_invoices.read_work_order_created_by(page)
     if created_by.strip().casefold() != "steele, dirk":
-        agn_invoices._print_po_audit({
-            **audit,
-            "outcome": "blocked",
-            "approval_action": False,
-            "reason": "work_order_creator_mismatch",
-            "work_order_created_by": created_by,
-        })
         return "Review"
-    audit["work_order_created_by"] = created_by
 
     agn_invoices.click_into_po(page, subject_po)
     status, authorized_amount = agn_invoices.read_po_status_and_amount(page)
-    amount_match = _amount(authorized_amount) == invoice.invoice_amount
-    audit.update({
-        "status_before_action": status,
-        "authorized_amount": authorized_amount,
-        "amount_match": amount_match,
-    })
     if status == "APPROVED":
-        agn_invoices._print_po_audit({
-            **audit,
-            "outcome": "already_approved",
-            "approval_action": False,
-            "prior_approval_source": "unknown_from_current_FieldPO_state",
-        })
         return "Review"
-    if status != "IN PROGRESS" or not amount_match:
-        reason = "po_status_not_in_progress" if status != "IN PROGRESS" else "amount_mismatch"
-        agn_invoices._print_po_audit({
-            **audit,
-            "outcome": "blocked",
-            "approval_action": False,
-            "reason": reason,
-        })
+    if status != "IN PROGRESS" or _amount(authorized_amount) != invoice.invoice_amount:
         return "Review"
 
-    try:
-        closed = agn_invoices.approve_displayed_po(
-            page,
-            invoice.vin,
-            request_permission=False,
-            expected_po_number=subject_po,
-            close_work_order=close_work_order,
-            allow_open_if_closure_unavailable=False,
-        )
-    except Exception as exc:
-        agn_invoices._print_po_audit({
-            **audit,
-            "outcome": "approval_failed",
-            "approval_action": True,
-            "detail": f"{type(exc).__name__}: {exc}",
-        })
-        raise
+    closed = agn_invoices.approve_displayed_po(
+        page,
+        invoice.vin,
+        request_permission=False,
+        expected_po_number=subject_po,
+        close_work_order=close_work_order,
+        allow_open_if_closure_unavailable=False,
+    )
     if closed != close_work_order:
-        agn_invoices._print_po_audit({
-            **audit,
-            "outcome": "approval_result_mismatch",
-            "approval_action": True,
-            "work_order_closed": bool(closed),
-            "expected_work_order_closed": close_work_order,
-        })
         return "Review"
 
-    agn_invoices._print_po_audit({
-        **audit,
-        "outcome": "approved",
-        "approval_action": True,
-        "work_order_closed": bool(closed),
-    })
     outlook_source.move_to_processed(invoice.internet_message_id)
     return "Success"
 
