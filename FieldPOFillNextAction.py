@@ -4,16 +4,16 @@ Scope rules (per operator workflow):
 1. Process only rows where Action is replacement.
 2. Look up rows where NextAction is blank, Error, or missing.
 3. Verify rows where NextAction is non-blank and not a retry value.
-3. Process only rows with Inventory Date equal to today.
+4. Process only rows with the explicitly selected Inventory Date.
 
 Write behavior:
 - Exactly one FPO found: write the raw FPO value.
 - Multiple FPOs found: write "multi" for manual review.
 - No FPO found: write "missing".
-- FieldPO lookup error: write "Error".
+- FieldPO lookup error: stop the workflow.
 
 Run with:
-    .venv\\Scripts\\python.exe FieldPOFillNextAction.py
+    .venv\Scripts\python.exe FieldPOFillNextAction.py --inventory-date YYYY-MM-DD
 """
 
 from __future__ import annotations
@@ -139,13 +139,7 @@ def _dismiss_attention_popup(page) -> None:
 
 def _ensure_fieldpo_login(page) -> None:
     page.goto(FIELDPO_URL)
-    try:
-        page.wait_for_url("**/fieldpo/dashboard**", timeout=30000)
-    except Exception:
-        log.warning("Dashboard did not load automatically. Please login in the opened browser.")
-        input("After login reaches dashboard, press Enter to continue...")
-        page.goto(FIELDPO_URL)
-        page.wait_for_url("**/fieldpo/dashboard**", timeout=120000)
+    page.wait_for_url("**/fieldpo/dashboard**", timeout=30000)
     _dismiss_attention_popup(page)
 
 
@@ -240,8 +234,7 @@ def _resolve_next_action(page, mva: str) -> str:
             log.info("%s - No FPO found in FieldPO. Writing missing.", mva)
             return "missing"
 
-        log.warning("%s - FieldPO lookup failed (%s). Writing Error.", mva, exc)
-        return "Error"
+        raise RuntimeError(f"FieldPO lookup failed for MVA {mva}: {exc}") from exc
 
     if not fpos:
         return "missing"
@@ -264,7 +257,10 @@ def _is_retry_value(value: str) -> bool:
     return lowered in {"error", "missing"}
 
 
-def _collect_candidates(values: list[list[str]]) -> tuple[list[tuple[int, str]], int]:
+def _collect_candidates(
+    values: list[list[str]],
+    target_inventory_date: date,
+) -> tuple[list[tuple[int, str]], int]:
     if not values:
         raise RuntimeError("Sheet is empty.")
 
@@ -286,7 +282,6 @@ def _collect_candidates(values: list[list[str]]) -> tuple[list[tuple[int, str]],
     if missing:
         raise RuntimeError(f"Required column(s) missing: {', '.join(missing)}")
 
-    today = date.today()
     candidates: list[tuple[int, str]] = []
 
     for row_idx, row in enumerate(values[1:], start=2):
@@ -304,7 +299,7 @@ def _collect_candidates(values: list[list[str]]) -> tuple[list[tuple[int, str]],
 
         inv_raw = row[inventory_col].strip() if len(row) > inventory_col else ""
         inv_date = _parse_sheet_date(inv_raw)
-        if inv_date != today:
+        if inv_date != target_inventory_date:
             continue
 
         candidates.append((row_idx, mva))
@@ -315,8 +310,9 @@ def _collect_candidates(values: list[list[str]]) -> tuple[list[tuple[int, str]],
 def _collect_non_blank_verification_rows(
     values: list[list[str]],
     next_action_col_1based: int,
+    target_inventory_date: date,
 ) -> list[tuple[int, str, str]]:
-    """Collect today's replacement rows where NextAction is already non-blank.
+    """Collect target-date replacement rows where NextAction is already non-blank.
 
     These rows are used for verification only (no overwrite).
     """
@@ -330,7 +326,6 @@ def _collect_non_blank_verification_rows(
     if mva_col is None or action_col is None or inventory_col is None:
         return []
 
-    today = date.today()
     verify_rows: list[tuple[int, str, str]] = []
     next_action_col = next_action_col_1based - 1
 
@@ -345,7 +340,7 @@ def _collect_non_blank_verification_rows(
 
         inv_raw = row[inventory_col].strip() if len(row) > inventory_col else ""
         inv_date = _parse_sheet_date(inv_raw)
-        if inv_date != today:
+        if inv_date != target_inventory_date:
             continue
 
         existing = row[next_action_col].strip() if len(row) > next_action_col else ""
@@ -362,8 +357,9 @@ def _collect_non_blank_verification_rows(
 def _collect_in_scope_blank_rows(
     values: list[list[str]],
     next_action_col_1based: int,
+    target_inventory_date: date,
 ) -> list[tuple[int, str]]:
-    """Collect today's replacement rows where NextAction is still blank."""
+    """Collect target-date replacement rows where NextAction is still blank."""
     if not values:
         return []
 
@@ -374,7 +370,6 @@ def _collect_in_scope_blank_rows(
     if mva_col is None or action_col is None or inventory_col is None:
         return []
 
-    today = date.today()
     out: list[tuple[int, str]] = []
     next_action_col = next_action_col_1based - 1
 
@@ -389,7 +384,7 @@ def _collect_in_scope_blank_rows(
 
         inv_raw = row[inventory_col].strip() if len(row) > inventory_col else ""
         inv_date = _parse_sheet_date(inv_raw)
-        if inv_date != today:
+        if inv_date != target_inventory_date:
             continue
 
         next_action = row[next_action_col].strip() if len(row) > next_action_col else ""
@@ -559,6 +554,10 @@ def _write_next_action_if_blank(ws, row_idx: int, next_action_col_1based: int, v
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Fill NextAction from FieldPO or rollback prior updates")
     parser.add_argument(
+        "--inventory-date",
+        help="Inventory Date to process in YYYY-MM-DD format.",
+    )
+    parser.add_argument(
         "--rollback-file",
         help="Path to a backup JSON file created by this script; restores previous NextAction values.",
     )
@@ -570,10 +569,21 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def run() -> None:
+def _parse_inventory_date_arg(raw: str) -> date:
+    try:
+        return datetime.strptime(raw, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise RuntimeError("--inventory-date must use YYYY-MM-DD format") from exc
+
+
+def run(target_inventory_date: date | None = None) -> None:
     _setup_logging()
     log.info("Starting FieldPO NextAction fill script")
-    args = _parse_args()
+    args = _parse_args() if target_inventory_date is None else argparse.Namespace(
+        inventory_date=None,
+        rollback_file=None,
+        rollback_latest=False,
+    )
 
     config = _load_runtime_config()
     spreadsheet_id = str(config.get("spreadsheet_id", "")).strip()
@@ -603,13 +613,19 @@ def run() -> None:
         _apply_rollback(ws, latest)
         return
 
+    if target_inventory_date is None:
+        if not args.inventory_date:
+            raise RuntimeError("--inventory-date is required for FieldPO processing")
+        target_inventory_date = _parse_inventory_date_arg(args.inventory_date)
+
     values = ws.get_all_values()
-    candidates, next_action_col = _collect_candidates(values)
-    verify_rows = _collect_non_blank_verification_rows(values, next_action_col)
+    candidates, next_action_col = _collect_candidates(values, target_inventory_date)
+    verify_rows = _collect_non_blank_verification_rows(values, next_action_col, target_inventory_date)
     log.info(
-        "Found %d lookup candidate row(s) and %d non-blank verification row(s) for today.",
+        "Found %d lookup candidate row(s) and %d non-blank verification row(s) for Inventory Date %s.",
         len(candidates),
         len(verify_rows),
+        target_inventory_date.isoformat(),
     )
     if not candidates and not verify_rows:
         log.info("No eligible rows to update or verify. Exiting.")
@@ -702,7 +718,11 @@ def run() -> None:
     # Final hard guard: no in-scope rows should remain blank.
     # This catches rows missed by transient sheet/write edge cases.
     remaining_values = ws.get_all_values()
-    remaining_blanks = _collect_in_scope_blank_rows(remaining_values, next_action_col)
+    remaining_blanks = _collect_in_scope_blank_rows(
+        remaining_values,
+        next_action_col,
+        target_inventory_date,
+    )
     forced_scope_fills = 0
     for row_idx, mva in remaining_blanks:
         ws.update_cell(row_idx, next_action_col, "missing")

@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 from importlib.util import module_from_spec, spec_from_file_location
 import json
@@ -45,10 +46,13 @@ COMBINED_SPEC.loader.exec_module(combined_pdf_closer)
 
 def _invoice(vin="1C4SJSBP6SS537975", po="FPO1131464"):
     return SimpleNamespace(
+        invoice_number="5307104",
         vin=vin,
         subject_po_number=po,
         pdf_po_number=po,
         invoice_amount=Decimal("340.00"),
+        invoice_total=Decimal("340.00"),
+        received_at=datetime(2026, 9, 3, 14, 25, tzinfo=UTC),
         internet_message_id="<invoice@example>",
     )
 
@@ -123,6 +127,41 @@ def test_main_resolves_review_vins_without_scanning_outlook(monkeypatch):
     context.close.assert_called_once()
 
 
+def test_main_scans_all_invoice_status_folders(monkeypatch):
+    rows = [fieldpo_closer.VinRow("1C4SJSBP6SS537975", "")]
+    monkeypatch.setattr(sys, "argv", ["FieldPO_Closer.py", "--mode", "vin"])
+    monkeypatch.setattr(fieldpo_closer, "load_rows", lambda mode: rows)
+    monkeypatch.setattr(fieldpo_closer, "_load_config", lambda: {"account_name": "test"})
+    monkeypatch.setattr(fieldpo_closer.pythoncom, "CoInitialize", lambda: None)
+    monkeypatch.setattr(fieldpo_closer.pythoncom, "CoUninitialize", lambda: None)
+    monkeypatch.setattr(fieldpo_closer.win32com.client, "Dispatch", MagicMock())
+    source = MagicMock()
+    source.archive_expired_processed_invoices.return_value = 0
+    source.scan_parent_invoices.return_value = SimpleNamespace(
+        invoices=(),
+        failures=(
+            SimpleNamespace(
+                internet_message_id="<unreadable@example>",
+                subject="[External] Invoice #5294412",
+                detail="invalid PDF",
+            ),
+        ),
+    )
+    source_factory = MagicMock(return_value=source)
+    monkeypatch.setattr(fieldpo_closer, "OutlookInvoiceSource", source_factory)
+    monkeypatch.setattr(fieldpo_closer, "process_rows", MagicMock())
+
+    assert fieldpo_closer.main() == 0
+
+    source.archive_expired_processed_invoices.assert_called_once_with()
+    source.scan_parent_invoices.assert_called_once()
+    scan_kwargs = source.scan_parent_invoices.call_args.kwargs
+    assert scan_kwargs["include_processed"] is True
+    assert scan_kwargs["include_needs_review"] is True
+    assert callable(scan_kwargs["progress"])
+    source.move_to_needs_review.assert_called_once_with("<unreadable@example>")
+
+
 def test_process_rows_preserves_explicit_vin_mode():
     vin = "1C4SJSBP6SS537975"
     rows = [fieldpo_closer.VinRow(vin, "")]
@@ -138,6 +177,73 @@ def test_process_rows_preserves_explicit_vin_mode():
 
     assert rows[0].result == "Success"
     assert saved == ["Success"]
+
+
+def test_process_rows_moves_vin_invoice_to_needs_review():
+    vin = "1C4SJSBP6SS537975"
+    invoice = _invoice(vin=vin)
+    rows = [fieldpo_closer.VinRow(vin, "")]
+    moved_message_ids = []
+
+    fieldpo_closer.process_rows(
+        "vin",
+        rows,
+        [invoice],
+        lambda invoices: "Review",
+        lambda current: None,
+        move_to_review=moved_message_ids.append,
+    )
+
+    assert rows[0].result == "Review"
+    assert moved_message_ids == ["<invoice@example>"]
+
+
+def test_process_rows_rechecks_success_and_review_vins():
+    rows = [
+        fieldpo_closer.VinRow("1C4SJSBP6SS537975", "Success"),
+        fieldpo_closer.VinRow("1C4SJSBP6SS537975", "Review"),
+    ]
+    processed_ids = []
+
+    fieldpo_closer.process_rows(
+        "vin",
+        rows,
+        [_invoice()],
+        lambda invoices: {invoices[0].internet_message_id: "Success"},
+        lambda current: None,
+        move_to_processed=processed_ids.append,
+    )
+
+    assert [row.result for row in rows] == ["Success", "Success"]
+    assert processed_ids == ["<invoice@example>"]
+
+
+def test_process_rows_routes_corrected_invoice_separately_from_failed_copy():
+    vin = "1C4SJSBP6SS537975"
+    old_invoice = _invoice(vin=vin)
+    corrected_invoice = _invoice(vin=vin)
+    corrected_invoice.internet_message_id = "<corrected@example>"
+    corrected_invoice.received_at = datetime(2026, 9, 4, 14, 25, tzinfo=UTC)
+    rows = [fieldpo_closer.VinRow(vin, "Review")]
+    moved_to_review = []
+    moved_to_processed = []
+
+    fieldpo_closer.process_rows(
+        "vin",
+        rows,
+        [old_invoice, corrected_invoice],
+        lambda invoices: {
+            "<invoice@example>": "Review",
+            "<corrected@example>": "Success",
+        },
+        lambda current: None,
+        move_to_review=moved_to_review.append,
+        move_to_processed=moved_to_processed.append,
+    )
+
+    assert rows[0].result == "Review"
+    assert moved_to_review == ["<invoice@example>"]
+    assert moved_to_processed == ["<corrected@example>"]
 
 
 def test_process_rows_sets_missing_review_and_success():
@@ -298,6 +404,7 @@ def test_process_rows_blocks_invoice_vin_mismatch_with_fieldpo():
     invoice = _invoice(vin="1FTFW1ET1EFA23456")
     rows = [fieldpo_closer.PoRow("FPO1131464", "")]
     processor = MagicMock(return_value="Success")
+    moved_message_ids = []
 
     fieldpo_closer.process_rows(
         "po",
@@ -306,10 +413,12 @@ def test_process_rows_blocks_invoice_vin_mismatch_with_fieldpo():
         processor,
         lambda current: None,
         lambda current: "1C4SJSBP6SS537975",
+        moved_message_ids.append,
     )
 
     assert rows[0].result == "Review"
     processor.assert_not_called()
+    assert moved_message_ids == ["<invoice@example>"]
 
 
 def test_process_rows_resolves_vin_but_blocks_subject_pdf_po_mismatch():
@@ -343,32 +452,35 @@ def test_load_rows_requires_explicit_vin_or_po_mode(tmp_path):
     assert rows == [fieldpo_closer.VinRow("1C4SJSBP6SS537975", "")]
 
 
-def test_fieldpo_invoice_group_closes_only_final_po(monkeypatch):
+def test_fieldpo_invoice_group_attempts_work_order_closure_for_each_po(monkeypatch):
     invoices = [_invoice(po="FPO1131464"), _invoice(po="FPO1131465")]
+    invoices[1].internet_message_id = "<second@example>"
+    invoices[1].received_at = datetime(2026, 9, 4, 14, 25, tzinfo=UTC)
     calls = []
 
-    def process_one(page, invoice, source, **kwargs):
+    def process_one(page, invoice, **kwargs):
         calls.append((invoice.subject_po_number, kwargs))
         return "Success"
 
     monkeypatch.setattr(fieldpo_closer, "process_fieldpo_invoice", process_one)
 
-    result = fieldpo_closer.process_fieldpo_invoices(MagicMock(), invoices, MagicMock())
+    result = fieldpo_closer.process_fieldpo_invoices(MagicMock(), invoices)
 
-    assert result == "Success"
+    assert result == {
+        "<invoice@example>": "Success",
+        "<second@example>": "Success",
+    }
     assert calls == [
         (
             "FPO1131464",
             {
-                "expected_po_numbers": {"FPO1131464", "FPO1131465"},
-                "close_work_order": False,
+                "close_work_order": True,
                 "fieldpo_vin": None,
             },
         ),
         (
             "FPO1131465",
             {
-                "expected_po_numbers": {"FPO1131464", "FPO1131465"},
                 "close_work_order": True,
                 "fieldpo_vin": None,
             },
@@ -376,10 +488,55 @@ def test_fieldpo_invoice_group_closes_only_final_po(monkeypatch):
     ]
 
 
+def test_fieldpo_invoice_group_processes_corrected_invoice_independently(monkeypatch):
+    wrong = _invoice()
+    wrong.invoice_number = "invoice-old"
+    corrected = _invoice()
+    corrected.invoice_number = "invoice-corrected"
+    corrected.internet_message_id = "<corrected@example>"
+    corrected.received_at = datetime(2026, 9, 4, 14, 25, tzinfo=UTC)
+
+    def process_one(page, invoice, **kwargs):
+        return "Review" if invoice is wrong else "Success"
+
+    monkeypatch.setattr(fieldpo_closer, "process_fieldpo_invoice", process_one)
+
+    outcomes = fieldpo_closer.process_fieldpo_invoices(
+        MagicMock(),
+        [wrong, corrected],
+    )
+
+    assert outcomes == {
+        "<invoice@example>": "Review",
+        "<corrected@example>": "Success",
+    }
+
+
+def test_fieldpo_invoice_group_treats_matching_resend_as_one_po(monkeypatch):
+    first = _invoice()
+    resend = _invoice()
+    resend.internet_message_id = "<resend@example>"
+    resend.received_at = datetime(2026, 9, 4, 14, 25, tzinfo=UTC)
+    process_one = MagicMock(return_value="Success")
+    monkeypatch.setattr(fieldpo_closer, "process_fieldpo_invoice", process_one)
+
+    outcomes = fieldpo_closer.process_fieldpo_invoices(
+        MagicMock(),
+        [first, resend],
+    )
+
+    assert outcomes == {
+        "<invoice@example>": "Success",
+        "<resend@example>": "Success",
+    }
+    process_one.assert_called_once()
+
+
 def test_fieldpo_invoice_uses_resolved_fieldpo_vin(monkeypatch):
     invoice = _invoice(vin="")
     page = MagicMock()
     page.get_by_text.return_value.all_inner_texts.return_value = ["FPO1131464"]
+    page.get_by_text.return_value.count.return_value = 0
     navigated_vins = []
     approved_vins = []
     monkeypatch.setattr(
@@ -409,7 +566,6 @@ def test_fieldpo_invoice_uses_resolved_fieldpo_vin(monkeypatch):
     result = fieldpo_closer.process_fieldpo_invoice(
         page,
         invoice,
-        MagicMock(),
         fieldpo_vin="1C4SJSBP6SS537975",
     )
 
@@ -418,11 +574,11 @@ def test_fieldpo_invoice_uses_resolved_fieldpo_vin(monkeypatch):
     assert approved_vins == ["1C4SJSBP6SS537975"]
 
 
-def test_fieldpo_invoice_closes_and_moves_only_after_strict_gates(monkeypatch, tmp_path):
+def test_fieldpo_invoice_closes_after_strict_gates(monkeypatch):
     invoice = _invoice()
     page = MagicMock()
     page.get_by_text.return_value.all_inner_texts.return_value = ["FPO1131464"]
-    source = MagicMock()
+    page.get_by_text.return_value.count.return_value = 0
     monkeypatch.setattr(
         fieldpo_closer.agn_invoices,
         "go_to_active_work_order_tab",
@@ -443,23 +599,79 @@ def test_fieldpo_invoice_closes_and_moves_only_after_strict_gates(monkeypatch, t
     approve = MagicMock(return_value=True)
     monkeypatch.setattr(fieldpo_closer.agn_invoices, "approve_displayed_po", approve)
 
-    result = fieldpo_closer.process_fieldpo_invoice(page, invoice, source)
+    result = fieldpo_closer.process_fieldpo_invoice(page, invoice)
 
     assert result == "Success"
     approve.assert_called_once()
-    source.move_to_processed.assert_called_once_with("<invoice@example>")
-    audit = json.loads((tmp_path / "po_approval_audit.jsonl").read_text(encoding="utf-8"))
-    assert audit["source"] == "outlook.FieldPO_Closer"
-    assert audit["outcome"] == "approved"
-    assert audit["approval_action"] is True
-    assert audit["amount_match"] is True
-    assert audit["work_order_closed"] is True
 
 
-def test_fieldpo_invoice_blocks_live_amount_mismatch(monkeypatch, tmp_path):
+def test_fieldpo_invoice_compares_pdf_total_not_subtotal(monkeypatch):
+    invoice = _invoice()
+    invoice.invoice_total = Decimal("365.00")
+    invoice.invoice_amount = Decimal("340.00")
+    page = MagicMock()
+    page.get_by_text.return_value.all_inner_texts.return_value = ["FPO1131464"]
+    page.get_by_text.return_value.count.return_value = 0
+    monkeypatch.setattr(
+        fieldpo_closer.agn_invoices,
+        "go_to_active_work_order_tab",
+        lambda current_page, vin: "057935872",
+    )
+    monkeypatch.setattr(fieldpo_closer.agn_invoices, "po_exists", lambda page, po: True)
+    monkeypatch.setattr(
+        fieldpo_closer.agn_invoices,
+        "read_work_order_created_by",
+        lambda page: "Steele, Dirk",
+    )
+    monkeypatch.setattr(fieldpo_closer.agn_invoices, "click_into_po", lambda page, po: None)
+    monkeypatch.setattr(
+        fieldpo_closer.agn_invoices,
+        "read_po_status_and_amount",
+        lambda page: ("IN PROGRESS", "365.00"),
+    )
+    approve = MagicMock(return_value=True)
+    monkeypatch.setattr(fieldpo_closer.agn_invoices, "approve_displayed_po", approve)
+
+    assert fieldpo_closer.process_fieldpo_invoice(page, invoice) == "Success"
+    approve.assert_called_once()
+
+
+def test_fieldpo_invoice_rejects_subtotal_match_when_total_differs(monkeypatch):
+    invoice = _invoice()
+    invoice.invoice_total = Decimal("365.00")
+    invoice.invoice_amount = Decimal("340.00")
+    page = MagicMock()
+    page.get_by_text.return_value.all_inner_texts.return_value = ["FPO1131464"]
+    page.get_by_text.return_value.count.return_value = 0
+    monkeypatch.setattr(
+        fieldpo_closer.agn_invoices,
+        "go_to_active_work_order_tab",
+        lambda current_page, vin: "057935872",
+    )
+    monkeypatch.setattr(fieldpo_closer.agn_invoices, "po_exists", lambda page, po: True)
+    monkeypatch.setattr(
+        fieldpo_closer.agn_invoices,
+        "read_work_order_created_by",
+        lambda page: "Steele, Dirk",
+    )
+    monkeypatch.setattr(fieldpo_closer.agn_invoices, "click_into_po", lambda page, po: None)
+    monkeypatch.setattr(
+        fieldpo_closer.agn_invoices,
+        "read_po_status_and_amount",
+        lambda page: ("IN PROGRESS", "340.00"),
+    )
+    approve = MagicMock()
+    monkeypatch.setattr(fieldpo_closer.agn_invoices, "approve_displayed_po", approve)
+
+    assert fieldpo_closer.process_fieldpo_invoice(page, invoice) == "Review"
+    approve.assert_not_called()
+
+
+def test_fieldpo_invoice_blocks_live_amount_mismatch(monkeypatch):
     invoice = _invoice()
     page = MagicMock()
     page.get_by_text.return_value.all_inner_texts.return_value = ["FPO1131464"]
+    page.get_by_text.return_value.count.return_value = 0
     monkeypatch.setattr(
         fieldpo_closer.agn_invoices,
         "go_to_active_work_order_tab",
@@ -480,37 +692,120 @@ def test_fieldpo_invoice_blocks_live_amount_mismatch(monkeypatch, tmp_path):
     approve = MagicMock()
     monkeypatch.setattr(fieldpo_closer.agn_invoices, "approve_displayed_po", approve)
 
-    result = fieldpo_closer.process_fieldpo_invoice(page, invoice, MagicMock())
+    result = fieldpo_closer.process_fieldpo_invoice(page, invoice)
 
     assert result == "Review"
     approve.assert_not_called()
-    audit = json.loads((tmp_path / "po_approval_audit.jsonl").read_text(encoding="utf-8"))
-    assert audit["outcome"] == "blocked"
-    assert audit["reason"] == "amount_mismatch"
-    assert audit["invoice_amount"] == "340.00"
-    assert audit["authorized_amount"] == "400.00"
-    assert audit["approval_action"] is False
 
 
-def test_fieldpo_invoice_flags_other_listed_po_before_opening_target(monkeypatch):
+def test_fieldpo_invoice_allows_other_fieldpo_pos_without_invoices(monkeypatch):
     page = MagicMock()
     page.get_by_text.return_value.all_inner_texts.return_value = [
         "FPO1131464",
         "FPO1131465",
     ]
+    page.get_by_text.return_value.count.return_value = 0
     monkeypatch.setattr(
         fieldpo_closer.agn_invoices,
         "go_to_active_work_order_tab",
         lambda current_page, vin: "057935872",
     )
     monkeypatch.setattr(fieldpo_closer.agn_invoices, "po_exists", lambda page, po: True)
+    monkeypatch.setattr(
+        fieldpo_closer.agn_invoices,
+        "read_work_order_created_by",
+        lambda page: "Steele, Dirk",
+    )
     click_po = MagicMock()
     monkeypatch.setattr(fieldpo_closer.agn_invoices, "click_into_po", click_po)
+    monkeypatch.setattr(
+        fieldpo_closer.agn_invoices,
+        "read_po_status_and_amount",
+        lambda page: ("IN PROGRESS", "340.00"),
+    )
+    monkeypatch.setattr(
+        fieldpo_closer.agn_invoices,
+        "approve_displayed_po",
+        MagicMock(return_value=False),
+    )
 
-    result = fieldpo_closer.process_fieldpo_invoice(page, _invoice(), MagicMock())
+    result = fieldpo_closer.process_fieldpo_invoice(page, _invoice())
 
-    assert result == "Review"
-    click_po.assert_not_called()
+    assert result == "Success"
+    click_po.assert_called_once_with(page, "FPO1131464")
+
+
+def test_fieldpo_invoice_does_not_repeat_approval_when_po_is_approved(monkeypatch):
+    page = MagicMock()
+    page.get_by_text.return_value.all_inner_texts.return_value = ["FPO1131464"]
+    page.get_by_text.return_value.count.return_value = 0
+    monkeypatch.setattr(
+        fieldpo_closer.agn_invoices,
+        "go_to_active_work_order_tab",
+        lambda current_page, vin: "057935872",
+    )
+    monkeypatch.setattr(fieldpo_closer.agn_invoices, "po_exists", lambda page, po: True)
+    monkeypatch.setattr(
+        fieldpo_closer.agn_invoices,
+        "read_work_order_created_by",
+        lambda page: "Steele, Dirk",
+    )
+    monkeypatch.setattr(fieldpo_closer.agn_invoices, "click_into_po", lambda page, po: None)
+    monkeypatch.setattr(
+        fieldpo_closer.agn_invoices,
+        "read_po_status_and_amount",
+        lambda page: ("APPROVED", "340.00"),
+    )
+    approve = MagicMock()
+    monkeypatch.setattr(fieldpo_closer.agn_invoices, "approve_displayed_po", approve)
+
+    assert fieldpo_closer.process_fieldpo_invoice(page, _invoice()) == (
+        "Unverified"
+    )
+    approve.assert_not_called()
+
+
+def test_fieldpo_invoice_approved_and_completed_is_success_without_repeat_action(
+    monkeypatch,
+):
+    invoice = _invoice()
+    invoice.subject_po_number = ""
+    page = MagicMock()
+    page.get_by_text.return_value.all_inner_texts.return_value = ["FPO1131464"]
+
+    def get_by_text(text, exact=False):
+        locator = MagicMock()
+        if text == "COMPLETED" and exact:
+            locator.count.return_value = 1
+        elif text == "FPO1131464" and exact:
+            locator.count.return_value = 1
+        else:
+            locator.all_inner_texts.return_value = ["FPO1131464"]
+        return locator
+
+    page.get_by_text.side_effect = get_by_text
+    monkeypatch.setattr(
+        fieldpo_closer.agn_invoices,
+        "go_to_active_work_order_tab",
+        lambda current_page, vin: "057935872",
+    )
+    monkeypatch.setattr(fieldpo_closer.agn_invoices, "po_exists", lambda page, po: True)
+    monkeypatch.setattr(
+        fieldpo_closer.agn_invoices,
+        "read_work_order_created_by",
+        lambda page: "Steele, Dirk",
+    )
+    monkeypatch.setattr(fieldpo_closer.agn_invoices, "click_into_po", lambda page, po: None)
+    monkeypatch.setattr(
+        fieldpo_closer.agn_invoices,
+        "read_po_status_and_amount",
+        lambda page: ("APPROVED", "340.00"),
+    )
+    approve = MagicMock()
+    monkeypatch.setattr(fieldpo_closer.agn_invoices, "approve_displayed_po", approve)
+
+    assert fieldpo_closer.process_fieldpo_invoice(page, invoice) == "Success"
+    approve.assert_not_called()
 
 
 def test_parse_combined_pdf_skips_terms_page(monkeypatch, tmp_path):
