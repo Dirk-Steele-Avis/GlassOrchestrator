@@ -65,6 +65,17 @@ if /i "%~1"=="--max-invoices" (
   goto :parse_args
 )
 
+if /i "%~1"=="--max" (
+  if "%~2"=="" (
+    echo [ERROR] --max requires a value.
+    exit /b 2
+  )
+  set "MAX_INVOICES=%~2"
+  shift
+  shift
+  goto :parse_args
+)
+
 if /i "%~1"=="--invoice-number" (
   if "%~2"=="" (
     echo [ERROR] --invoice-number requires a value.
@@ -83,7 +94,8 @@ if /i "%~1"=="--sweep-terminal-to-needs-review" (
 )
 
 if /i "%~1"=="--help" (
-  echo Usage: Run-Glass-Closeout.cmd [--batch ^| --mva MVA] [--csv path] [--max-rows N] [--max-invoices N] [--invoice-number N] [--sweep-terminal-to-needs-review]
+  echo Usage: Run-Glass-Closeout.cmd [--batch ^| --mva MVA] [--csv path] [--max-rows N] [--max-invoices N ^| --max N] [--invoice-number N] [--sweep-terminal-to-needs-review]
+  echo Invoice limits select once and restrict every closeout stage to that selection.
   exit /b 0
 )
 
@@ -91,10 +103,12 @@ echo [ERROR] Unknown argument: %~1
 exit /b 2
 
 :run
+if defined MAX_INVOICES goto :limited_closeout
+if defined INVOICE_NUMBER goto :limited_closeout
 if /i "%MODE%"=="mva" (
   echo Running Glass closeout for MVA %TARGET_MVA%...
   call ".\Run-GlassBootstrap.cmd" .\.venv\Scripts\python.exe WorkItems\close_workitem.py --mvas "%TARGET_MVA%" --concise-console --results-json data\glass_closeout_work_items.json
-  if errorlevel 1 exit /b %errorlevel%
+  if errorlevel 1 goto :stage_failed
 ) else (
   if defined CLOSE_CSV (
     echo Running Glass closeout from reviewed CSV %CLOSE_CSV%...
@@ -103,7 +117,7 @@ if /i "%MODE%"=="mva" (
     ) else (
       call ".\Run-GlassBootstrap.cmd" .\.venv\Scripts\python.exe WorkItems\close_workitem.py --csv "%CLOSE_CSV%" --concise-console --results-json data\glass_closeout_work_items.json
     )
-    if errorlevel 1 exit /b %errorlevel%
+    if errorlevel 1 goto :stage_failed
   ) else (
     echo Running Glass closeout batch...
     if defined MAX_ROWS (
@@ -111,18 +125,36 @@ if /i "%MODE%"=="mva" (
     ) else (
       call ".\Run-GlassBootstrap.cmd" .\.venv\Scripts\python.exe WorkItems\build_close_queue.py --apply
     )
-    if errorlevel 1 exit /b %errorlevel%
+    if errorlevel 1 goto :stage_failed
 
     if defined MAX_ROWS (
       call ".\Run-GlassBootstrap.cmd" .\.venv\Scripts\python.exe WorkItems\close_workitem.py --max-rows %MAX_ROWS% --concise-console --results-json data\glass_closeout_work_items.json
     ) else (
       call ".\Run-GlassBootstrap.cmd" .\.venv\Scripts\python.exe WorkItems\close_workitem.py --concise-console --results-json data\glass_closeout_work_items.json
     )
-    if errorlevel 1 exit /b %errorlevel%
+    if errorlevel 1 goto :stage_failed
   )
 )
 
+goto :invoice_stage
+
+:limited_closeout
+if /i "%MODE%"=="mva" goto :incompatible_scope
+if defined CLOSE_CSV goto :incompatible_scope
+if defined MAX_ROWS goto :incompatible_scope
+if "%SWEEP_TERMINAL%"=="1" goto :incompatible_scope
+echo Running Glass closeout for one shared invoice selection...
+set "INVOICE_ARGS=--close-work-items"
+goto :run_invoices
+
+:incompatible_scope
+echo [ERROR] Invoice-scoped closeout cannot be combined with --mva, --csv, --max-rows, or --sweep-terminal-to-needs-review.
+exit /b 2
+
+:invoice_stage
 set "INVOICE_ARGS="
+
+:run_invoices
 if defined MAX_INVOICES set "INVOICE_ARGS=%INVOICE_ARGS% --max-invoices %MAX_INVOICES%"
 if defined INVOICE_NUMBER set "INVOICE_ARGS=%INVOICE_ARGS% --invoice-number %INVOICE_NUMBER%"
 if "%SWEEP_TERMINAL%"=="1" set "INVOICE_ARGS=%INVOICE_ARGS% --sweep-terminal-to-needs-review"
@@ -132,3 +164,6 @@ set "RUN_EXIT=%errorlevel%"
 echo.
 echo Exit code: %RUN_EXIT%
 exit /b %RUN_EXIT%
+
+:stage_failed
+exit /b %errorlevel%

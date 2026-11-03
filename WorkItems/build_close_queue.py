@@ -19,6 +19,11 @@ from vendor_tracking.sheet_updater import (
     normalize_date_for_match,
 )
 from outlook.agn_invoices import mark_processed_category
+from invoice_workflow.invoice_parser import (
+    InvoicePdfParseError,
+    parse_invoice_pdf,
+    validate_vendor_invoice,
+)
 
 DEFAULT_CLOSE_QUEUE = BASE_DIR / "WorkItems" / "close_workitem.csv"
 DEFAULT_CLOSE_HISTORY = BASE_DIR / "data" / "close_workitem_history.csv"
@@ -63,6 +68,12 @@ def _load_uncategorized_invoices() -> tuple[list[dict], list[str]]:
             if not vin or not amount:
                 review_notes.append(f"{subject}: PDF VIN or amount could not be parsed")
                 continue
+            try:
+                pdf_data = parse_invoice_pdf(pdf_path)
+                validate_vendor_invoice(pdf_data)
+            except InvoicePdfParseError as exc:
+                review_notes.append(f"{subject}: {exc}")
+                continue
             invoices.append({
                 "subject": subject,
                 "received": str(getattr(mail, "ReceivedTime", "")),
@@ -70,6 +81,7 @@ def _load_uncategorized_invoices() -> tuple[list[dict], list[str]]:
                 "vin": vin,
                 "invoice_amount": amount,
                 "mail": mail,
+                "is_recalibration": pdf_data.is_recalibration,
             })
     return invoices, review_notes
 
@@ -85,10 +97,44 @@ def _load_existing_candidates(path: Path) -> set[tuple[str, str]]:
         }
 
 
+def _load_history_reasons(path: Path) -> dict[tuple[str, str], str]:
+    if not path.exists():
+        return {}
+    reasons: dict[tuple[str, str], str] = {}
+    with path.open(newline="", encoding="utf-8") as history_file:
+        reader = csv.DictReader(line for line in history_file if not line.startswith("#"))
+        required = {"mva", "Type", "processed_date", "result"}
+        if not required.issubset(reader.fieldnames or []):
+            raise ValueError(f"Close history {path} is missing required columns")
+        for row in reader:
+            key = (row["mva"].strip(), row["Type"].strip())
+            recorded_date = row["processed_date"].strip()
+            result = row["result"].strip()
+            if not all((*key, recorded_date, result)):
+                raise ValueError(f"Close history {path} contains an incomplete record")
+            outcomes = {
+                "closed": "work item was marked complete",
+                "not_found": "no open work item was found; no work item was closed",
+                "checkpointed": "handling was checkpointed; closure outcome is not recorded",
+            }
+            outcome = outcomes.get(result, f"recorded outcome: {result}")
+            reason = (
+                f"close history {recorded_date}: {outcome} [result={result}]. "
+                f"No new candidate because MVA/{key[1]} is already in close history. "
+                "History does not record VIN, PO, or invoice number; "
+                "this is not a duplicate-invoice or payment determination"
+            )
+            if key in reasons:
+                reasons[key] += f"; {reason}"
+            else:
+                reasons[key] = reason
+    return reasons
+
+
 def _load_processed_candidates(path: Path) -> set[tuple[str, str]]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, OSError, json.JSONDecodeError):
+    except FileNotFoundError:
         return set()
     if payload.get("date") != date.today().isoformat():
         return set()
@@ -217,35 +263,60 @@ def _select_invoice_sheet_row(
 def build_close_candidates(
     updater: VendorSheetUpdater,
     invoices: list[dict],
-    existing: set[tuple[str, str]],
+    existing: dict[tuple[str, str], str],
     max_rows: int | None,
     target_mvas: set[str] | None = None,
-) -> tuple[list[dict], list[str]]:
+    review_invoices: list[tuple[dict, str]] | None = None,
+) -> tuple[list[dict], list[str], list[str]]:
     candidates: list[dict] = []
     review_notes: list[str] = []
-    proposed = set(existing)
+    skipped_notes: list[str] = []
+    proposed = dict(existing)
     new_count = 0
 
     for invoice in invoices:
         subject = invoice.get("subject", "")
         vin = invoice.get("vin", "")
+        label = f"{subject} | VIN {vin}"
+        if invoice.get("is_recalibration"):
+            skipped_notes.append(
+                f"{label}: recalibration; separate PO/invoice validation, "
+                "no additional Glass work-item closure or Sheet cost update"
+            )
+            continue
         invoice_match = INVOICE_SUBJECT_PATTERN.search(subject)
         invoice_id = invoice_match.group(1) if invoice_match else ""
         row_index, normalized, match_note = _select_invoice_sheet_row(updater, vin)
         if row_index is None or normalized is None:
             if target_mvas is None:
                 review_notes.append(f"{subject}: {match_note}")
+                if review_invoices is not None:
+                    review_invoices.append((invoice, match_note))
+            else:
+                skipped_notes.append(
+                    f"{label}: cannot establish requested MVA scope: {match_note}"
+                )
             continue
 
         mva, complaint_type = normalized
         if target_mvas is not None and mva not in target_mvas:
+            skipped_notes.append(
+                f"{label} | MVA {mva}: outside requested --mva scope"
+            )
             continue
         key = (mva, complaint_type)
         if key in proposed:
+            skipped_notes.append(f"{label} | MVA {mva}: {proposed[key]}")
             continue
         if max_rows is not None and new_count >= max_rows:
+            skipped_notes.append(
+                f"{label} | MVA {mva}: deferred by --max-rows {max_rows}"
+            )
             continue
-        proposed.add(key)
+        proposed[key] = (
+            f"same MVA/{complaint_type} already selected in this batch "
+            f"by Invoice {invoice_id}"
+        )
         new_count += 1
 
         candidate = {
@@ -259,9 +330,54 @@ def build_close_candidates(
         }
         if "mail" in invoice:
             candidate["mail"] = invoice["mail"]
+        if "selection_index" in invoice:
+            candidate["selection_index"] = invoice["selection_index"]
         candidates.append(candidate)
 
-    return candidates, review_notes
+    return candidates, review_notes, skipped_notes
+
+
+def prepare_selected_closeout(
+    updater: VendorSheetUpdater,
+    invoices: list[dict],
+) -> tuple[list[dict], list[tuple[dict, str]]]:
+    """Apply only the captured invoices and return their exact work-item targets.
+
+    Invoices that fail their Sheet check are returned for Needs Review and are
+    excluded from Sheet, queue, and work-item changes.
+    """
+    existing = _load_history_reasons(DEFAULT_CLOSE_HISTORY)
+    existing.update({
+        key: "already checkpointed today"
+        for key in _load_processed_candidates(PROCESSED_STATE_PATH)
+    })
+    reviews: list[tuple[dict, str]] = []
+    candidates, _review_notes, skipped_notes = build_close_candidates(
+        updater, invoices, existing, max_rows=None, review_invoices=reviews,
+    )
+    for note in skipped_notes:
+        print(f"[CLOSEOUT] No new work-item target: {note}")
+    for invoice, note in reviews:
+        print(f"[CLOSEOUT] Needs Review: {invoice.get('subject', '')}: Sheet check failed: {note}")
+
+    queued = _load_existing_candidates(DEFAULT_CLOSE_QUEUE)
+    if candidates:
+        updater.ensure_columns()
+        _append_candidates(
+            DEFAULT_CLOSE_QUEUE,
+            [
+                candidate for candidate in candidates
+                if (candidate["mva"], candidate["complaint_type"]) not in queued
+            ],
+        )
+        for candidate in candidates:
+            fields = {"Repair Status": STATUS_COMPLETED, "Cost": candidate["cost"]}
+            updater.update_vendor_fields(int(candidate["row_index"]), fields)
+            print(
+                f"[CLOSEOUT] Invoice {candidate['invoice_id']} | "
+                f"MVA {candidate['mva']} | queued for work-item closure"
+            )
+    return candidates, reviews
 
 
 def main() -> int:
@@ -307,9 +423,10 @@ def main() -> int:
     invoices, source_review_notes = _load_uncategorized_invoices()
     processed = _load_processed_candidates(PROCESSED_STATE_PATH)
     queued = _load_existing_candidates(args.close_queue)
-    completed = _load_existing_candidates(args.history) | processed
-    existing = queued | completed
-    candidates, review_notes = build_close_candidates(
+    existing = _load_history_reasons(args.history)
+    existing.update({key: "already in the close queue" for key in queued})
+    existing.update({key: "already checkpointed today" for key in processed})
+    candidates, review_notes, skipped_notes = build_close_candidates(
         updater,
         invoices,
         existing,
@@ -325,9 +442,13 @@ def main() -> int:
             f"  {candidate['received']} | MVA {candidate['mva']} | "
             f"VIN {candidate['vin']} | Invoice {candidate['invoice_id']}"
         )
+    if skipped_notes:
+        print(f"No new candidate: {len(skipped_notes)} invoice(s)")
+        for note in skipped_notes:
+            print(f"  {note}")
     if review_notes:
-        print(f"Needs review: {len(review_notes)} invoice(s) could not be matched safely")
-        for note in review_notes[:20]:
+        print(f"Needs review: {len(review_notes)} invoice(s) failed source or Sheet checks")
+        for note in review_notes:
             print(f"  {note}")
 
     if not args.apply:

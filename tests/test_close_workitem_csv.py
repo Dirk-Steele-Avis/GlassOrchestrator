@@ -5,6 +5,7 @@ from datetime import date
 import io
 import json
 import logging
+import subprocess
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -96,6 +97,32 @@ def _write_csv(tmp_path: Path, content: str) -> Path:
     return p
 
 
+def test_invoice_scope_selects_exact_mva_from_existing_queue(tmp_path):
+    from WorkItems import close_workitem
+
+    path = _write_csv(
+        tmp_path,
+        "mva,Type\n11111111,Glass\n59235573,Glass\n22222222,Glass\n",
+    )
+    args = argparse.Namespace(
+        mvas="", only_mvas="059235573", csv_path=str(path), max_rows=None,
+    )
+    assert close_workitem._build_targets(args) == [
+        {"mva": "059235573", "complaint_type": "Glass"},
+    ]
+
+
+def test_invoice_scope_missing_from_queue_is_visible_failure(tmp_path):
+    from WorkItems import close_workitem
+
+    path = _write_csv(tmp_path, "mva,Type\n11111111,Glass\n")
+    args = argparse.Namespace(
+        mvas="", only_mvas="059235573", csv_path=str(path), max_rows=None,
+    )
+    with pytest.raises(ValueError, match="Selected work-item targets are missing"):
+        close_workitem._build_targets(args)
+
+
 class TestLoadCsvCommentSkipping:
 
     def test_comment_lines_skipped(self, tmp_path):
@@ -159,6 +186,12 @@ class TestActiveCloseRunnerDisconnect:
     def test_successful_close_reuses_exact_vehicle_keyword_search(self, monkeypatch):
         from WorkItems import close_workitem
 
+        process_command = MagicMock(
+            return_value=subprocess.CompletedProcess(
+                args=["tasklist"], returncode=0, stdout="msedge.exe 1234", stderr="",
+            ),
+        )
+        monkeypatch.setattr(subprocess, "run", process_command)
         page = MagicMock()
         page.url = "https://avisbudget.palantirfoundry.com/workspace/vehicle"
         page.goto = AsyncMock()
@@ -177,7 +210,6 @@ class TestActiveCloseRunnerDisconnect:
         navigate = AsyncMock(return_value=page)
 
         monkeypatch.setattr(close_workitem, "async_playwright", lambda: playwright_context)
-        monkeypatch.setattr(close_workitem, "_is_edge_running", lambda: False)
         monkeypatch.setattr(close_workitem, "resolve_headless", lambda: False)
         monkeypatch.setattr(close_workitem, "resolve_edge_user_data_dir", lambda: "profile")
         monkeypatch.setattr(close_workitem, "resolve_edge_profile_directory", lambda: "Default")
@@ -210,6 +242,59 @@ class TestActiveCloseRunnerDisconnect:
         ]
         page.goto.assert_awaited_once_with(close_workitem.LOGIN_URL, wait_until="domcontentloaded")
         assert navigate.await_count == 2
+        process_command.assert_not_called()
+        playwright.chromium.launch_persistent_context.assert_awaited_once_with(
+            user_data_dir="profile",
+            channel="msedge",
+            headless=False,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--profile-directory=Default",
+                "--start-maximized",
+            ],
+            no_viewport=True,
+        )
+
+    @pytest.mark.parametrize(
+        "reason",
+        ["ProcessSingleton: profile is already in use", "Executable doesn't exist"],
+    )
+    def test_browser_launch_failure_reports_exact_profile_without_retry_or_process_kill(
+        self, monkeypatch, caplog, reason,
+    ):
+        from WorkItems import close_workitem
+
+        launch = AsyncMock(side_effect=close_workitem.PlaywrightError(reason))
+        playwright = MagicMock()
+        playwright.chromium.launch_persistent_context = launch
+        playwright_context = AsyncMock()
+        playwright_context.__aenter__.return_value = playwright
+        monkeypatch.setattr(close_workitem, "async_playwright", lambda: playwright_context)
+        monkeypatch.setattr(close_workitem, "resolve_headless", lambda: False)
+        monkeypatch.setattr(close_workitem, "resolve_edge_user_data_dir", lambda: "configured-profile")
+        monkeypatch.setattr(close_workitem, "resolve_edge_profile_directory", lambda: "Default")
+        monkeypatch.setattr(close_workitem, "resolve_step_delay", lambda: 0)
+        process_command = MagicMock()
+        monkeypatch.setattr(subprocess, "run", process_command)
+        ensure_session = AsyncMock()
+        close_item = AsyncMock()
+        monkeypatch.setattr(close_workitem, "ensure_profile_context", ensure_session)
+        monkeypatch.setattr(close_workitem, "_playwright_close_work_item", close_item)
+
+        with pytest.raises(RuntimeError, match="Edge launch failed") as error:
+            asyncio.run(close_workitem._run_playwright_close_async(
+                argparse.Namespace(timeout_seconds=30, debug_hold_seconds=0),
+                [{"mva": "059235573", "complaint_type": "Glass"}],
+            ))
+
+        assert "configured-profile" in str(error.value)
+        assert "Default" in str(error.value)
+        assert reason in str(error.value)
+        assert reason in caplog.text
+        launch.assert_awaited_once()
+        ensure_session.assert_not_awaited()
+        close_item.assert_not_awaited()
+        process_command.assert_not_called()
 
     def test_navigation_failure_stops_remaining_mvas(self, monkeypatch):
         from WorkItems import close_workitem
@@ -225,7 +310,6 @@ class TestActiveCloseRunnerDisconnect:
         navigate = AsyncMock(side_effect=RuntimeError("post-search contract changed"))
 
         monkeypatch.setattr(close_workitem, "async_playwright", lambda: playwright_context)
-        monkeypatch.setattr(close_workitem, "_is_edge_running", lambda: False)
         monkeypatch.setattr(close_workitem, "resolve_headless", lambda: False)
         monkeypatch.setattr(close_workitem, "resolve_edge_user_data_dir", lambda: "profile")
         monkeypatch.setattr(close_workitem, "resolve_edge_profile_directory", lambda: "Default")
@@ -250,9 +334,16 @@ class TestActiveCloseRunnerDisconnect:
         assert results == [
             {
                 "mva": "011111111",
+                "complaint_type": "Glass",
                 "result": close_workitem.RESULT_NAV_FAILED,
                 "detail": "post-search contract changed",
-            }
+            },
+            {
+                "mva": "022222222",
+                "complaint_type": "Glass",
+                "result": close_workitem.RESULT_NOT_ATTEMPTED,
+                "detail": "batch stopped after navigation failure for 011111111",
+            },
         ]
         assert navigate.await_count == 1
 
@@ -271,7 +362,6 @@ class TestActiveCloseRunnerDisconnect:
         playwright_context.__aexit__ = AsyncMock(return_value=None)
 
         monkeypatch.setattr(close_workitem, "async_playwright", lambda: playwright_context)
-        monkeypatch.setattr(close_workitem, "_is_edge_running", lambda: False)
         monkeypatch.setattr(close_workitem, "resolve_headless", lambda: False)
         monkeypatch.setattr(close_workitem, "resolve_edge_user_data_dir", lambda: "profile")
         monkeypatch.setattr(close_workitem, "resolve_edge_profile_directory", lambda: "Default")
@@ -306,11 +396,23 @@ class TestActiveCloseRunnerDisconnect:
         launch_kwargs = playwright.chromium.launch_persistent_context.await_args.kwargs
         assert "chromium_sandbox" not in launch_kwargs
         assert results == [
-            {"mva": "011111111", "result": close_workitem.RESULT_NOT_FOUND, "detail": ""},
+            {
+                "mva": "011111111",
+                "complaint_type": "Glass",
+                "result": close_workitem.RESULT_NOT_FOUND,
+                "detail": "",
+            },
             {
                 "mva": "022222222",
+                "complaint_type": "Glass",
                 "result": close_workitem.RESULT_ERROR,
                 "detail": "browser unavailable",
+            },
+            {
+                "mva": "033333333",
+                "complaint_type": "Glass",
+                "result": close_workitem.RESULT_NOT_ATTEMPTED,
+                "detail": "batch stopped after browser failure for 022222222",
             },
         ]
 

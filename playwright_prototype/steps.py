@@ -24,6 +24,12 @@ log = logging.getLogger(__name__)
 DATA_ENTRY_SUBMIT_DELAY_MS = 2000
 BUTTON_PUSH_DELAY_MS = 2000
 UI_SETTLE_DELAY_MS = 1500
+# Compass opens the vehicle tab from the homepage Search click; Playwright waits
+# for that navigation inside click(), so slow page loads count against it.
+COMPASS_HOME_SEARCH_SUBMIT_TIMEOUT_MS = 30_000
+MARK_COMPLETE_ENABLED_TIMEOUT_MS = 20_000
+MARK_COMPLETE_POST_ENABLED_SETTLE_MS = 1_000
+MARK_COMPLETE_MENU_ITEM_NAME = re.compile(r"^\s*Mark Complete\b")
 OPEN_WORK_ITEMS_COUNT_WAIT_MS = 5_000
 OPEN_WORK_ITEMS_COUNT_POLL_MS = 250
 OPEN_WORK_ITEMS_ZERO_CONFIRM_DELAY_MS = 250
@@ -202,7 +208,7 @@ async def _fill_rvm_complaint_form(page: Page, mva: str) -> None:
     yes_label = scope.locator("label", has_text=re.compile(r"^\s*Yes\s*$", re.I)).first
     await yes_label.click(timeout=10_000)
 
-    for section, value in (("Category", "Glass Damage"), ("Sub-Category", "Mechanical Issue")):
+    for section, value in (("Category", "Mechanical Issue"), ("Sub-Category", "Interior Component Damaged")):
         section_heading = scope.get_by_role(
             "heading", name=re.compile(rf"^\s*{re.escape(section)}\s*$", re.I)
         ).first
@@ -349,8 +355,10 @@ async def _enter_mva(page: Page, mva: str) -> Page:
             raise RuntimeError("Compass homepage must contain exactly one Search button")
         await home_mva_input.first.fill(mva)
         await page.wait_for_timeout(DATA_ENTRY_SUBMIT_DELAY_MS)
-        async with page.context.expect_page(timeout=10_000) as new_page_info:
-            await search_button.first.click(timeout=5_000)
+        async with page.context.expect_page(
+            timeout=COMPASS_HOME_SEARCH_SUBMIT_TIMEOUT_MS
+        ) as new_page_info:
+            await search_button.first.click(timeout=COMPASS_HOME_SEARCH_SUBMIT_TIMEOUT_MS)
         vehicle_page = await new_page_info.value
         await vehicle_page.wait_for_load_state("domcontentloaded")
         return vehicle_page
@@ -549,6 +557,18 @@ async def _confirm_mark_complete(page: Page, note: str = "Done") -> None:
     await page.wait_for_timeout(10_000)
 
 
+async def _wait_until_enabled(locator, timeout_ms: int) -> None:
+    """Wait for exactly one visible, enabled element; raise with the locator on timeout."""
+    from playwright.async_api import expect
+
+    try:
+        await expect(locator).to_have_count(1, timeout=timeout_ms)
+        await expect(locator).to_be_visible(timeout=timeout_ms)
+        await expect(locator).to_be_enabled(timeout=timeout_ms)
+    except AssertionError as exc:
+        raise RuntimeError(f"{locator} not enabled within {timeout_ms} ms: {exc}") from exc
+
+
 async def close_open_work_item(page: Page, mva: str, complaint_type: str = "Glass", note: str = "Done") -> str:
     """Open the live Open Work Items row and close it through the action menu."""
     row_title = "GLASS-GLASS" if complaint_type == "Glass" else f"{complaint_type}-{complaint_type}".upper()
@@ -570,11 +590,17 @@ async def close_open_work_item(page: Page, mva: str, complaint_type: str = "Glas
     menu_text = (await menu_overlay.inner_text()).strip()
     log.info("[STEPS] %s — action menu opened: %s", mva, menu_text.replace("\n", " | "))
 
-    mark_complete_menu_item = detail_page.locator(
-        "xpath=(//*[@role='menu']//*[contains(normalize-space(.), 'Mark Complete')])[1]"
-    ).first
-    await mark_complete_menu_item.wait_for(state="visible", timeout=20_000)
-    await detail_page.wait_for_timeout(UI_SETTLE_DELAY_MS)
+    # Compass appends a description to the item name, e.g. "Mark Complete Work item must be open...".
+    mark_complete_menu_item = menu_overlay.get_by_role("menuitem", name=MARK_COMPLETE_MENU_ITEM_NAME)
+    menu_item_names = await menu_overlay.get_by_role("menuitem").all_inner_texts()
+    log.info(
+        "[STEPS] %s — action menu items: %s",
+        mva,
+        [" ".join(name.split()) for name in menu_item_names],
+    )
+    # Compass renders Mark Complete disabled for several seconds after the menu opens.
+    await _wait_until_enabled(mark_complete_menu_item, MARK_COMPLETE_ENABLED_TIMEOUT_MS)
+    await detail_page.wait_for_timeout(MARK_COMPLETE_POST_ENABLED_SETTLE_MS)
     await mark_complete_menu_item.click(timeout=10_000)
     await detail_page.wait_for_timeout(UI_SETTLE_DELAY_MS)
 

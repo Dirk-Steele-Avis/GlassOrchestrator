@@ -57,15 +57,23 @@ if "%SYNC_DEPS%"=="1" (
   echo [BOOTSTRAP] Requirements unchanged. Skipping dependency install.
 )
 
-rem No arguments: process valid MVAs from today's spreadsheet rows.
 rem Manual modes:
+rem   Run-EnsureGlassWorkItems.cmd --inventory-date 2026-09-25
 rem   Run-EnsureGlassWorkItems.cmd --mva 058524185
 rem   Run-EnsureGlassWorkItems.cmd --mva 058524185 --dry-run
 rem   Run-EnsureGlassWorkItems.cmd --csv WorkItems\create_workitem.csv
 
+if "%~1"=="" (
+  echo [ERROR] Explicit target required.
+  echo Usage: Run-EnsureGlassWorkItems.cmd --inventory-date YYYY-MM-DD
+  echo        Run-EnsureGlassWorkItems.cmd --mva MVA [--dry-run]
+  echo        Run-EnsureGlassWorkItems.cmd --csv path\to\file.csv
+  exit /b 2
+)
+
 if /i "%~1"=="--csv" goto :run_csv
 
-echo Ensuring Glass complaints and work items from today's spreadsheet...
+echo Ensuring Glass complaints and work items for explicit target...
 "%VENV_PY%" ".\create_compass_complaints.py" %*
 goto :complete
 
