@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import gspread
+from vendor_tracking.sheet_updater import _google_sheets_client
 
 
 ROOT = Path(__file__).resolve().parent
@@ -36,13 +37,13 @@ SECTION_ORDER = (
     "AGN (Replacements)", "AGN Repair", "Super Glass (Repairs)",
     "AVIS (TBK)", "Local Market", "Other",
 )
-STALE_DAYS = 14
+STALE_DAYS = 5
 RED = "#d4002a"
 BLACK = "#111111"
 FONT = "'Segoe UI',Calibri,Arial,sans-serif"
 REPORT_COLUMNS = (
-    ("Inv", 44), ("Orig", 44), ("MVA", 76), ("Next action", 116),
-    ("VIN", 221), ("Make", 78), ("Location", 68), ("Action", 108),
+    ("Inv", 44), ("Orig", 44), ("MVA", 76), ("Next action", 200),
+    ("VIN", 137), ("Make", 78), ("Location", 68), ("Action", 108),
     ("Area", 96), ("Claim #", 72), ("Work item", 75), ("Age", 52),
 )
 
@@ -66,7 +67,7 @@ class ReportRow:
 
     @property
     def is_local(self) -> bool:
-        return bool(self.location) and self.location.upper() not in HOME_LOCATIONS
+        return self.location.upper() not in HOME_LOCATIONS
 
     @property
     def needs_photo(self) -> bool:
@@ -94,6 +95,24 @@ def _parse_date(value: str) -> date | None:
         except ValueError:
             pass
     return None
+
+
+def latest_inventory_date(values: list[list[str]]) -> date:
+    if not values:
+        raise RuntimeError("GlassClaims is empty; expected a header row")
+    try:
+        inventory_index = values[0].index("Inventory Date")
+    except ValueError as exc:
+        raise RuntimeError("GlassClaims is missing required column(s): Inventory Date") from exc
+    inventory_dates = [
+        parsed
+        for source in values[1:]
+        if len(source) > inventory_index
+        and (parsed := _parse_date(source[inventory_index])) is not None
+    ]
+    if not inventory_dates:
+        raise RuntimeError("GlassClaims has no valid Inventory Date values")
+    return max(inventory_dates)
 
 
 def _short_date(value: str) -> str:
@@ -157,7 +176,9 @@ def build_sections(rows: list[ReportRow]) -> list[ReportSection]:
     groups: dict[str, list[ReportRow]] = {title: [] for title in SECTION_ORDER}
     for row in rows:
         compact_vendor = row.vendor.replace(" ", "").lower()
-        if row.is_local:
+        if row.verb == "Warranty":
+            title = "AGN (Replacements)"
+        elif row.is_local:
             title = "Local Market"
         elif row.vendor.upper() == "AGN" and row.verb == "Replace":
             title = "AGN (Replacements)"
@@ -205,7 +226,7 @@ def _report_row_html(row: ReportRow) -> str:
     cells = (
         _td(_esc(row.inventory_date), "padding-left:14px;color:#555;"), _td(_esc(row.original_date)),
         _td(f'<span style="font-family:Consolas,monospace;font-size:12px;">{_esc(row.mva)}</span>'),
-        _td(next_action), _td(f'<span style="font-family:Consolas,monospace;font-size:11px;white-space:nowrap;">{_esc(row.vin)}</span>', "white-space:nowrap;"),
+        _td(next_action, "white-space:normal;word-wrap:break-word;overflow-wrap:break-word;"), _td(f'<span style="font-family:Consolas,monospace;font-size:11px;white-space:nowrap;">{_esc(row.vin)}</span>', "white-space:nowrap;"),
         _td(_esc(row.make)), _td(_esc(row.location)), _td(action), _td(area), _td(claim),
         _td(_esc(row.work_item), "color:#555;"), _td(age, "text-align:right;padding-right:14px;"),
     )
@@ -235,7 +256,7 @@ def render_report(rows: list[ReportRow], *, today: date) -> str:
     sections = build_sections(rows)
     photo = [row for row in rows if row.needs_photo or not row.verb]
     stale = sorted(
-        [row for row in rows if row.vendor.upper() == "AVIS" and row.age is not None and row.age >= STALE_DAYS],
+        [row for row in rows if row.age is not None and row.age >= STALE_DAYS],
         key=lambda row: row.age or 0, reverse=True,
     )
     missing = [row for row in rows if "missing" in row.claim.lower()]
@@ -249,9 +270,9 @@ def render_report(rows: list[ReportRow], *, today: date) -> str:
 
     attention = (
         (len(photo), "Needs photo", details(photo, lambda row: _esc(f"{row.location} {row.make} - MVA {row.mva}"))),
-        (len(stale), f"Avis units {STALE_DAYS}+ days old", details(stale, lambda row: _esc(f"MVA {row.mva} ({row.age}d)"))),
+        (len(stale), f"Units {STALE_DAYS}+ days old", details(stale, lambda row: _esc(f"MVA {row.mva} ({row.age}d)"))),
         (len(missing), "Claim # still missing", f"of {len(rows)} open units"),
-        (len(fresh), "New today", f"Original date {today.month}/{today.day}"),
+        (len(fresh), "New on report date", f"Original date {today.month}/{today.day}"),
     )
     parts = [
         '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Glass Damage Report</title>',
@@ -268,14 +289,14 @@ def render_report(rows: list[ReportRow], *, today: date) -> str:
             "@media print{.toolbar,.mobile-report{display:none}.page{padding:0}.report-stage{position:relative!important;left:auto!important;width:1100px!important;height:auto!important}.report-canvas{position:static;transform:none!important}body{background:#fff;overflow:visible}}</style></head><body>"
         ),
         '<div class="toolbar"><button onclick="copyReport()">Copy report for Outlook</button></div><div class="page"><div class="report-stage" id="reportStage"><div class="report-canvas" id="reportCanvas">',
-        f'<table id="report" role="presentation" width="1100" align="center" cellpadding="0" cellspacing="0" border="0" bgcolor="#f4f4f4" style="width:1100px;background:#f4f4f4;font-family:{FONT};color:{BLACK};border-collapse:collapse;">',
+        f'<table id="report" role="presentation" width="1100" cellpadding="0" cellspacing="0" border="0" bgcolor="#f4f4f4" style="width:1100px;background:#f4f4f4;font-family:{FONT};color:{BLACK};border:2px solid #111;border-collapse:collapse;">',
         f'<tr><td bgcolor="{RED}" style="background:{RED};padding:26px 32px 22px;color:#fff;"><table role="presentation" width="100%"><tr><td valign="bottom"><div style="font-size:12px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#ffe3e8;">Supply Chain Damage and Maintenance &middot; Atlanta</div><div style="font-size:34px;font-weight:800;text-transform:uppercase;line-height:40px;">Glass Damage Report</div><div style="font-size:15px;color:#ffe3e8;">Bobby Brown, APO &amp; Local Market</div></td><td valign="bottom" align="right"><div style="font-size:12px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#ffe3e8;">{today.strftime("%A")}</div><div style="font-size:30px;font-weight:800;text-transform:uppercase;line-height:36px;">{today.strftime("%b %d, %Y")}</div></td></tr></table></td></tr>',
         f'<tr><td bgcolor="{BLACK}" style="background:{BLACK};padding:10px 32px;font-size:14px;color:#fff;"><b style="font-size:17px;">{len(rows)}</b>&nbsp; units open',
     ]
     for section in sections:
         parts.append(f'&nbsp;&nbsp; | &nbsp;&nbsp;<b style="font-size:17px;">{len(section.rows)}</b>&nbsp; {_esc(section.title)}')
     parts.append('</td></tr><tr><td height="22">&nbsp;</td></tr>')
-    parts.append(f'<tr><td bgcolor="#fff" style="background:#fff;border-top:4px solid {RED};padding:16px 20px 18px;"><div style="font-size:16px;font-weight:800;text-transform:uppercase;padding-bottom:10px;">Needs attention today</div><table role="presentation" width="100%"><tr>')
+    parts.append(f'<tr><td bgcolor="#fff" style="background:#fff;border-top:4px solid {RED};padding:16px 20px 18px;"><div style="font-size:16px;font-weight:800;text-transform:uppercase;padding-bottom:10px;">Needs attention</div><table role="presentation" width="100%"><tr>')
     for index, (count, title, detail) in enumerate(attention):
         border = "border-right:1px solid #e0e0e0;" if index < 3 else ""
         color = RED if count and index < 3 else BLACK
@@ -293,7 +314,7 @@ def render_report(rows: list[ReportRow], *, today: date) -> str:
     parts.extend((
         '<tr><td height="20">&nbsp;</td></tr><tr><td style="padding:0 4px 24px;"><table role="presentation" width="100%"><tr><td style="font-size:13px;color:#555;"><b style="color:#111;font-size:14px;">Dirk Steele</b><br>Supply Chain Damage and Maintenance Manager &middot; Atlanta, GA</td>',
         f'<td align="right" style="font-size:12px;color:#555;">Age = days since original date &middot; red at {STALE_DAYS}+</td></tr></table></td></tr></table></div></div>',
-        f'<div class="mobile-report"><header class="mobile-hero"><div class="mobile-kicker">Supply Chain Damage and Maintenance &middot; Atlanta</div><h1>Glass Damage Report</h1><p>Bobby Brown, APO &amp; Local Market</p><div class="mobile-date">{today.strftime("%A, %b %d, %Y")}</div></header><div class="mobile-summary"><b>{len(rows)}</b> units open</div><section class="mobile-attention"><h2>Needs attention today</h2><div class="mobile-metrics">',
+        f'<div class="mobile-report"><header class="mobile-hero"><div class="mobile-kicker">Supply Chain Damage and Maintenance &middot; Atlanta</div><h1>Glass Damage Report</h1><p>Bobby Brown, APO &amp; Local Market</p><div class="mobile-date">{today.strftime("%A, %b %d, %Y")}</div></header><div class="mobile-summary"><b>{len(rows)}</b> units open</div><section class="mobile-attention"><h2>Needs attention</h2><div class="mobile-metrics">',
     ))
     for count, title, detail in attention:
         parts.append(f'<div class="mobile-metric"><strong>{count}</strong><span>{_esc(title)}</span><small>{detail}</small></div>')
@@ -333,7 +354,7 @@ def read_sheet_rows(config: dict[str, Any]) -> list[list[str]]:
     service_path = service_path if service_path.is_absolute() else ROOT / service_path
     if not service_path.exists():
         raise RuntimeError(f"Google service account file not found: {service_path}")
-    client = gspread.service_account(filename=str(service_path))
+    client = _google_sheets_client(str(service_path))
     spreadsheet = client.open_by_key(spreadsheet_id)
     worksheet = spreadsheet.worksheet(sheet_name)
     return worksheet.get_all_values()
@@ -344,13 +365,14 @@ def _default_output_path(today: date) -> Path:
 
 
 def generate_report(*, output_path: Path | None = None, open_browser: bool = True) -> Path:
-    today = date.today()
-    rows = build_rows(read_sheet_rows(_load_config()), today=today)
+    values = read_sheet_rows(_load_config())
+    report_date = latest_inventory_date(values)
+    rows = build_rows(values, today=report_date)
     if not rows:
-        raise RuntimeError("No GlassClaims rows have an Inventory Date equal to today")
-    output_path = output_path or _default_output_path(today)
+        raise RuntimeError(f"No GlassClaims rows have an Inventory Date of {report_date:%Y-%m-%d}")
+    output_path = output_path or _default_output_path(report_date)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(render_report(rows, today=today), encoding="utf-8")
+    output_path.write_text(render_report(rows, today=report_date), encoding="utf-8")
     if open_browser:
         webbrowser.open(output_path.resolve().as_uri())
     return output_path

@@ -23,8 +23,10 @@ paste into an Outlook email. It does not create or send an email.
 - `Next Action` and `WorkItemCreated` are optional enrichment columns. When
   present, their values populate the Next Action and Work item display
   columns; when absent, the report still generates with those fields blank.
-- A row is included only when its `Inventory Date` equals the current local
-  date. Sheet filters and manually hidden rows do not control eligibility.
+- The report date is the greatest valid `Inventory Date` in the sheet, including
+  dates in the future. A row is included only when its `Inventory Date` equals
+  that report date. Sheet filters and manually hidden rows do not control
+  eligibility.
 - Rows without a VIN are excluded so blank and summary rows do not appear.
 - The workflow shall not modify the workbook.
 - Failure to read values, configuration, or any required header shall stop
@@ -43,9 +45,13 @@ paste into an Outlook email. It does not create or send an email.
   shall not change the fixed table markup copied into Outlook.
 - Sections appear in this order when nonempty: AGN (Replacements), AGN Repair,
   Super Glass (Repairs), AVIS (TBK), Local Market, Other.
+- Every row whose Location is not BB or APO belongs in Local Market, including
+  rows with a blank Location, except warranty rows, which belong in AGN
+  (Replacements) regardless of Location.
 - Rows are ordered oldest first within each section.
-- The attention summary reports photo/action issues, AVIS units open at least
-  14 days, missing claims, and units new today.
+- The attention summary reports photo/action issues, all report units open at
+  least 5 days regardless of vendor, missing claims, and units new on the report
+  date. The 5-day metric uses the same report rows as the displayed sections.
 - The report shall HTML-escape all values read from the sheet.
 - Report generation shall never send email automatically.
 
