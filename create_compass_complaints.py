@@ -4,13 +4,13 @@ create_compass_complaints.py
 Sheet-driven Compass glass complaint and work-item batch creation.
 
 Workflow (per complaint.md):
-- Read spreadsheet rows for today (Inventory Date only)
+- Read spreadsheet rows for one explicit Inventory Date
 - Validate MVA
 - For each row occurrence:
   - Check existing OPEN Glass Repair/Replace complaint
     - Skip if the complaint and work item already exist
     - Create the missing complaint and/or work item
-- Continue on errors
+- Report failures through a nonzero process result
 - Append run log and print summary
 - Support --dry-run
 """
@@ -78,7 +78,13 @@ BROWSER_PROFILE_DIR = BASE_DIR / "outlook" / "browser_profile"
 SETTLE_WAIT_MS = 15_000
 COMPASS_COMPLAINT_API_FLAG = "compass_complaint_api_precheck_enabled"
 COMPASS_COMPLAINT_API_BASE_URL_KEY = "compass_complaint_api_base_url"
-ACTIVE_GLASS_COMPLAINT_TYPES = {"glass damage"}
+GLASS_COMPLAINT_TITLE = "Glass Damage"
+# Compass shows the complaint category (e.g. "Mechanical Issue") as the
+# Active Complaints title; "RVM" is only the complaint description text.
+RVM_COMPLAINT_TITLE = "RVM"
+RVM_AREAS = {"rvm", "rear view mirror"}
+RVM_COMPASS_CATEGORY = "Mechanical Issue"
+RVM_DAMAGE_CONDITION = "Interior Component Damaged"
 INACTIVE_COMPLAINT_STATUSES = {"ignored", "deleted", "resolved"}
 
 log = logging.getLogger("EnsureGlassWorkItems")
@@ -96,7 +102,7 @@ class CandidateRow:
 @dataclass
 class RunSummary:
     total_rows_read: int = 0
-    rows_for_day: int = 0
+    rows_for_date: int = 0
     skipped_invalid: int = 0
     skipped_existing: int = 0
     created: int = 0
@@ -254,14 +260,32 @@ def _is_active_compass_complaint(complaint: dict[str, Any]) -> bool:
     return status not in INACTIVE_COMPLAINT_STATUSES
 
 
-def _is_glass_complaint_record(complaint: dict[str, Any]) -> bool:
+def _is_rvm_area(area: str | None) -> bool:
+    return (area or "").strip().casefold() in RVM_AREAS
+
+
+def _complaint_title_for_area(area: str | None) -> str:
+    return RVM_COMPASS_CATEGORY if _is_rvm_area(area) else GLASS_COMPLAINT_TITLE
+
+
+def _complaint_damage_condition_for_area(area: str | None) -> str | None:
+    return RVM_DAMAGE_CONDITION if _is_rvm_area(area) else None
+
+
+def _is_glass_complaint_record(complaint: dict[str, Any], complaint_title: str) -> bool:
+    expected = complaint_title.casefold()
     for key in ("damageCategory", "complaintDescription", "$title"):
-        if _normalize_compass_text(complaint.get(key)) in ACTIVE_GLASS_COMPLAINT_TYPES:
+        if _normalize_compass_text(complaint.get(key)) == expected:
             return True
     return False
 
 
-def _inspect_glass_complaint_via_api(page, runtime_config: dict[str, Any], mva: str) -> LookupResult:
+def _inspect_glass_complaint_via_api(
+    page,
+    runtime_config: dict[str, Any],
+    mva: str,
+    complaint_title: str,
+) -> LookupResult:
     base_url = _runtime_compass_api_base_url(runtime_config)
     vehicle_payload = {"where": {"mvaNo": mva}, "$pageSize": 1}
     vehicle_rows = _post_compass_structure(
@@ -297,7 +321,7 @@ def _inspect_glass_complaint_via_api(page, runtime_config: dict[str, Any], mva: 
         raise RuntimeError(f"complaint_lookup_invalid for {mva}")
 
     active_rows = [row for row in complaint_rows if isinstance(row, dict) and _is_active_compass_complaint(row)]
-    glass_rows = [row for row in active_rows if _is_glass_complaint_record(row)]
+    glass_rows = [row for row in active_rows if _is_glass_complaint_record(row, complaint_title)]
     matched_titles = [
         str(row.get("damageCategory") or row.get("complaintDescription") or row.get("$title") or "").strip()
         for row in glass_rows
@@ -318,10 +342,16 @@ def _inspect_glass_complaint_via_api(page, runtime_config: dict[str, Any], mva: 
     )
 
 
-def _resolve_glass_complaint_lookup(context, page, runtime_config: dict[str, Any], mva: str) -> LookupResult:
+def _resolve_glass_complaint_lookup(
+    context,
+    page,
+    runtime_config: dict[str, Any],
+    mva: str,
+    complaint_title: str,
+) -> LookupResult:
     use_api_precheck = _config_bool(runtime_config.get(COMPASS_COMPLAINT_API_FLAG), default=False)
     if not use_api_precheck:
-        return _inspect_glass_complaint(page, mva)
+        return _inspect_glass_complaint(page, mva, complaint_title)
 
     api_page = None
     try:
@@ -330,7 +360,7 @@ def _resolve_glass_complaint_lookup(context, page, runtime_config: dict[str, Any
         api_page.wait_for_timeout(2_000)
         _handle_msft_auth_if_needed(api_page)
         _prime_compass_go_scan_page(api_page, mva)
-        lookup = _inspect_glass_complaint_via_api(api_page, runtime_config, mva)
+        lookup = _inspect_glass_complaint_via_api(api_page, runtime_config, mva, complaint_title)
         log.info(
             "MVA %s -> complaint lookup via %s: exists=%s reason=%s complaint_ids=%s titles=%s",
             mva,
@@ -347,7 +377,7 @@ def _resolve_glass_complaint_lookup(context, page, runtime_config: dict[str, Any
             mva,
             exc,
         )
-        fallback = _inspect_glass_complaint(page, mva)
+        fallback = _inspect_glass_complaint(page, mva, complaint_title)
         log.info(
             "MVA %s -> fallback UI lookup result: exists=%s reason=%s source=%s",
             mva,
@@ -442,6 +472,31 @@ def _read_title_texts(table_locator) -> list[str]:
     return out
 
 
+def _read_complaint_rows(table_locator) -> list[tuple[str, str, int]]:
+    title_cells = table_locator.locator(
+        "div[class*='bp6-table-cell-row-'][class*='bp6-table-cell-col-1']"
+    )
+    rows: list[tuple[str, str, int]] = []
+    for idx in range(title_cells.count()):
+        title_cell = title_cells.nth(idx)
+        title = (title_cell.inner_text(timeout=1000) or "").strip()
+        class_attr = title_cell.get_attribute("class") or ""
+        match = re.search(r"bp6-table-cell-row-(\d+)", class_attr)
+        if not title or match is None:
+            continue
+        row_index = int(match.group(1))
+        condition_cell = table_locator.locator(
+            f"div[class~='bp6-table-cell-row-{row_index}'][class~='bp6-table-cell-col-7']"
+        ).first
+        condition = (
+            (condition_cell.inner_text(timeout=1000) or "").strip()
+            if condition_cell.count()
+            else ""
+        )
+        rows.append((title, condition, row_index))
+    return rows
+
+
 def _capture_work_item_debug_artifacts(page, mva: str, reason: str) -> None:
     debug_dir = BASE_DIR / "log" / "failures"
     debug_dir.mkdir(parents=True, exist_ok=True)
@@ -491,8 +546,13 @@ def _capture_work_item_debug_artifacts(page, mva: str, reason: str) -> None:
     log.info("Saved debug artifacts for %s failure to %s(.html/.png)", reason, base)
 
 
-def _find_glass_row_index_blueprint(page) -> int | None:
+def _find_glass_row_index_blueprint(
+    page,
+    complaint_title: str,
+    damage_condition: str | None = None,
+) -> int | None:
     # Blueprint table is div-based (bp6-table-cell-row-X / col-Y), not tr/td.
+    expected = complaint_title.lower()
     title_cells = page.locator("div[class*='bp6-table-cell-row-'][class*='bp6-table-cell-col-1']")
     for i in range(title_cells.count()):
         cell = title_cells.nth(i)
@@ -500,13 +560,23 @@ def _find_glass_row_index_blueprint(page) -> int | None:
             text = (cell.inner_text(timeout=1000) or "").strip().lower()
         except Exception:
             continue
-        if "glass damage" not in text:
+        if expected not in text:
             continue
 
         class_attr = cell.get_attribute("class") or ""
         match = re.search(r"bp6-table-cell-row-(\d+)", class_attr)
         if match:
-            return int(match.group(1))
+            row_index = int(match.group(1))
+            if damage_condition is not None:
+                condition_cell = page.locator(
+                    f"div[class~='bp6-table-cell-row-{row_index}'][class~='bp6-table-cell-col-7']"
+                ).first
+                if condition_cell.count() == 0:
+                    continue
+                condition = (condition_cell.inner_text(timeout=1000) or "").strip()
+                if condition.casefold() != damage_condition.casefold():
+                    continue
+            return row_index
     return None
 
 
@@ -597,12 +667,16 @@ def _is_button_enabled(locator) -> bool:
         return False
 
 
-def _has_open_glass_work_item(page) -> tuple[bool, str]:
+def _has_open_glass_work_item(
+    page,
+    complaint_title: str,
+    damage_condition: str | None = None,
+) -> tuple[bool, str]:
     try:
         page.get_by_role("tab", name=re.compile(r"^Active Complaints", re.I)).first.click(timeout=4000)
         page.wait_for_timeout(300)
 
-        row_idx = _find_glass_row_index_blueprint(page)
+        row_idx = _find_glass_row_index_blueprint(page, complaint_title, damage_condition)
         if row_idx is None:
             return False, "glass_complaint_not_present"
         attached_count = _attached_work_items_count_blueprint(page, row_idx)
@@ -874,7 +948,12 @@ def _search_mva(page, mva: str) -> None:
     _wait_for_vehicle_details_mva(page, mva)
 
 
-def _inspect_glass_complaint(page, mva: str) -> LookupResult:
+def _inspect_glass_complaint(
+    page,
+    mva: str,
+    complaint_title: str,
+    damage_condition: str | None = None,
+) -> LookupResult:
     table = page.locator(COMPASS_DETAILS_PANEL_TABLE_SELECTOR).first
     try:
         table.wait_for(state="visible", timeout=4000)
@@ -886,32 +965,72 @@ def _inspect_glass_complaint(page, mva: str) -> LookupResult:
     except Exception:
         table_text = ""
 
-    title_texts = _read_title_texts(table)
-    if any(text.strip().lower() == "glass damage" for text in title_texts):
-        return LookupResult(True, "glass_damage_found", table_text=table_text, title_texts=title_texts)
+    expected = complaint_title.lower()
+    reason_prefix = "rvm" if damage_condition is not None else "glass_damage"
+    if damage_condition is not None:
+        complaint_rows = _read_complaint_rows(table)
+        matching_category = [
+            row for row in complaint_rows if row[0].strip().casefold() == expected
+        ]
+        if any(row[1].strip().casefold() == damage_condition.casefold() for row in matching_category):
+            return LookupResult(
+                True,
+                f"{reason_prefix}_found",
+                table_text=table_text,
+                title_texts=[row[0] for row in matching_category],
+            )
+        if matching_category:
+            return LookupResult(
+                False,
+                "rvm_subcategory_mismatch",
+                table_text=table_text,
+                title_texts=[row[0] for row in matching_category],
+            )
+        return LookupResult(False, f"{reason_prefix}_not_present", table_text=table_text)
 
-    if "glass damage" in table_text.lower():
+    title_texts = _read_title_texts(table)
+    if any(text.strip().lower() == expected for text in title_texts):
+        return LookupResult(True, f"{reason_prefix}_found", table_text=table_text, title_texts=title_texts)
+
+    if complaint_title == GLASS_COMPLAINT_TITLE and "glass damage" in table_text.lower():
         return LookupResult(True, "glass_damage_found_in_table_text", table_text=table_text, title_texts=title_texts)
 
-    return LookupResult(False, "glass_damage_not_present", table_text=table_text, title_texts=title_texts)
+    return LookupResult(False, f"{reason_prefix}_not_present", table_text=table_text, title_texts=title_texts)
 
 
-def _glass_damage_complaint_count(page) -> int:
+def _glass_damage_complaint_count(
+    page,
+    complaint_title: str,
+    damage_condition: str | None = None,
+) -> int:
     table = page.locator(COMPASS_DETAILS_PANEL_TABLE_SELECTOR).first
     try:
+        if damage_condition is not None:
+            return sum(
+                title.strip().casefold() == complaint_title.casefold()
+                and condition.strip().casefold() == damage_condition.casefold()
+                for title, condition, _ in _read_complaint_rows(table)
+            )
         title_texts = _read_title_texts(table)
     except Exception:
         return 0
-    return sum(text.strip().lower() == "glass damage" for text in title_texts)
+    expected = complaint_title.lower()
+    return sum(text.strip().lower() == expected for text in title_texts)
 
 
-def _wait_for_new_glass_complaint(page, baseline_count: int, timeout_ms: int = SETTLE_WAIT_MS) -> bool:
+def _wait_for_new_glass_complaint(
+    page,
+    baseline_count: int,
+    complaint_title: str,
+    timeout_ms: int = SETTLE_WAIT_MS,
+    damage_condition: str | None = None,
+) -> bool:
     attempts = max(1, timeout_ms // 500)
     for _ in range(attempts):
-        if _glass_damage_complaint_count(page) > baseline_count:
+        if _glass_damage_complaint_count(page, complaint_title, damage_condition) > baseline_count:
             return True
         page.wait_for_timeout(500)
-    return _glass_damage_complaint_count(page) > baseline_count
+    return _glass_damage_complaint_count(page, complaint_title, damage_condition) > baseline_count
 
 
 def _click_button_by_name(page, pattern: str, timeout_ms: int = 10_000) -> None:
@@ -947,20 +1066,20 @@ def _complaint_form_region(scope, heading_name: str):
     return heading.locator("xpath=ancestor::*[@role='region'][1]")
 
 
-def _set_glass_damage_category(scope) -> None:
+def _set_complaint_category(scope, value: str) -> None:
     category_region = _complaint_form_region(scope, "Category")
     category_label = category_region.locator(
-        "label", has_text=re.compile(r"^\s*Glass Damage\s*$", re.I)
+        "label", has_text=re.compile(rf"^\s*{re.escape(value)}\s*$", re.I)
     ).first
     category_label.wait_for(state="visible", timeout=10_000)
     category_label.click(timeout=10_000)
 
-    category = category_region.locator("input[type='radio'][value='Glass Damage']").first
+    category = category_region.locator(f"input[type='radio'][value='{value}']").first
     category.wait_for(state="attached", timeout=10_000)
     if not category.is_checked():
         category.check(force=True)
     if not category.is_checked():
-        raise RuntimeError("Could not set Category to Glass Damage")
+        raise RuntimeError(f"Could not set Category to {value}")
 
 
 def _fill_complaint_description(scope, text: str) -> None:
@@ -992,17 +1111,18 @@ def _set_glass_damage_subcategory(scope, value: str = "Glass Damage") -> None:
 def _complaint_fields_for_area(
     area: str | None,
     damage_expectation: str | None,
-) -> tuple[str, str]:
+) -> tuple[str, str, str]:
+    """Return (category, sub-category, description) for the complaint form."""
     normalized_area = (area or "").strip().casefold()
-    if normalized_area in {"rvm", "rear view mirror"}:
-        return "Mechanical Issue", "RVM"
+    if _is_rvm_area(area):
+        return RVM_COMPASS_CATEGORY, RVM_DAMAGE_CONDITION, RVM_COMPLAINT_TITLE
     if normalized_area.startswith("windshield"):
         subcategory = _subcategory_for_damage_expectation(damage_expectation)
         if subcategory is None:
             raise RuntimeError("Windshield complaint requires a valid repair or replacement Action")
-        return subcategory, "Glass Damage"
+        return GLASS_COMPLAINT_TITLE, subcategory, GLASS_COMPLAINT_TITLE
     if normalized_area:
-        return "Side/Rear Window Damage", "Glass Damage"
+        return GLASS_COMPLAINT_TITLE, "Side/Rear Window Damage", GLASS_COMPLAINT_TITLE
     raise RuntimeError("Glass complaint requires an Area")
 
 
@@ -1030,7 +1150,13 @@ def _create_complaint_only(
                 """
             )
 
-        baseline_complaint_count = _glass_damage_complaint_count(page)
+        category, subcategory, description = _complaint_fields_for_area(area, damage_expectation)
+        complaint_title = _complaint_title_for_area(area)
+        damage_condition = _complaint_damage_condition_for_area(area)
+
+        baseline_complaint_count = _glass_damage_complaint_count(
+            page, complaint_title, damage_condition
+        )
         _click_button_by_name(page, r"create\s*complaint")
         page.wait_for_timeout(1200)
         scope = _complaint_popup_scope(page)
@@ -1038,10 +1164,8 @@ def _create_complaint_only(
         _set_yes_drivable(scope)
         page.wait_for_timeout(600)
 
-        _set_glass_damage_category(scope)
+        _set_complaint_category(scope, category)
         page.wait_for_timeout(600)
-
-        subcategory, description = _complaint_fields_for_area(area, damage_expectation)
 
         _set_glass_damage_subcategory(scope, subcategory)
         page.wait_for_timeout(600)
@@ -1053,16 +1177,22 @@ def _create_complaint_only(
         submit = scope.locator("a[role='button']", has_text="Submit Complaint").first
         submit.wait_for(state="visible", timeout=10_000)
         log.info(
-            "Complaint form state before submit: drivable_yes=%s category_glass=%s subcategory_selected=%s",
+            "Complaint form state before submit: drivable_yes=%s category_selected=%s subcategory_selected=%s",
             scope.locator("input[type='radio'][value='Yes']").first.is_checked(),
             _complaint_form_region(scope, "Category")
-            .locator("input[type='radio'][value='Glass Damage']")
+            .locator(f"input[type='radio'][value='{category}']")
             .first.is_checked(),
             _complaint_form_region(scope, "Sub-Category")
             .locator(f"input[type='radio'][value='{subcategory}']")
             .first.is_checked(),
         )
-        log.info("MVA %s -> chosen sub-category=%s description=%s", mva, subcategory, description)
+        log.info(
+            "MVA %s -> chosen category=%s sub-category=%s description=%s",
+            mva,
+            category,
+            subcategory,
+            description,
+        )
 
         ready = False
         last_submit_state = {}
@@ -1087,34 +1217,42 @@ def _create_complaint_only(
             submit.scroll_into_view_if_needed(timeout=5_000)
             submit.click(timeout=10_000, force=True)
 
-        if _wait_for_new_glass_complaint(page, baseline_complaint_count):
+        if _wait_for_new_glass_complaint(
+            page, baseline_complaint_count, complaint_title, damage_condition=damage_condition
+        ):
             _wait_for_vehicle_details_mva(page, mva)
-            new_count = _glass_damage_complaint_count(page)
+            new_count = _glass_damage_complaint_count(page, complaint_title, damage_condition)
             log.info(
-                "MVA %s -> new Glass Damage complaint visible (count %d -> %d)",
+                "MVA %s -> new %s complaint visible (count %d -> %d)",
                 mva,
+                complaint_title,
                 baseline_complaint_count,
                 new_count,
             )
             return True, "new_complaint_visible"
 
-        current_count = _glass_damage_complaint_count(page)
+        current_count = _glass_damage_complaint_count(page, complaint_title, damage_condition)
         return False, (
             "submitted_but_no_new_complaint: "
-            f"glass_damage_count={baseline_complaint_count}->{current_count}"
+            f"{complaint_title}_count={baseline_complaint_count}->{current_count}"
         )
     except Exception as exc:
         return False, f"complaint_create_failed: {exc}"
 
 
-def _create_work_item_for_glass_complaint(page, mva: str) -> tuple[bool, str]:
+def _create_work_item_for_glass_complaint(
+    page,
+    mva: str,
+    complaint_title: str,
+    damage_condition: str | None = None,
+) -> tuple[bool, str]:
     try:
         page.get_by_role("tab", name=re.compile(r"^Active Complaints", re.I)).first.click(timeout=5000)
 
-        row_idx = _find_glass_row_index_blueprint(page)
+        row_idx = _find_glass_row_index_blueprint(page, complaint_title, damage_condition)
         if row_idx is None:
             _capture_work_item_debug_artifacts(page, mva, "glass_row_missing")
-            return False, "glass_damage_row_not_found_in_active_complaints"
+            return False, f"{complaint_title}_row_not_found_in_active_complaints"
         if not _select_glass_complaint_row_blueprint(page, row_idx):
             _capture_work_item_debug_artifacts(page, mva, "glass_checkbox_not_selected")
             return False, "failed_to_select_glass_complaint_checkbox"
@@ -1215,7 +1353,7 @@ def _collect_candidates(values: list[list[str]], run_day: date) -> tuple[list[Ca
         if inv_date != run_day:
             continue
 
-        summary.rows_for_day += 1
+        summary.rows_for_date += 1
 
         mva_raw = row[mva_col].strip() if len(row) > mva_col else ""
         damage_raw = row[damage_col].strip() if (damage_col is not None and len(row) > damage_col) else ""
@@ -1254,7 +1392,7 @@ def _build_single_candidate(raw_mva: str) -> tuple[list[CandidateRow], RunSummar
     mva = _normalize_mva(raw_mva)
     if not _is_valid_mva(mva):
         raise RuntimeError(f"Invalid MVA override: {raw_mva!r}")
-    summary = RunSummary(total_rows_read=1, rows_for_day=1)
+    summary = RunSummary(total_rows_read=1, rows_for_date=1)
     return [CandidateRow(row_index=1, mva=mva, inventory_date_raw=str(date.today()), damage_expectation=None)], summary
 
 
@@ -1289,7 +1427,7 @@ def _check_existing_open_glass_complaint(mva: str) -> tuple[bool, str]:
             page = context.new_page()
             _open_home_page(page)
             page = _open_vehicle_from_home(page, mva)
-            result = _inspect_glass_complaint(page, mva)
+            result = _inspect_glass_complaint(page, mva, GLASS_COMPLAINT_TITLE)
 
             if result.exists:
                 log.info("MVA %s -> glass complaint exists (%s)", mva, result.reason)
@@ -1374,8 +1512,39 @@ def _process_candidates(
                     else:
                         _wait_for_keyword_search_input(page, timeout_s=6)
                         _search_mva(page, item.mva)
-                    lookup = _resolve_glass_complaint_lookup(context, page, runtime_config, item.mva)
-                    has_work_item, work_item_reason = _has_open_glass_work_item(page)
+                    complaint_title = _complaint_title_for_area(item.area)
+                    damage_condition = _complaint_damage_condition_for_area(item.area)
+                    if damage_condition is not None and _config_bool(
+                        runtime_config.get(COMPASS_COMPLAINT_API_FLAG), default=False
+                    ):
+                        summary.failed += 1
+                        log.error(
+                            "Row %d MVA %s -> RVM lookup requires UI Damage Condition; API precheck cannot confirm the sub-category",
+                            item.row_index,
+                            item.mva,
+                        )
+                        continue
+                    if damage_condition is not None:
+                        lookup = _inspect_glass_complaint(
+                            page, item.mva, complaint_title, damage_condition
+                        )
+                    else:
+                        lookup = _resolve_glass_complaint_lookup(
+                            context, page, runtime_config, item.mva, complaint_title
+                        )
+
+                    if lookup.reason == "rvm_subcategory_mismatch":
+                        summary.failed += 1
+                        log.error(
+                            "Row %d MVA %s -> existing Mechanical Issue has a different Damage Condition; refusing duplicate creation",
+                            item.row_index,
+                            item.mva,
+                        )
+                        continue
+
+                    has_work_item, work_item_reason = _has_open_glass_work_item(
+                        page, complaint_title, damage_condition
+                    )
 
                     if lookup.exists and has_work_item:
                         summary.skipped_existing += 1
@@ -1428,7 +1597,9 @@ def _process_candidates(
                             )
                             continue
 
-                    work_item_created, work_item_create_reason = _create_work_item_for_glass_complaint(page, item.mva)
+                    work_item_created, work_item_create_reason = _create_work_item_for_glass_complaint(
+                        page, item.mva, complaint_title, damage_condition
+                    )
                     if work_item_created:
                         summary.created += 1
                         log.info("Row %d MVA %s -> work item created", item.row_index, item.mva)
@@ -1456,10 +1627,15 @@ def _process_candidates(
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Create Compass complaints from today's MVAs")
-    parser.add_argument(
+    parser = argparse.ArgumentParser(description="Create Compass complaints for an explicit Inventory Date or MVA")
+    target = parser.add_mutually_exclusive_group(required=True)
+    target.add_argument(
         "--mva",
         help="Prototype override: process a single MVA directly instead of reading the sheet.",
+    )
+    target.add_argument(
+        "--inventory-date",
+        help="Inventory Date to process in YYYY-MM-DD format.",
     )
     parser.add_argument(
         "--dry-run",
@@ -1469,9 +1645,20 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def run() -> int:
+def _parse_inventory_date_arg(raw: str) -> date:
+    try:
+        return datetime.strptime(raw, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise RuntimeError("--inventory-date must use YYYY-MM-DD format") from exc
+
+
+def run(target_inventory_date: date | None = None) -> int:
     _setup_logging()
-    args = _parse_args()
+    args = _parse_args() if target_inventory_date is None else argparse.Namespace(
+        mva=None,
+        inventory_date=None,
+        dry_run=False,
+    )
     runtime_config = _load_runtime_config()
 
     run_mode = "DRY-RUN" if args.dry_run else "LIVE"
@@ -1482,6 +1669,8 @@ def run() -> int:
         candidates, summary = _build_single_candidate(args.mva)
         log.info("Prototype MVA override enabled: %s", candidates[0].mva)
     else:
+        if target_inventory_date is None:
+            target_inventory_date = _parse_inventory_date_arg(args.inventory_date)
         spreadsheet_id = str(runtime_config.get("spreadsheet_id", "")).strip()
         sheet_name = str(runtime_config.get("sheet_name", "GlassClaims")).strip() or "GlassClaims"
         service_account_path = _resolve_path(str(runtime_config.get("service_account_json", "Service_account.json")))
@@ -1496,12 +1685,13 @@ def run() -> int:
         ws = sh.worksheet(sheet_name)
 
         values = ws.get_all_values()
-        candidates, summary = _collect_candidates(values, run_day=date.today())
+        candidates, summary = _collect_candidates(values, run_day=target_inventory_date)
 
     log.info(
-        "Rows read=%d, rows_for_day=%d, candidates=%d, skipped_invalid=%d",
+        "Rows read=%d, target_inventory_date=%s, rows_for_date=%d, candidates=%d, skipped_invalid=%d",
         summary.total_rows_read,
-        summary.rows_for_day,
+        target_inventory_date.isoformat() if target_inventory_date else "explicit-mva",
+        summary.rows_for_date,
         len(candidates),
         summary.skipped_invalid,
     )
@@ -1509,10 +1699,11 @@ def run() -> int:
     summary = _process_candidates(candidates, args.dry_run, summary, runtime_config=runtime_config)
 
     log.info(
-        "Complete. total_rows_read=%d, rows_for_day=%d, skipped_invalid=%d, "
+        "Complete. target_inventory_date=%s, total_rows_read=%d, rows_for_date=%d, skipped_invalid=%d, "
         "skipped_existing=%d, created=%d, failed=%d, dry_run_would_create=%d",
+        target_inventory_date.isoformat() if target_inventory_date else "explicit-mva",
         summary.total_rows_read,
-        summary.rows_for_day,
+        summary.rows_for_date,
         summary.skipped_invalid,
         summary.skipped_existing,
         summary.created,

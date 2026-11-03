@@ -2,7 +2,8 @@ from unittest.mock import MagicMock, patch
 
 from create_compass_complaints import (
     _complaint_fields_for_area,
-    _set_glass_damage_category,
+    _complaint_title_for_area,
+    _set_complaint_category,
     _set_glass_damage_subcategory,
     _wait_for_new_glass_complaint,
 )
@@ -54,7 +55,7 @@ def _form_scope():
 def test_category_and_subcategory_select_distinct_glass_damage_radios():
     scope, regions, radios = _form_scope()
 
-    _set_glass_damage_category(scope)
+    _set_complaint_category(scope, "Glass Damage")
     _set_glass_damage_subcategory(scope)
 
     radios["Category"].check.assert_called_once_with(force=True)
@@ -63,17 +64,27 @@ def test_category_and_subcategory_select_distinct_glass_damage_radios():
         region.locator.assert_any_call("input[type='radio'][value='Glass Damage']")
 
 
-def test_rvm_uses_mechanical_issue_subcategory_and_rvm_description():
-    assert _complaint_fields_for_area("Rear View Mirror", "replace") == ("Mechanical Issue", "RVM")
-    assert _complaint_fields_for_area("RVM", "repair") == ("Mechanical Issue", "RVM")
+def test_rvm_uses_mechanical_issue_category_and_interior_component_subcategory():
+    expected = ("Mechanical Issue", "Interior Component Damaged", "RVM")
+    assert _complaint_fields_for_area("Rear View Mirror", "replace") == expected
+    assert _complaint_fields_for_area("RVM", "repair") == expected
+
+
+def test_complaint_title_is_mechanical_issue_for_rvm_area():
+    assert _complaint_title_for_area("RVM") == "Mechanical Issue"
+    assert _complaint_title_for_area("Rear View Mirror") == "Mechanical Issue"
+    assert _complaint_title_for_area("Windshield") == "Glass Damage"
+    assert _complaint_title_for_area("Left Front Door") == "Glass Damage"
 
 
 def test_windshield_subcategory_uses_action():
     assert _complaint_fields_for_area("Windshield", "replace") == (
+        "Glass Damage",
         "Windshield Crack",
         "Glass Damage",
     )
     assert _complaint_fields_for_area("Windshield", "repair") == (
+        "Glass Damage",
         "Windshield Chip",
         "Glass Damage",
     )
@@ -81,6 +92,7 @@ def test_windshield_subcategory_uses_action():
 
 def test_non_windshield_uses_side_rear_window_subcategory():
     assert _complaint_fields_for_area("Left Front Door", "replace") == (
+        "Glass Damage",
         "Side/Rear Window Damage",
         "Glass Damage",
     )
@@ -93,7 +105,7 @@ def test_wait_for_new_glass_complaint_requires_count_increase():
         "create_compass_complaints._glass_damage_complaint_count",
         side_effect=[0, 1],
     ):
-        assert _wait_for_new_glass_complaint(page, baseline_count=0, timeout_ms=1500)
+        assert _wait_for_new_glass_complaint(page, 0, "Glass Damage", timeout_ms=1500)
 
     page.wait_for_timeout.assert_called_once_with(500)
 
@@ -105,6 +117,6 @@ def test_wait_for_new_glass_complaint_rejects_unchanged_count():
         "create_compass_complaints._glass_damage_complaint_count",
         return_value=1,
     ):
-        assert not _wait_for_new_glass_complaint(page, baseline_count=1, timeout_ms=1000)
+        assert not _wait_for_new_glass_complaint(page, 1, "Glass Damage", timeout_ms=1000)
 
     assert page.wait_for_timeout.call_count == 2

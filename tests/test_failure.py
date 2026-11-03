@@ -272,7 +272,7 @@ class TestFT3_NotificationConsistency:
         )
         monkeypatch.setattr(
             "GlassOrchestrator.parse_descriptions_to_manifest",
-            lambda descriptions, dt: ({"59654641": {}, "01712003": {}}, ["59654641", "01712003"]),
+            lambda descriptions, dt, **kwargs: ({"59654641": {}, "01712003": {}}, ["59654641", "01712003"]),
         )
         monkeypatch.setattr("GlassOrchestrator.apply_cycle_day_tracking", lambda *args, **kwargs: None)
         monkeypatch.setattr("GlassOrchestrator.parse_glass_data_results", lambda *args, **kwargs: None)
@@ -288,6 +288,6 @@ class TestFT3_NotificationConsistency:
 
         monkeypatch.setattr("GlassOrchestrator.notify_order_items", spy_notify)
 
-        run_pipeline()
+        run_pipeline(processing_date=email_date.date())
 
         assert notified_mvas == ["59654641"]
