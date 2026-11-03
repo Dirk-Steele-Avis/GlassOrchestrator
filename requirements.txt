@@ -1,5 +1,7 @@
 pandas>=2.0
+openpyxl>=3.1
 gspread>=6.0
+pip-system-certs>=5.3
 selenium>=4.0
 pytest>=7.0
 beautifulsoup4>=4.0

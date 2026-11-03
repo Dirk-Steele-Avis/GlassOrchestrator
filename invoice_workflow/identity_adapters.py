@@ -1,4 +1,4 @@
-"""Read-only adapters used by strict completed-invoice identity validation."""
+"""FieldPO identity readers and strict PO approval adapter."""
 
 from __future__ import annotations
 
@@ -7,7 +7,12 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from invoice_workflow.contracts import FieldPOIdentitySnapshot, FieldPOReviewSnapshot
+from invoice_workflow.contracts import (
+    FieldPOIdentitySnapshot,
+    FieldPOReviewSnapshot,
+    ParsedInvoice,
+    ValidatedIdentity,
+)
 from vendor_tracking.sheet_updater import VendorSheetUpdater
 
 FIELDPO_URL = "https://supply-chain.east.prod.sdp.abg.cloud/fieldpo/dashboard"
@@ -39,6 +44,13 @@ class GoogleSheetIdentityReader:
             value.zfill(9) if re.fullmatch(r"\d{8,9}", value) else value
             for value in values
         )
+
+    def find_vins_by_mva(self, mva: str) -> tuple[str, ...]:
+        values = (
+            self._updater.get_row_fields(row, ["VIN"]).get("VIN", "").strip().upper()
+            for row in self._updater.find_rows_by_mva(mva)
+        )
+        return tuple(dict.fromkeys(value for value in values if value))
 
 
 class FieldPOBrowserIdentityReader:
@@ -195,6 +207,114 @@ class FieldPOBrowserReviewReader:
             po_status=statuses[0],
             authorized_amount=identity.authorized_amount,
         )
+
+
+class FieldPOBrowserApprover:
+    """Approve one already-validated PO and close its exact FieldPO work order."""
+
+    def __init__(
+        self,
+        page: Any,
+        identity_reader: FieldPOBrowserIdentityReader | None = None,
+    ) -> None:
+        self._page = page
+        self._identity_reader = identity_reader or FieldPOBrowserIdentityReader(page)
+
+    def approve(self, invoice: ParsedInvoice, identity: ValidatedIdentity) -> None:
+        from outlook import agn_invoices
+
+        po_number = invoice.pdf_po_number.strip().upper()
+        if not po_number or po_number != identity.po_number:
+            raise ValueError(
+                f"PDF PO {po_number or '<missing>'} does not match validated "
+                f"FieldPO PO {identity.po_number}"
+            )
+        subject_po = invoice.subject_po_number.strip().upper()
+        if subject_po and subject_po != po_number:
+            raise ValueError(
+                f"Email subject PO {subject_po} does not match PDF PO {po_number}"
+            )
+        if identity.vin != invoice.vin:
+            raise ValueError(
+                f"Validated VIN {identity.vin} does not match invoice VIN {invoice.vin}"
+            )
+        if identity.invoice_amount != invoice.invoice_amount:
+            raise ValueError(
+                f"Validated amount {identity.invoice_amount} does not match "
+                f"invoice amount {invoice.invoice_amount}"
+            )
+
+        page = self._page
+        live_identity = self._identity_reader.read_identity(po_number)
+        if live_identity.po_number != identity.po_number:
+            raise ValueError(
+                f"FieldPO PO {live_identity.po_number} changed from validated PO "
+                f"{identity.po_number}"
+            )
+        if live_identity.vin != identity.vin or live_identity.vin != invoice.vin:
+            raise ValueError(
+                f"Live FieldPO VIN {live_identity.vin} does not match invoice/"
+                f"validated VIN {invoice.vin}"
+            )
+        if live_identity.mva != identity.mva:
+            raise ValueError(
+                f"Live FieldPO MVA {live_identity.mva or '<missing>'} does not match "
+                f"Sheet MVA {identity.mva}"
+            )
+        if live_identity.authorized_amount != invoice.invoice_amount:
+            raise ValueError(
+                f"Live FieldPO authorized amount {live_identity.authorized_amount} "
+                f"does not match invoice amount {invoice.invoice_amount}"
+            )
+        if live_identity.authorized_amount != identity.authorized_amount:
+            raise ValueError(
+                f"Live FieldPO authorized amount {live_identity.authorized_amount} "
+                f"changed from validated amount {identity.authorized_amount}"
+            )
+        work_order_created_by = agn_invoices.read_work_order_created_by(page)
+        if work_order_created_by.strip().casefold() != "steele, dirk":
+            raise ValueError(
+                "Work Order Created By must be Steele, Dirk; found "
+                f"{work_order_created_by or '<missing>'}"
+            )
+        if not agn_invoices.po_exists(page, po_number):
+            raise LookupError(f"Exact FieldPO PO {po_number} is not present")
+
+        agn_invoices.click_into_po(page, po_number)
+        status, authorized_amount = agn_invoices.read_po_status_and_amount(page)
+        if status != "IN PROGRESS":
+            raise ValueError(
+                f"FieldPO PO {po_number} status is {status}; expected IN PROGRESS"
+            )
+        amount = _parse_authorized_amount(authorized_amount)
+        if amount != invoice.invoice_amount:
+            raise ValueError(
+                f"FieldPO authorized amount {amount} does not match invoice amount "
+                f"{invoice.invoice_amount}"
+            )
+        if amount != live_identity.authorized_amount:
+            raise ValueError(f"FieldPO authorized amount changed during approval check")
+
+        work_order_closed = agn_invoices.approve_displayed_po(
+            page,
+            identity.vin,
+            request_permission=False,
+            expected_po_number=po_number,
+            close_work_order=True,
+            allow_open_if_closure_unavailable=False,
+        )
+        if work_order_closed is not True:
+            raise RuntimeError(
+                f"FieldPO PO {po_number} approval and work-order closure "
+                "were not both confirmed"
+            )
+
+
+def _parse_authorized_amount(value: str) -> Decimal:
+    try:
+        return Decimal(str(value).replace(",", "").replace("$", "").strip())
+    except InvalidOperation as exc:
+        raise ValueError(f"Invalid FieldPO authorized amount: {value!r}") from exc
 
 
 def _wait_for_loading_overlay(page: Any) -> None:

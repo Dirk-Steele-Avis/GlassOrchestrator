@@ -19,8 +19,8 @@ from invoice_workflow.failure_codes import classify_failure
 from invoice_workflow.store import InvoiceRepository
 
 _SUBJECT_PATTERN = re.compile(
-    r"\[External\]\s+Invoice\s+#(?P<invoice>\d+)\s+"
-    r"\(PO\s+#\s*(?P<po>FPO\d{7,})(?:[^\d)]*)\)",
+    r"\[External\]\s+Invoice\s+#(?P<invoice>\d+)"
+    r"(?:\s+\(PO\s+#\s*(?P<po>[^)]*)\))?",
     re.IGNORECASE,
 )
 
@@ -145,7 +145,7 @@ def _assess_invoice(
         else "HISTORY_NOT_FOUND"
     )
     try:
-        current = fieldpo_reader.read_review(invoice.subject_po_number)
+        current = fieldpo_reader.read_review(invoice.pdf_po_number)
     except Exception as exc:
         return _row(
             invoice,
@@ -223,13 +223,16 @@ def _row(
 
 def _capture_failure_row(failure) -> ReviewReportRow:
     match = _SUBJECT_PATTERN.fullmatch(failure.subject.strip())
+    subject_po = match.group("po").strip().upper() if match and match.group("po") else ""
+    if re.fullmatch(r"FPO\d{7,}", subject_po) is None:
+        subject_po = ""
     return ReviewReportRow(
         priority=3,
         invoice_number=match.group("invoice") if match else "",
         received_utc="",
         subject=failure.subject,
         internet_message_id=failure.internet_message_id,
-        subject_po_number=match.group("po").upper() if match else "",
+        subject_po_number=subject_po,
         pdf_po_number="",
         vin="",
         invoice_amount="",

@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import subprocess
+import sys
 from contextlib import ExitStack
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -16,6 +18,7 @@ import win32com.client
 from playwright.sync_api import sync_playwright
 
 from invoice_workflow.coordinator import CompletedInvoicesCoordinator, RunSummary
+from invoice_workflow.contracts import OutlookScanResult, ParsedInvoice
 from invoice_workflow.identity import StrictIdentityResolver
 from invoice_workflow.identity_adapters import (
     FIELDPO_URL,
@@ -96,7 +99,23 @@ def _print_live_summary(
             f"  Email move failures: Processed={summary.outlook_failed}, "
             f"Needs Review={summary.needs_review_failed}"
         )
-    print("  PO approval: Not performed by this workflow")
+    approval_attempted = any(
+        invoice.po_status != "pending" for invoice in summary.invoice_outcomes
+    )
+    if approval_attempted:
+        approved = sum(
+            invoice.po_status == "complete" for invoice in summary.invoice_outcomes
+        )
+        approval_issues = sum(
+            invoice.po_status in {"failed", "blocked"}
+            for invoice in summary.invoice_outcomes
+        )
+        print(
+            f"  FieldPO PO approval: {approved} approved, "
+            f"{approval_issues} failed or blocked"
+        )
+    else:
+        print("  PO approval: Not performed by this workflow")
     print("  Complaint creation: Not part of closeout")
     print("  Work-item creation: Not part of closeout; existing items are closed earlier")
 
@@ -165,7 +184,14 @@ def _print_live_summary(
             f"FieldPO {invoice.fieldpo_mva or 'not read'} [{mva_status}]"
         )
         print(f"      Work item: {work_item_status}")
-        print("      PO approval: NOT CHECKED")
+        print(
+            "      FieldPO PO approval: "
+            f"{_display_stage_status(invoice.po_status, 'APPROVED')}"
+        )
+        print(
+            "      FieldPO work order: "
+            f"{_display_stage_status(invoice.work_order_status, 'CLOSED')}"
+        )
         print("      Complaint: NOT CHECKED")
         print(f"      Invoice email: {email_status}")
         if invoice.detail:
@@ -176,6 +202,16 @@ def _compare_required(left: str, right: str) -> str:
     if not left or not right:
         return "MISMATCH"
     return "MATCH" if left == right else "MISMATCH"
+
+
+def _display_stage_status(status: str, completed_label: str) -> str:
+    return {
+        "complete": completed_label,
+        "failed": "FAILED",
+        "blocked": "BLOCKED",
+        "in_progress": "IN PROGRESS",
+        "pending": "NOT CHECKED",
+    }.get(status, status.replace("_", " ").upper())
 
 
 def _compare_optional(left: str, right: str) -> str:
@@ -245,6 +281,51 @@ def _run_live(
             account_name=account_name,
             attachment_directory=ATTACHMENT_ROOT / run_id,
         )
+        archived_count = outlook_source.archive_expired_processed_invoices()
+        logger.info(
+            f"processed_invoice_archive_completed moved={archived_count}",
+            stage="capture",
+        )
+        print(
+            f"[OUTLOOK] Archived {archived_count} expired Processed invoice(s) "
+            "to Invoice_Archive.",
+            flush=True,
+        )
+        repository = InvoiceRepository(DATABASE_PATH)
+        captured_scan = None
+        closeout_reviews: tuple[tuple[ParsedInvoice, str], ...] = ()
+        if args.close_work_items:
+            repository.initialize()
+            terminal_message_ids = frozenset(
+                repository.list_terminal_identity_message_ids()
+            )
+            captured_scan = outlook_source.scan_parent_invoices(
+                invoice_number=args.invoice_number,
+                max_invoices=args.max_invoices,
+                excluded_message_ids=(
+                    frozenset()
+                    if args.invoice_number is not None
+                    else terminal_message_ids
+                ),
+            )
+            for invoice in captured_scan.invoices:
+                if invoice.internet_message_id in terminal_message_ids:
+                    raise ValueError(
+                        f"Selected Invoice #{invoice.invoice_number} is already terminal "
+                        "by exact InternetMessageID; closeout was not started"
+                    )
+            reviews, deferred = _close_selected_work_items(
+                captured_scan, config, args.work_item_results, logger,
+            )
+            closeout_reviews = tuple(reviews)
+            removed = deferred | {invoice.internet_message_id for invoice, _ in reviews}
+            captured_scan = OutlookScanResult(
+                tuple(
+                    invoice for invoice in captured_scan.invoices
+                    if invoice.internet_message_id not in removed
+                ),
+                captured_scan.failures,
+            )
         sheet_reader = GoogleSheetIdentityReader(
             spreadsheet_id=spreadsheet_id,
             sheet_name=sheet_name,
@@ -263,23 +344,147 @@ def _run_live(
             page = browser.pages[0] if browser.pages else browser.new_page()
             page.goto(FIELDPO_URL)
             page.wait_for_url("**/fieldpo/dashboard**", timeout=120_000)
-            resolver = StrictIdentityResolver(
-                sheet_reader,
-                FieldPOBrowserIdentityReader(page),
-            )
+            fieldpo_identity_reader = FieldPOBrowserIdentityReader(page)
+            resolver = StrictIdentityResolver(sheet_reader, fieldpo_identity_reader)
+            fieldpo_approver = None
+            if captured_scan is not None:
+                from invoice_workflow.identity_adapters import FieldPOBrowserApprover
+
+                fieldpo_approver = FieldPOBrowserApprover(
+                    page, fieldpo_identity_reader,
+                )
             coordinator = CompletedInvoicesCoordinator(
                 outlook_source,
                 resolver,
-                InvoiceRepository(DATABASE_PATH),
+                repository,
                 logger,
                 run_id=run_id,
             )
+            if captured_scan is not None:
+                return coordinator.run_captured(
+                    captured_scan, invoice_number=args.invoice_number,
+                    closeout_reviews=closeout_reviews,
+                    fieldpo_approver=fieldpo_approver,
+                )
             return coordinator.run_live(
                 invoice_number=args.invoice_number,
                 max_invoices=args.max_invoices,
             )
     finally:
         pythoncom.CoUninitialize()
+
+
+def _close_selected_work_items(
+    scan: OutlookScanResult,
+    config: dict[str, Any],
+    results_path: Path,
+    logger: WorkflowRunLogger,
+) -> tuple[list[tuple[ParsedInvoice, str]], set[str]]:
+    """Close work items for the captured selection.
+
+    Returns invoices that need review and message IDs deferred to a later run.
+    Per-invoice problems are returned for Needs Review; system failures raise.
+    """
+    from WorkItems.build_close_queue import prepare_selected_closeout
+    from vendor_tracking.sheet_updater import VendorSheetUpdater
+
+    for failure in scan.failures:
+        print(f"[CLOSEOUT] Needs Review: {failure.subject}: {failure.detail}")
+    print(f"[CLOSEOUT] Selected {len(scan.invoices)} invoice(s) for every closeout stage.")
+    for invoice in scan.invoices:
+        print(f"[CLOSEOUT] Selected Invoice #{invoice.invoice_number} | {invoice.subject}")
+        logger.info(
+            f"invoice_selected internet_message_id={invoice.internet_message_id}",
+            invoice=invoice.invoice_number,
+            stage="capture",
+        )
+    invoices = [
+        {
+            "subject": invoice.subject,
+            "vin": invoice.vin,
+            "invoice_amount": str(invoice.invoice_amount),
+            "received": invoice.received_at.isoformat(),
+            "is_recalibration": invoice.is_recalibration,
+            "selection_index": index,
+        }
+        for index, invoice in enumerate(scan.invoices)
+    ]
+    reviews: list[tuple[ParsedInvoice, str]] = []
+    deferred: set[str] = set()
+    targets = []
+    if invoices:
+        updater = VendorSheetUpdater(
+            _required_text(config, "spreadsheet_id"),
+            _required_text(config, "sheet_name"),
+            str(_resolve_path(_required_text(config, "service_account_json"))),
+        )
+        updater.connect()
+        targets, sheet_reviews = prepare_selected_closeout(updater, invoices)
+        reviews.extend(
+            (scan.invoices[invoice["selection_index"]], f"Closeout Sheet check failed: {note}")
+            for invoice, note in sheet_reviews
+        )
+
+    if not targets:
+        results_path.parent.mkdir(parents=True, exist_ok=True)
+        results_path.write_text("[]", encoding="utf-8")
+        logger.info("no_selected_work_item_targets", stage="compass")
+        return reviews, deferred
+
+    logger.info(f"selected_work_items_started count={len(targets)}", stage="compass")
+    results_path.unlink(missing_ok=True)
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "WorkItems" / "close_workitem.py"),
+            "--only-mvas", ",".join(target["mva"] for target in targets),
+            "--concise-console",
+            "--results-json", str(results_path),
+        ],
+        cwd=ROOT,
+        check=False,
+    )
+    if not results_path.exists():
+        raise RuntimeError(
+            f"Selected work-item closure failed with exit code {result.returncode} "
+            "and wrote no results; invoice validation was not started"
+        )
+    work_item_results = _load_work_item_results(results_path)
+    expected = {(target["mva"], target["complaint_type"]) for target in targets}
+    if work_item_results.keys() != expected:
+        raise ValueError("Selected work-item results do not match the captured invoice targets")
+    failed_outcomes = 0
+    for target in targets:
+        mva, complaint_type = target["mva"], target["complaint_type"]
+        outcome = work_item_results[(mva, complaint_type)]
+        invoice = scan.invoices[target["selection_index"]]
+        if outcome["status"] in {"closed", "not_found"}:
+            continue
+        if outcome["status"] == "not_attempted":
+            deferred.add(invoice.internet_message_id)
+            print(
+                f"[CLOSEOUT] Deferred Invoice #{invoice.invoice_number} | MVA {mva}: "
+                f"{outcome['detail']}; left for the next run"
+            )
+            continue
+        failed_outcomes += 1
+        detail = (
+            f"Work-item closure {outcome['status']} for MVA {mva} ({complaint_type})"
+            + (f": {outcome['detail']}" if outcome["detail"] else "")
+        )
+        reviews.append((invoice, detail))
+        print(f"[CLOSEOUT] Needs Review: Invoice #{invoice.invoice_number}: {detail}")
+    if result.returncode and not failed_outcomes:
+        raise RuntimeError(
+            f"Selected work-item closure exited {result.returncode} without a failed "
+            "work-item result; invoice validation was not started"
+        )
+    logger.info(
+        f"selected_work_items_completed count={len(targets)} "
+        f"review={failed_outcomes} deferred={len(deferred)}",
+        stage="compass",
+    )
+    return reviews, deferred
 
 
 def _run_terminal_sweep(
@@ -328,7 +533,16 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--invoice-number", type=_invoice_number)
     parser.add_argument("--sweep-terminal-to-needs-review", action="store_true")
     parser.add_argument("--work-item-results", type=Path)
-    return parser.parse_args(argv)
+    parser.add_argument("--close-work-items", action="store_true")
+    args = parser.parse_args(argv)
+    if args.close_work_items:
+        if args.max_invoices is None and args.invoice_number is None:
+            parser.error("--close-work-items requires --max-invoices or --invoice-number")
+        if args.sweep_terminal_to_needs_review:
+            parser.error("--close-work-items cannot be combined with --sweep-terminal-to-needs-review")
+        if args.work_item_results is None:
+            parser.error("--close-work-items requires --work-item-results")
+    return args
 
 
 def _load_runtime_config() -> dict[str, Any]:

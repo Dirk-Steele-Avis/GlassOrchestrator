@@ -85,6 +85,127 @@ def test_live_run_captures_and_records_exact_identity(tmp_path):
     outlook.move_to_needs_review.assert_not_called()
 
 
+def test_captured_run_never_selects_additional_invoices(tmp_path):
+    invoice = _invoice()
+    outlook = MagicMock()
+    resolver = MagicMock()
+    resolver.resolve.return_value = IdentityResult(
+        StageStatus.COMPLETE, identity=_identity(invoice),
+    )
+    repository = InvoiceRepository(tmp_path / "workflow.db")
+    with WorkflowRunLogger(tmp_path / "logs", "captured") as logger:
+        summary = CompletedInvoicesCoordinator(
+            outlook, resolver, repository, logger, run_id="captured",
+        ).run_captured(OutlookScanResult((invoice,), ()))
+
+    assert summary.captured == 1
+    assert summary.exit_code == 0
+    outlook.scan_parent_invoices.assert_not_called()
+    resolver.resolve.assert_called_once_with(invoice)
+    outlook.move_to_processed.assert_called_once_with(invoice.internet_message_id)
+
+
+def test_scoped_closeout_approves_po_and_work_order_before_processed(tmp_path):
+    invoice = _invoice()
+    outlook = MagicMock()
+    resolver = MagicMock()
+    resolver.resolve.return_value = IdentityResult(
+        StageStatus.COMPLETE, identity=_identity(invoice),
+    )
+    approver = MagicMock()
+    repository = InvoiceRepository(tmp_path / "workflow.db")
+    with WorkflowRunLogger(tmp_path / "logs", "approval") as logger:
+        summary = CompletedInvoicesCoordinator(
+            outlook, resolver, repository, logger, run_id="approval",
+        ).run_captured(
+            OutlookScanResult((invoice,), ()),
+            fieldpo_approver=approver,
+        )
+
+    assert summary.exit_code == 0
+    approver.approve.assert_called_once_with(invoice, _identity(invoice))
+    outlook.move_to_processed.assert_called_once_with(invoice.internet_message_id)
+    state = repository.get_invoice(invoice.internet_message_id)
+    assert state.po_status is StageStatus.COMPLETE
+    assert state.work_order_status is StageStatus.COMPLETE
+    assert state.outlook_status is StageStatus.COMPLETE
+
+
+def test_fieldpo_approval_failure_moves_invoice_to_review_not_processed(tmp_path):
+    invoice = _invoice()
+    outlook = MagicMock()
+    resolver = MagicMock()
+    resolver.resolve.return_value = IdentityResult(
+        StageStatus.COMPLETE, identity=_identity(invoice),
+    )
+    approver = MagicMock()
+    approver.approve.side_effect = RuntimeError("PO status changed before approval")
+    repository = InvoiceRepository(tmp_path / "workflow.db")
+    with WorkflowRunLogger(tmp_path / "logs", "approval-failed") as logger:
+        summary = CompletedInvoicesCoordinator(
+            outlook, resolver, repository, logger, run_id="approval-failed",
+        ).run_captured(
+            OutlookScanResult((invoice,), ()),
+            fieldpo_approver=approver,
+        )
+
+    assert summary.exit_code == 2
+    assert [failure.code for failure in summary.failures] == [
+        "FIELDPO_APPROVAL_FAILED",
+    ]
+    outlook.move_to_needs_review.assert_called_once_with(invoice.internet_message_id)
+    outlook.move_to_processed.assert_not_called()
+    state = repository.get_invoice(invoice.internet_message_id)
+    assert state.po_status is StageStatus.FAILED
+    assert state.work_order_status is StageStatus.FAILED
+    assert state.outlook_status is StageStatus.PENDING
+
+
+def test_closeout_review_moves_invoice_to_needs_review_and_continues(tmp_path):
+    reviewed = _invoice("<reviewed@example>", "5485904")
+    kept = _invoice()
+    outlook = MagicMock()
+    resolver = MagicMock()
+    resolver.resolve.return_value = IdentityResult(
+        StageStatus.COMPLETE, identity=_identity(kept),
+    )
+    repository = InvoiceRepository(tmp_path / "workflow.db")
+    detail = "Work-item closure error for MVA 060750874 (Glass)"
+    with WorkflowRunLogger(tmp_path / "logs", "closeout") as logger:
+        summary = CompletedInvoicesCoordinator(
+            outlook, resolver, repository, logger, run_id="closeout",
+        ).run_captured(
+            OutlookScanResult((kept,), ()),
+            invoice_number=None,
+            closeout_reviews=((reviewed, detail),),
+        )
+
+    assert summary.exit_code == 2
+    assert summary.identities_complete == 1
+    assert summary.needs_review_moved == 1
+    assert [(f.invoice_number, f.stage, f.code, f.detail) for f in summary.failures] == [
+        ("5485904", "closeout", "CLOSEOUT_REVIEW", detail),
+    ]
+    outlook.move_to_needs_review.assert_called_once_with("<reviewed@example>")
+    outlook.move_to_processed.assert_called_once_with(kept.internet_message_id)
+    resolver.resolve.assert_called_once_with(kept)
+
+
+def test_explicit_invoice_sent_to_review_is_not_reported_missing(tmp_path):
+    reviewed = _invoice("<reviewed@example>", "5485904")
+    repository = InvoiceRepository(tmp_path / "workflow.db")
+    with WorkflowRunLogger(tmp_path / "logs", "explicit") as logger:
+        summary = CompletedInvoicesCoordinator(
+            MagicMock(), MagicMock(), repository, logger, run_id="explicit",
+        ).run_captured(
+            OutlookScanResult((), ()),
+            invoice_number="5485904",
+            closeout_reviews=((reviewed, "Closeout Sheet check failed: VIN not found"),),
+        )
+
+    assert [f.code for f in summary.failures] == ["CLOSEOUT_REVIEW"]
+
+
 def test_capture_failure_returns_review_exit_code(tmp_path):
     outlook = MagicMock()
     outlook.scan_parent_invoices.return_value = OutlookScanResult(

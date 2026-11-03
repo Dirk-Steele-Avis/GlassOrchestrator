@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 import re
 from uuid import uuid4
 
 from invoice_workflow.contracts import (
+    FieldPOApprover,
     IdentityResolver,
+    OutlookScanResult,
     OutlookSource,
+    ParsedInvoice,
     Stage,
     StageStatus,
 )
@@ -48,6 +52,8 @@ class InvoiceRunOutcome:
     identity_status: str
     outlook_status: str
     detail: str
+    po_status: str = "pending"
+    work_order_status: str = "pending"
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +109,21 @@ class CompletedInvoicesCoordinator:
             max_invoices=max_invoices,
             excluded_message_ids=excluded_message_ids,
         )
+        return self.run_captured(scan, invoice_number=invoice_number)
+
+    def run_captured(
+        self,
+        scan: OutlookScanResult,
+        *,
+        invoice_number: str | None = None,
+        closeout_reviews: Sequence[tuple[ParsedInvoice, str]] = (),
+        fieldpo_approver: FieldPOApprover | None = None,
+    ) -> RunSummary:
+        """Process an already captured selection without selecting again."""
+        self._repository.initialize()
+        terminal_message_ids = frozenset(
+            self._repository.list_terminal_identity_message_ids()
+        )
         failures: list[FailureRecord] = []
         outlook_moved = 0
         outlook_failed = 0
@@ -112,7 +133,9 @@ class CompletedInvoicesCoordinator:
             f"capture_complete invoices={len(scan.invoices)} failures={len(scan.failures)}",
             stage="capture",
         )
-        target_not_found = invoice_number is not None and not scan.invoices
+        target_not_found = (
+            invoice_number is not None and not scan.invoices and not closeout_reviews
+        )
         if target_not_found:
             detail = (
                 f"Requested invoice {invoice_number} was not found in capture results"
@@ -159,12 +182,44 @@ class CompletedInvoicesCoordinator:
             )
             needs_review_moved = moved
             needs_review_failed = failed
+        for reviewed_invoice, detail in closeout_reviews:
+            code = "CLOSEOUT_REVIEW"
+            failures.append(
+                FailureRecord(
+                    run_id=self._run_id,
+                    invoice_number=reviewed_invoice.invoice_number,
+                    stage="closeout",
+                    code=code,
+                    detail=detail,
+                    subject=reviewed_invoice.subject,
+                    subject_po_number=reviewed_invoice.subject_po_number,
+                    pdf_po_number=reviewed_invoice.pdf_po_number,
+                    vin=reviewed_invoice.vin,
+                    invoice_amount=str(reviewed_invoice.invoice_amount),
+                )
+            )
+            self._logger.error(
+                f"closeout_review code={code} detail={detail}",
+                invoice=reviewed_invoice.invoice_number,
+                stage="closeout",
+            )
+            moved, failed = self._move_reviewed_message(
+                reviewed_invoice.invoice_number,
+                reviewed_invoice.internet_message_id,
+                failures,
+                detail_context="closeout_review",
+                moved_count=needs_review_moved,
+                failed_count=needs_review_failed,
+            )
+            needs_review_moved = moved
+            needs_review_failed = failed
         for invoice in scan.invoices:
             self._repository.upsert_invoice(invoice)
 
         duplicate_numbers = set(self._repository.block_duplicate_invoice_numbers())
         identities_complete = 0
         identities_blocked = 0
+        fieldpo_approval_failed = 0
         identity_results = {}
         for invoice in scan.invoices:
             if invoice.internet_message_id in terminal_message_ids:
@@ -303,6 +358,71 @@ class CompletedInvoicesCoordinator:
                     invoice=invoice.invoice_number,
                     stage=Stage.IDENTITY,
                 )
+                if fieldpo_approver is not None:
+                    po_attempt_id = self._repository.start_attempt(
+                        invoice.internet_message_id,
+                        self._run_id,
+                        Stage.FIELDPO_PO,
+                    )
+                    work_order_attempt_id = self._repository.start_attempt(
+                        invoice.internet_message_id,
+                        self._run_id,
+                        Stage.FIELDPO_WORK_ORDER,
+                    )
+                    try:
+                        fieldpo_approver.approve(invoice, identity)
+                    except Exception as exc:
+                        fieldpo_approval_failed += 1
+                        detail = f"{type(exc).__name__}: {exc}"
+                        self._repository.finish_attempt(
+                            po_attempt_id,
+                            StageStatus.FAILED,
+                            detail,
+                        )
+                        self._repository.finish_attempt(
+                            work_order_attempt_id,
+                            StageStatus.FAILED,
+                            detail,
+                        )
+                        code = "FIELDPO_APPROVAL_FAILED"
+                        failures.append(
+                            FailureRecord(
+                                run_id=self._run_id,
+                                invoice_number=invoice.invoice_number,
+                                stage=str(Stage.FIELDPO_PO),
+                                code=code,
+                                detail=detail,
+                                subject=invoice.subject,
+                                subject_po_number=invoice.subject_po_number,
+                                pdf_po_number=invoice.pdf_po_number,
+                                vin=invoice.vin,
+                                invoice_amount=str(invoice.invoice_amount),
+                            )
+                        )
+                        self._logger.exception(
+                            f"fieldpo_approval_failed code={code} detail={detail}",
+                            invoice=invoice.invoice_number,
+                            stage=Stage.FIELDPO_PO,
+                        )
+                        moved, failed = self._move_reviewed_message(
+                            invoice.invoice_number,
+                            invoice.internet_message_id,
+                            failures,
+                            detail_context="fieldpo_approval_failure",
+                            moved_count=needs_review_moved,
+                            failed_count=needs_review_failed,
+                        )
+                        needs_review_moved = moved
+                        needs_review_failed = failed
+                        continue
+                    self._repository.finish_attempt(
+                        po_attempt_id,
+                        StageStatus.COMPLETE,
+                    )
+                    self._repository.finish_attempt(
+                        work_order_attempt_id,
+                        StageStatus.COMPLETE,
+                    )
                 outlook_attempt_id = self._repository.start_attempt(
                     invoice.internet_message_id,
                     self._run_id,
@@ -385,7 +505,9 @@ class CompletedInvoicesCoordinator:
         exit_code = (
             2
             if scan.failures
+            or closeout_reviews
             or identities_blocked
+            or fieldpo_approval_failed
             or outlook_failed
             or needs_review_failed
             or target_not_found
@@ -395,6 +517,7 @@ class CompletedInvoicesCoordinator:
             "live_run_complete "
             f"captured={len(scan.invoices)} identity_complete={identities_complete} "
             f"identity_blocked={identities_blocked} "
+            f"fieldpo_approval_failed={fieldpo_approval_failed} "
             f"outlook_moved={outlook_moved} outlook_failed={outlook_failed} "
             f"needs_review_moved={needs_review_moved} "
             f"needs_review_failed={needs_review_failed} "
@@ -409,7 +532,7 @@ class CompletedInvoicesCoordinator:
             sheet_mva = sheet_mvas[0] if len(set(sheet_mvas)) == 1 else ""
             invoice_outcomes.append(InvoiceRunOutcome(
                 invoice_number=invoice.invoice_number,
-                po_number=invoice.subject_po_number,
+                po_number=invoice.pdf_po_number,
                 pdf_po_number=invoice.pdf_po_number,
                 fieldpo_po_number=fieldpo.po_number if fieldpo else "",
                 vin=invoice.vin,
@@ -429,6 +552,10 @@ class CompletedInvoicesCoordinator:
                     state.outlook_status.value if state is not None else "unknown"
                 ),
                 detail=state.last_error if state is not None else "",
+                po_status=state.po_status.value if state is not None else "pending",
+                work_order_status=(
+                    state.work_order_status.value if state is not None else "pending"
+                ),
             ))
         return RunSummary(
             run_id=self._run_id,

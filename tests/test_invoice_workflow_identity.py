@@ -54,12 +54,49 @@ def test_exact_identity_is_valid():
     fieldpo.read_identity.assert_called_once_with("FPO1131464")
 
 
+def test_missing_subject_po_uses_exact_pdf_po_for_fieldpo_lookup():
+    invoice = replace(
+        _invoice(),
+        subject="[External] Invoice #5294412",
+        subject_po_number="",
+    )
+    resolver, _, fieldpo = _resolver(po_number="FPO1131464")
+
+    result = resolver.resolve(invoice)
+
+    assert result.status is StageStatus.COMPLETE
+    assert result.identity.po_number == "FPO1131464"
+    fieldpo.read_identity.assert_called_once_with("FPO1131464")
+
+
+@pytest.mark.parametrize("authorized_amount", [Decimal("150.00"), Decimal("340.00")])
+def test_separate_recalibration_po_still_requires_exact_authorized_amount(authorized_amount):
+    invoice = replace(
+        _invoice(),
+        invoice_number="5426981",
+        subject="[External] Invoice #5426981 (PO # FPO1165259)",
+        subject_po_number="FPO1165259",
+        pdf_po_number="FPO1165259",
+        invoice_amount=Decimal("150.00"),
+    )
+    resolver, _, fieldpo = _resolver(
+        po_number="FPO1165259",
+        authorized_amount=authorized_amount,
+    )
+    result = resolver.resolve(invoice)
+    fieldpo.read_identity.assert_called_once_with("FPO1165259")
+    if authorized_amount == Decimal("150.00"):
+        assert result.status is StageStatus.COMPLETE
+    else:
+        assert result.status is StageStatus.BLOCKED
+        assert "Authorized amount mismatch" in result.detail
+
+
 @pytest.mark.parametrize(
     ("changes", "expected"),
     [
-        ({"subject_po_number": ""}, "subject does not contain"),
-        ({"subject_po_number": "FPO112856"}, "subject does not contain"),
-        ({"subject_po_number": "FPO11285A3"}, "subject does not contain"),
+        ({"subject_po_number": "FPO112856"}, "subject contains an invalid PO"),
+        ({"subject_po_number": "FPO11285A3"}, "subject contains an invalid PO"),
         ({"pdf_po_number": ""}, "PDF does not contain"),
         ({"pdf_po_number": "FPO112856"}, "PDF does not contain"),
         ({"pdf_po_number": "FPO11285A3"}, "PDF does not contain"),
