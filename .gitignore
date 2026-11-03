@@ -67,6 +67,7 @@ artifacts/
 
 # Generated operator reports
 reports/*.html
+reports/open_po_analysis_*/
 
 # Outlook invoice and receipt downloads
 outlook/pdfs/
@@ -87,6 +88,7 @@ outlook/po_approval_audit.jsonl
 outlook/closure_decisions.jsonl
 outlook/invoices_queue.csv
 outlook/po_numbers.txt
+outlook/invoice_approval_target*.tsv
 
 # Local invoice workflow runtime artifacts
 data/completed_invoices.db
