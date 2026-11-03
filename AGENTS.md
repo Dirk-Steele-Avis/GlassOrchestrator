@@ -15,6 +15,12 @@
 - On failure, stop that workflow path and report the precise failed step and reason. Preserve a documented nonfatal business outcome only when the canonical requirements explicitly define it.
 - Test both the successful path and visible failure at the exact boundary being changed.
 
+## Response Style
+
+- Keep progress updates and final responses concise, plain-language, and focused on the user's request.
+- Lead with the answer, decision, or next action; explain technical details in approachable terms without omitting important risks or constraints.
+- For code changes, briefly state what changed, which focused checks ran, and any blockers or unverified checks.
+
 ## Validation
 
 - Run focused tests first: `.venv\Scripts\python.exe -m pytest <test-path> -q`.
