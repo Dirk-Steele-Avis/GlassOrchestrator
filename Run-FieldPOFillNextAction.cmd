@@ -58,7 +58,14 @@ if "%SYNC_DEPS%"=="1" (
 )
 
 echo Running FieldPO NextAction fill with venv Python...
-"%VENV_PY%" ".\FieldPOFillNextAction.py"
+if "%~1"=="" (
+  echo [ERROR] Explicit target required.
+  echo Usage: Run-FieldPOFillNextAction.cmd --inventory-date YYYY-MM-DD
+  echo        Run-FieldPOFillNextAction.cmd --rollback-file path\to\backup.json
+  echo        Run-FieldPOFillNextAction.cmd --rollback-latest
+  exit /b 2
+)
+"%VENV_PY%" ".\FieldPOFillNextAction.py" %*
 
 echo.
 echo Exit code: %errorlevel%

@@ -10,9 +10,9 @@ import csv
 from datetime import date, datetime
 import inspect
 import json
+import logging
 import os
 import re
-import subprocess
 import time
 from typing import TYPE_CHECKING
 
@@ -20,6 +20,7 @@ from utils.logger import log
 
 from config.config_loader import get_config
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import async_playwright
 from playwright_prototype.config import (
     LOGIN_URL,
@@ -31,7 +32,6 @@ from playwright_prototype.config import (
 from playwright_prototype.session import ensure_profile_context
 from playwright_prototype.steps import (
     COMPLAINT_TYPE_PATTERNS,
-    COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR,
     close_open_work_item,
 )
 from playwright_prototype.steps import navigate_to_mva as pw_navigate_to_mva
@@ -46,6 +46,7 @@ RESULT_NOT_FOUND = "not_found"
 RESULT_NAV_FAILED = "nav_failed"
 RESULT_ERROR = "error"
 RESULT_TIMEOUT = "timeout"
+RESULT_NOT_ATTEMPTED = "not_attempted"
 PROCESSED_STATE_PATH = Path(__file__).resolve().parent.parent / "data" / "close_workitem_processed.json"
 DEFAULT_CLOSE_CSV = Path(__file__).resolve().parent / "close_workitem.csv"
 DEFAULT_CLOSE_HISTORY = Path(__file__).resolve().parent.parent / "data" / "close_workitem_history.csv"
@@ -69,15 +70,6 @@ async def _debug_hold_if_configured(page: "Page", args: argparse.Namespace, mva:
         await page.wait_for_timeout(hold_seconds * 1000)
     except Exception as exc:
         log.warning("[CLOSE] %s - debug hold interrupted (%s)", mva, exc)
-
-
-def _is_edge_running() -> bool:
-    """Return True if any msedge.exe process is currently running."""
-    result = subprocess.run(
-        ["tasklist", "/FI", "IMAGENAME eq msedge.exe", "/NH"],
-        capture_output=True, text=True
-    )
-    return "msedge.exe" in result.stdout
 
 
 def _get_valid_complaint_types() -> list[str]:
@@ -445,7 +437,23 @@ def _build_targets(args: argparse.Namespace) -> list[dict]:
 
     max_rows = getattr(args, "max_rows", None)
     csv_path = str(getattr(args, "csv_path", "") or DEFAULT_CLOSE_CSV)
-    return _build_targets_from_csv(csv_path, max_rows=max_rows)
+    targets = _build_targets_from_csv(csv_path, max_rows=max_rows)
+    only_mvas = getattr(args, "only_mvas", "")
+    if only_mvas:
+        selected = {
+            (target["mva"], target["complaint_type"])
+            for target in _build_targets_from_mvas(only_mvas)
+        }
+        targets = [
+            target for target in targets
+            if (target["mva"], target["complaint_type"]) in selected
+        ]
+        missing = selected - {
+            (target["mva"], target["complaint_type"]) for target in targets
+        }
+        if missing:
+            raise ValueError(f"Selected work-item targets are missing from {csv_path}: {sorted(missing)}")
+    return targets
 
 
 async def _capture_playwright_screenshot(page: "Page", label: str, mva: str) -> None:
@@ -512,6 +520,15 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
     """
     workflow_started = time.monotonic()
     results: list[dict] = []
+
+    def result_record(target: dict, status: str, detail: str = "") -> dict:
+        return {
+            "mva": target["mva"],
+            "complaint_type": target["complaint_type"],
+            "result": status,
+            "detail": detail,
+        }
+
     headless = resolve_headless()
     edge_user_data_dir = resolve_edge_user_data_dir()
     edge_profile_directory = resolve_edge_profile_directory()
@@ -531,36 +548,34 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
     )
     log.info("[CLOSE] %s", "=" * 50)
 
-    # Edge must not be running when using launch_persistent_context —
-    # the user-data-dir lock prevents a second instance from starting.
-    # If residual background processes remain after the user closes the UI,
-    # kill them automatically and wait briefly before launching.
-    if _is_edge_running():
-        log.warning("[CLOSE] Edge processes detected — killing residual processes before launch...")
-        subprocess.run(["taskkill", "/F", "/IM", "msedge.exe", "/T"],
-                       capture_output=True, text=True)
-        time.sleep(2)
-        if _is_edge_running():
-            log.error(
-                "[CLOSE] Microsoft Edge is still running after kill attempt. "
-                "Please close all Edge windows manually and try again."
-            )
-            sys.exit(1)
-        log.info("[CLOSE] Edge processes cleared — proceeding with launch.")
-
     async with async_playwright() as pw:
         phase_started = time.monotonic()
-        context = await pw.chromium.launch_persistent_context(
-            user_data_dir=str(edge_user_data_dir),
-            channel="msedge",
-            headless=headless,
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                f"--profile-directory={edge_profile_directory}",
-                "--start-maximized",
-            ],
-            no_viewport=True,
+        log.info(
+            "[CLOSE] Launching Edge | user_data_dir=%s | profile=%s",
+            edge_user_data_dir,
+            edge_profile_directory,
         )
+        try:
+            context = await pw.chromium.launch_persistent_context(
+                user_data_dir=str(edge_user_data_dir),
+                channel="msedge",
+                headless=headless,
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    f"--profile-directory={edge_profile_directory}",
+                    "--start-maximized",
+                ],
+                no_viewport=True,
+            )
+        except PlaywrightError as exc:
+            detail = (
+                f"Edge launch failed for user data directory '{edge_user_data_dir}', "
+                f"profile '{edge_profile_directory}': {exc}. "
+                "If another Edge session uses this user data directory, close that "
+                "session before retrying. No existing browser processes were terminated."
+            )
+            log.error("[CLOSE] %s", detail)
+            raise RuntimeError(detail) from exc
         log.info("[PERF] Browser launch completed in %.2fs", time.monotonic() - phase_started)
 
         try:
@@ -576,7 +591,15 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
                     page = await _ensure_live_page(context, page, mva)
                 except Exception as exc:
                     log.error("[CLOSE] %s - browser unavailable before processing: %s", mva, exc)
-                    results.append({"mva": mva, "result": RESULT_ERROR, "detail": "browser unavailable"})
+                    results.append(result_record(target, RESULT_ERROR, "browser unavailable"))
+                    results.extend(
+                        result_record(
+                            remaining,
+                            RESULT_NOT_ATTEMPTED,
+                            f"batch stopped after browser failure for {mva}",
+                        )
+                        for remaining in targets[target_index + 1:]
+                    )
                     break
 
                 log.info("[CLOSE] %s", "-" * 40)
@@ -601,11 +624,19 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
                             break
                     except Exception as exc:
                         log.error("[CLOSE] %s - browser unavailable while settling UI: %s", mva, exc)
-                        results.append({"mva": mva, "result": RESULT_ERROR, "detail": "browser unavailable"})
+                        results.append(result_record(target, RESULT_ERROR, "browser unavailable"))
                         browser_unavailable = True
                         break
 
                 if browser_unavailable:
+                    results.extend(
+                        {
+                            "mva": remaining["mva"],
+                            "result": RESULT_NOT_ATTEMPTED,
+                            "detail": f"batch stopped after browser failure for {mva}",
+                        }
+                        for remaining in targets[target_index + 1:]
+                    )
                     break
 
                 log.info("[PERF] %s - pre-search UI settle completed in %.2fs", mva, time.monotonic() - settle_start)
@@ -618,12 +649,6 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
 
                 try:
                     if reuse_vehicle_search:
-                        keyword_search = page.locator(COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR)
-                        if await keyword_search.count() != 1:
-                            raise RuntimeError(
-                                "Expected exactly one vehicle-page Keyword Search field after close"
-                            )
-                        await keyword_search.first.wait_for(state="visible", timeout=8_000)
                         log.info("[CLOSE] %s - reusing current vehicle-page MVA search", mva)
                     else:
                         log.info("[CLOSE] %s - opening Compass homepage Vehicle Search", mva)
@@ -650,14 +675,22 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
                     log.error("[CLOSE] %s - timed out after %ss during navigation", mva, args.timeout_seconds)
                     await _capture_playwright_screenshot(page, "timeout", mva)
                     await _debug_hold_if_configured(page, args, mva, "navigation timeout")
-                    results.append({"mva": mva, "result": RESULT_TIMEOUT, "detail": "navigation"})
+                    results.append(result_record(target, RESULT_TIMEOUT, "navigation"))
                     continue
                 except (PlaywrightTimeoutError, Exception) as exc:
                     detail = str(exc)
                     log.error("[CLOSE] %s - navigation failed; stopping batch: %s", mva, detail)
                     await _capture_playwright_screenshot(page, "nav_failure", mva)
                     await _debug_hold_if_configured(page, args, mva, "navigation failure")
-                    results.append({"mva": mva, "result": RESULT_NAV_FAILED, "detail": detail})
+                    results.append(result_record(target, RESULT_NAV_FAILED, detail))
+                    results.extend(
+                        result_record(
+                            remaining,
+                            RESULT_NOT_ATTEMPTED,
+                            f"batch stopped after navigation failure for {mva}",
+                        )
+                        for remaining in targets[target_index + 1:]
+                    )
                     break
 
                 elapsed = time.monotonic() - started
@@ -677,17 +710,17 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
                     elif result == RESULT_NOT_FOUND:
                         log.warning("[CLOSE] %s - WORK ITEM COUNT: 0 (%s)", mva, complaint_type)
                         await _capture_playwright_screenshot(page, "not_found", mva)
-                    results.append({"mva": mva, "result": result, "detail": detail})
+                    results.append(result_record(target, result, detail))
                 except asyncio.TimeoutError:
                     log.error("[CLOSE] %s - timed out after %ss during close", mva, args.timeout_seconds)
                     await _capture_playwright_screenshot(page, "timeout", mva)
                     await _debug_hold_if_configured(page, args, mva, "close timeout")
-                    results.append({"mva": mva, "result": RESULT_TIMEOUT, "detail": "close"})
+                    results.append(result_record(target, RESULT_TIMEOUT, "close"))
                 except Exception as exc:
                     log.error("[CLOSE] %s - error during close: %s", mva, exc)
                     await _capture_playwright_screenshot(page, "error", mva)
                     await _debug_hold_if_configured(page, args, mva, "close error")
-                    results.append({"mva": mva, "result": RESULT_ERROR, "detail": ""})
+                    results.append(result_record(target, RESULT_ERROR))
         finally:
             try:
                 await context.close()
@@ -719,6 +752,7 @@ def _log_summary(results: list[dict]) -> tuple[int, int]:
         1 for r in results if r["result"] == RESULT_TIMEOUT and r.get("detail") == "close"
     )
     timeout_other_count = timeout_count - timeout_nav_count - timeout_close_count
+    not_attempted_count = sum(1 for r in results if r["result"] == RESULT_NOT_ATTEMPTED)
     failed_count = sum(1 for r in results if r["result"] in {RESULT_NAV_FAILED, RESULT_ERROR, RESULT_TIMEOUT})
 
     log.info("[CLOSE] %s", "=" * 50)
@@ -733,6 +767,7 @@ def _log_summary(results: list[dict]) -> tuple[int, int]:
             timeout_close_count,
             timeout_other_count,
         )
+    log.info("[CLOSE]   - Not attempted: %d", not_attempted_count)
     log.info("[CLOSE]   ! Failed:    %d", failed_count)
     log.info("[CLOSE] %s", "=" * 50)
     for r in results:
@@ -746,6 +781,80 @@ def _log_summary(results: list[dict]) -> tuple[int, int]:
     return not_found_count, failed_count
 
 
+def _configure_concise_console() -> None:
+    for handler in logging.getLogger().handlers:
+        if isinstance(handler, logging.StreamHandler) and not isinstance(
+            handler, logging.FileHandler
+        ):
+            handler.setLevel(logging.WARNING)
+
+
+def _print_console_summary(results: list[dict]) -> None:
+    closed_count = sum(1 for result in results if result["result"] == RESULT_CLOSED)
+    not_found_count = sum(
+        1 for result in results if result["result"] == RESULT_NOT_FOUND
+    )
+    failed_count = sum(
+        1
+        for result in results
+        if result["result"] in {RESULT_NAV_FAILED, RESULT_ERROR, RESULT_TIMEOUT}
+    )
+    not_attempted_count = sum(
+        1 for result in results if result["result"] == "not_attempted"
+    )
+    print(
+        "[CLOSEOUT] Work items: "
+        f"{len(results)} target(s); {closed_count} closed, "
+        f"{not_found_count} not found, {failed_count} failed, "
+        f"{not_attempted_count} not attempted."
+    )
+    for result in results:
+        status = result["result"].replace("_", " ").upper()
+        detail = str(result.get("detail", "")).strip()
+        if result["result"] == RESULT_NOT_FOUND:
+            detail = detail or "No open work item found."
+        elif result["result"] == RESULT_CLOSED:
+            detail = detail or "Work item closed."
+        detail_suffix = f" | {detail}" if detail else ""
+        print(
+            f"[CLOSEOUT] MVA {result['mva']} | {status}{detail_suffix}"
+        )
+
+
+def _write_results_json(
+    path: str,
+    results: list[dict],
+    targets: list[dict] | None = None,
+) -> None:
+    if not path:
+        return
+    if targets is not None and len(results) != len(targets):
+        raise ValueError(
+            f"Expected {len(targets)} work-item results, received {len(results)}"
+        )
+    result_path = Path(path)
+    result_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = []
+    for index, result in enumerate(results):
+        target = targets[index] if targets is not None else None
+        if target is not None and result["mva"] != target["mva"]:
+            raise ValueError(
+                f"Work-item result MVA {result['mva']} does not match target {target['mva']}"
+            )
+        complaint_type = (
+            target["complaint_type"]
+            if target is not None
+            else result["complaint_type"]
+        )
+        payload.append({
+            "mva": result["mva"],
+            "complaint_type": complaint_type,
+            "status": result["result"],
+            "detail": result.get("detail", ""),
+        })
+    result_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Close open glass work items from an operator-reviewed CSV."
@@ -757,6 +866,9 @@ def main() -> None:
     parser.add_argument("--max-rows", type=int, default=None, help="Cap reviewed CSV targets to the first N rows")
     parser.add_argument("--csv", dest="csv_path", default=str(DEFAULT_CLOSE_CSV), help="Reviewed CSV with required mva and Type columns")
     parser.add_argument("--mvas", type=str, default="", help="Comma/space-separated MVA list to process explicitly (overrides CSV source)")
+    parser.add_argument("--only-mvas", default="", help="Restrict the reviewed CSV to these exact Glass MVAs")
+    parser.add_argument("--concise-console", action="store_true", help="Keep browser progress in the log and print a readable close summary")
+    parser.add_argument("--results-json", default="", help="Write exact MVA closure outcomes to this JSON file")
 
     args = parser.parse_args()
 
@@ -766,11 +878,18 @@ def main() -> None:
         parser.error("--debug-hold-seconds must be 0 or greater")
     if args.max_rows is not None and args.max_rows <= 0:
         parser.error("--max-rows must be greater than 0")
+    if args.only_mvas and (args.mvas or args.max_rows is not None):
+        parser.error("--only-mvas cannot be combined with --mvas or --max-rows")
 
     agentic_env = os.getenv("GLASS_AGENTIC", "").strip().lower() in {"1", "true", "yes"}
     should_pause = sys.stdin.isatty() and args.pause and not agentic_env
+    if args.concise_console:
+        _configure_concise_console()
     targets = _build_targets(args)
     if not targets:
+        _write_results_json(args.results_json, [])
+        if args.concise_console:
+            _print_console_summary([])
         return
 
     log.info("[CLOSE] %s", "=" * 50)
@@ -785,6 +904,9 @@ def main() -> None:
             log.info("[CLOSE] Retired %d handled target(s) from the review CSV", retired_count)
 
     _, failed_count = _log_summary(results)
+    _write_results_json(args.results_json, results, targets)
+    if args.concise_console:
+        _print_console_summary(results)
     if failed_count > 0:
         sys.exit(1)
 

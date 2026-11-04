@@ -23,6 +23,7 @@ data/invoice_workflow.sqlite3
 data/invoice_workflow.sqlite3-wal
 data/invoice_workflow.sqlite3-shm
 data/invoice_workflow.lock
+data/glass_closeout_work_items.json
 GlassResults.txt
 MasterLog.xlsx
 GlassOrchestrator.log
@@ -64,6 +65,10 @@ outlook/run_log.txt
 # Runtime diagnostics artifacts
 artifacts/
 
+# Generated operator reports
+reports/*.html
+reports/open_po_analysis_*/
+
 # Outlook invoice and receipt downloads
 outlook/pdfs/
 outlook/invoice_attachments/
@@ -77,10 +82,13 @@ outlook/FPO actions.pdf
 outlook/FieldPO_Closer/attachments/
 outlook/FieldPO_Closer/*.pdf
 outlook/FieldPO_Closer/vins.csv
+outlook/FieldPO_Closer/pos.csv
 outlook/direct_approval_results.jsonl
+outlook/po_approval_audit.jsonl
 outlook/closure_decisions.jsonl
 outlook/invoices_queue.csv
 outlook/po_numbers.txt
+outlook/invoice_approval_target*.tsv
 
 # Local invoice workflow runtime artifacts
 data/completed_invoices.db

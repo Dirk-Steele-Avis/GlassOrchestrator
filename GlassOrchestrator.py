@@ -26,7 +26,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import getaddresses
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 try:
     import gspread  # pylint: disable=import-error  # pyright: ignore[reportMissingImports]
@@ -258,6 +258,21 @@ MVA_PATTERN = _compile_scan_pattern(
     str(RUNTIME_CONFIG.get("mva_pattern", DEFAULT_MVA_PATTERN)),
     DEFAULT_MVA_PATTERN,
 )
+TEMPORARY_ORCA_DATE_CORRECTION_EMAIL_DATE = date(2026, 10, 9)
+TEMPORARY_ORCA_DATE_CORRECTION_SOURCE_TYPE = "1009"
+TEMPORARY_ORCA_DATE_CORRECTION_TARGET_DATE = date(2026, 10, 10)
+TEMPORARY_ORCA_DATE_CORRECTION_MVAS = frozenset(
+    {
+        "56518346",
+        "61147446",
+        "59083861",
+        "62143745",
+        "59753525",
+        "60763360",
+        "51028703",
+        "56444463",
+    }
+)
 REPAIR_ELIGIBLE_AREAS: set[str] = set(RUNTIME_CONFIG.get("repair_eligible_areas", ["WS"]))
 VENDOR_LABELS: dict[str, str] = dict(RUNTIME_CONFIG.get("vendor_labels", {
     "Repair": "Repair(SuperGlass)",
@@ -275,12 +290,29 @@ INCIDENT_WINDOW_DAYS = int(RUNTIME_CONFIG.get("incident_window_days", 7))
 # The phase terminalogy should be seen as a design process but not an archetetual method
 # ─── Logging ──────────────────────────────────────────────────────────────────
 
+class _ConsoleFormatter(logging.Formatter):
+    """Omit tracebacks on the console; GlassOrchestrator.log keeps them for diagnosis."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        if not (record.exc_info or record.exc_text or record.stack_info):
+            return super().format(record)
+        clean = logging.makeLogRecord(record.__dict__)
+        clean.exc_info = None
+        clean.exc_text = None
+        clean.stack_info = None
+        return super().format(clean)
+
+
+_LOG_FORMAT = "%(asctime)s [%(levelname)s] %(message)s"
+_console_handler = logging.StreamHandler(sys.stdout)
+_console_handler.setFormatter(_ConsoleFormatter(_LOG_FORMAT))
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
+    format=_LOG_FORMAT,
     handlers=[
         logging.FileHandler(BASE_DIR / "GlassOrchestrator.log"),
-        logging.StreamHandler(sys.stdout),
+        _console_handler,
     ],
 )
 log = logging.getLogger("GlassOrchestrator")
@@ -335,7 +367,7 @@ class OutboundEmail:
 
 def fetch_input_descriptions() -> tuple[list[tuple[str, str]], datetime, bytes | None]:
     """
-        Connect to Gmail via IMAP, fetch the oldest UNSEEN email from the
+        Connect to Gmail via IMAP, fetch the newest UNSEEN email from the
     target sender, and extract:
       - A list of (type_value, description) tuples from the email table
       - The Date header parsed as a datetime object
@@ -351,9 +383,7 @@ def fetch_input_descriptions() -> tuple[list[tuple[str, str]], datetime, bytes |
             return [], datetime.now(), None
 
         log.info("Input: Found %d unseen message(s)", len(unseen_ids))
-        # Process oldest-first so one run can safely drain all unseen messages
-        # while preserving chronological order.
-        source_uid = unseen_ids[0]
+        source_uid = max(unseen_ids, key=int)
         latest_message, internal_sent_at = _fetch_message_by_id(mail, source_uid)
         descriptions, sent_at = _extract_descriptions_from_message(
             latest_message,
@@ -738,50 +768,27 @@ def _get_name_index_from_cells(cells: list[str]) -> int | None:
     return cells.index("Name")
 
 
-def _extract_location_from_type(type_value: str | None) -> str:
-    """
-    Extract location suffix (APO or BB) from Type column value.
-    
-    Format: MMDD + location suffix (e.g., '0420APO' → 'APO', '0420BB' → 'BB')
-    Returns the configured LOCATION default if extraction fails.
-    """
-    if not type_value:
-        return LOCATION
-    # Extract suffix after 4-digit date prefix
-    type_value = type_value.strip()
-    if len(type_value) > 4:
-        suffix = type_value[4:].upper()
-        if suffix in ("APO", "BB"):
-            return suffix
-    return LOCATION
+def _resolve_type_date(type_value: str, processing_date: date) -> date:
+    """Resolve a normalized MMDD Type to exactly today or tomorrow."""
+    match = re.fullmatch(r"(\d{2})(\d{2})", type_value)
+    if not match:
+        raise ValueError(f"Invalid normalized Orca Type date: {type_value!r}")
 
+    month = int(match.group(1))
+    day = int(match.group(2))
+    allowed_dates = {processing_date, processing_date + timedelta(days=1)}
+    for year in {processing_date.year, (processing_date + timedelta(days=1)).year}:
+        try:
+            candidate = date(year, month, day)
+        except ValueError:
+            continue
+        if candidate in allowed_dates:
+            return candidate
 
-def _extract_arrival_date_from_type(type_value: str | None, fallback_date: datetime) -> str:
-    """Extract Inventory Date from Type MMDD prefix, else use fallback date.
-
-    Examples:
-      - '0502APO' -> '05/02/<fallback year>'
-      - missing/invalid MMDD -> fallback_date formatted as MM/DD/YYYY
-    """
-    fallback = fallback_date.strftime("%m/%d/%Y")
-    if not type_value:
-        return fallback
-
-    cleaned = type_value.strip().upper()
-
-    # Strict schema: MMDD + location suffix (APO|BB), e.g. 0502APO.
-    strict = re.match(r"^(\d{2})(\d{2})(APO|BB)$", cleaned)
-    if not strict:
-        return fallback
-
-    month = int(strict.group(1))
-    day = int(strict.group(2))
-
-    try:
-        return datetime(fallback_date.year, month, day).strftime("%m/%d/%Y")
-    except ValueError:
-        log.warning("Parsing: INVALID_TYPE_DATE — type='%s'", type_value)
-        return fallback
+    raise ValueError(
+        f"Orca Type date {type_value} must equal processing date "
+        f"{processing_date:%Y-%m-%d} or next date {(processing_date + timedelta(days=1)):%Y-%m-%d}"
+    )
 
 
 def _split_non_empty_lines(raw_text: str) -> list[str]:
@@ -831,6 +838,13 @@ def _normalize_scan_text(raw_text: str) -> str:
         return ""
 
     upper = collapsed.upper()
+    if upper == "60687185BK":
+        log.warning(
+            "Parsing: TEMPORARY_SCAN_CORRECTION — scan='%s' normalized to '60687185BW'",
+            collapsed,
+        )
+        upper = "60687185BW"
+
     if upper.endswith(" OEM"):
         normalized = _normalize_suffix_order(re.sub(r"\s+", "", upper[:-4]))
         return f"{normalized} OEM"
@@ -839,52 +853,47 @@ def _normalize_scan_text(raw_text: str) -> str:
 
 def _normalize_combined_location_groups(
     descriptions: list[tuple[str, str]],
-    email_date: datetime,
-) -> list[tuple[str, str]]:
-    """Map one Orca ``break`` delimiter to BB-before and APO-after groups."""
+) -> list[tuple[str, str, str]]:
+    """Validate date-only Types and assign locations around the Orca delimiter."""
     delimiter_indexes = [
         index
         for index, (_, description) in enumerate(descriptions)
         if description.strip().casefold() == "break"
     ]
-    if not delimiter_indexes:
-        return descriptions
-    if len(delimiter_indexes) != 1:
+    if len(delimiter_indexes) > 1:
         raise ValueError(
             "Combined Orca email must contain exactly one 'break' delimiter"
         )
 
-    delimiter_index = delimiter_indexes[0]
-    if delimiter_index == 0 or delimiter_index == len(descriptions) - 1:
+    delimiter_index = delimiter_indexes[0] if delimiter_indexes else None
+    if not descriptions or (delimiter_index is not None and len(descriptions) == 1):
         raise ValueError(
-            "Combined Orca email 'break' delimiter must separate BB and APO scans"
+            "Orca email must contain at least one scan"
         )
 
-    normalized: list[tuple[str, str]] = []
+    normalized: list[tuple[str, str, str]] = []
     date_prefix: str | None = None
     for index, (type_value, description) in enumerate(descriptions):
+        normalized_type = type_value.strip()
+        type_match = re.fullmatch(r"\d{3,4}", normalized_type)
+        if not type_match:
+            raise ValueError(
+                "Orca email row "
+                f"{index + 1} has Type={type_value!r}; expected MDD or MMDD date without location"
+            )
+        normalized_date = normalized_type.zfill(4)
+        if date_prefix is None:
+            date_prefix = normalized_date
+        elif normalized_date != date_prefix:
+            raise ValueError(
+                "Orca email requires one shared MDD or MMDD date"
+            )
+
         if index == delimiter_index:
             continue
 
-        normalized_type = type_value.strip()
-        if email_date.date() == datetime(2026, 9, 22).date() and normalized_type == "0922bb":
-            normalized_type = "0922"
-
-        type_match = re.fullmatch(r"(\d{4})", normalized_type)
-        if not type_match:
-            raise ValueError(
-                "Combined Orca email row "
-                f"{index + 1} has Type={type_value!r}; expected MMDD format"
-            )
-        if date_prefix is None:
-            date_prefix = type_match.group(1)
-        elif type_match.group(1) != date_prefix:
-            raise ValueError(
-                "Combined Orca email requires one shared MMDD date for both locations"
-            )
-
-        location = "BB" if index < delimiter_index else "APO"
-        normalized.append((f"{date_prefix}{location}", description))
+        location = "BB" if delimiter_index is not None and index < delimiter_index else "APO"
+        normalized.append((normalized_date, description, location))
 
     return normalized
 
@@ -892,7 +901,11 @@ def _normalize_combined_location_groups(
 # ─── Parsing & Normalization ─────────────────────────────────────────────────
 
 # not phase based
-def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_date: datetime) -> tuple[dict, list[str]]:
+def parse_descriptions_to_manifest(
+    descriptions: list[tuple[str, str]],
+    email_date: datetime,
+    processing_date: date | None = None,
+) -> tuple[dict, list[str]]:
     """
     Apply regex to each description string and build a session manifest.
 
@@ -903,13 +916,11 @@ def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_da
       c = claim listed flag
             " OEM" = AVIS-sourced OEM replacement
 
-    On parse error (MALFORMED_SCAN, AMBIGUOUS_LOCATION, INVALID_REPAIR) the
-    entry is logged as a warning and skipped entirely.  No error rows are
-    written to the manifest or the sheet.
+    Malformed scans are logged and skipped; malformed Types abort the batch.
 
     Args:
         descriptions: List of (type_value, description) tuples from email parsing.
-                      type_value is the email Type column (e.g., '0420APO').
+                      type_value is the date-only email Type column (e.g., '0420').
         email_date: Email Date header as datetime
 
     Returns:
@@ -917,51 +928,79 @@ def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_da
                   Location, Action, Area, Claim#, WorkItem}
         mva_list: list of clean 8-digit MVA strings for the worker (errors excluded)
     """
-    descriptions = _normalize_combined_location_groups(descriptions, email_date)
+    normalized_descriptions = _normalize_combined_location_groups(descriptions)
+    effective_processing_date = processing_date or email_date.date()
+    batch_mvas = set()
+    for _, description, _ in normalized_descriptions:
+        normalized_scan = _normalize_scan_text(description.strip())
+        match = MVA_PATTERN.match(normalized_scan)
+        if match:
+            batch_mvas.add(match.group(1))
+
+    is_temporary_date_correction = (
+        email_date.date() == TEMPORARY_ORCA_DATE_CORRECTION_EMAIL_DATE
+        and normalized_descriptions[0][0] == TEMPORARY_ORCA_DATE_CORRECTION_SOURCE_TYPE
+        and batch_mvas == TEMPORARY_ORCA_DATE_CORRECTION_MVAS
+    )
+    if is_temporary_date_correction:
+        batch_date = TEMPORARY_ORCA_DATE_CORRECTION_TARGET_DATE
+        log.warning(
+            "Parsing: TEMPORARY_ORCA_DATE_CORRECTION — Type %s overridden to %s for exact batch",
+            TEMPORARY_ORCA_DATE_CORRECTION_SOURCE_TYPE,
+            batch_date.isoformat(),
+        )
+    else:
+        batch_date = _resolve_type_date(
+            normalized_descriptions[0][0], effective_processing_date
+        )
+    inventory_date = batch_date.strftime("%m/%d/%Y")
     log.info("Parsing: Processing %d descriptions …", len(descriptions))
 
     manifest: dict[str, dict] = {}
     mva_list: list[str] = []
-    missing_type_count = 0
+    skipped_scans = 0
     default_work_item = RUNTIME_CONFIG.get("work_item_default_flag", "verified")
 
-    for type_value, desc in descriptions:
+    for type_value, desc, location in normalized_descriptions:
         raw = desc.strip()
         normalized_scan = _normalize_scan_text(raw)
-        location = _extract_location_from_type(type_value)
-        inventory_date = _extract_arrival_date_from_type(type_value, email_date)
-        if not type_value:
-            missing_type_count += 1
 
-        match = MVA_PATTERN.match(normalized_scan)
-        if not match:
-            log.warning("Parsing: MALFORMED_SCAN — scan='%s'", raw)
-            continue
+        bare_warranty_match = re.fullmatch(r"(\d{8})WAR(C?)", normalized_scan)
+        if bare_warranty_match:
+            mva = bare_warranty_match.group(1)
+            area_code = None
+            damage_flag = "war"
+            claim_flag = bare_warranty_match.group(2).lower()
+            is_oem = False
+            damage_area = "Warranty"
+        else:
+            match = MVA_PATTERN.match(normalized_scan)
+            if not match:
+                log.warning("Parsing: MALFORMED_SCAN: scan=%r; skipped", raw)
+                skipped_scans += 1
+                continue
 
-        mva = match.group(1)
-        scanned_area_code = match.group(2).upper()
-        area_code = LEGACY_AREA_ALIASES.get(scanned_area_code, scanned_area_code)
-        damage_flag = (match.group(3) or "").lower()
+            mva = match.group(1)
+            scanned_area_code = match.group(2).upper()
+            area_code = LEGACY_AREA_ALIASES.get(scanned_area_code, scanned_area_code)
+            damage_flag = (match.group(3) or "").lower()
+            claim_flag = match.group(4).lower()
+            is_oem = bool(match.group(5))
+            if area_code not in AREAS:
+                raise ValueError(f"AMBIGUOUS_LOCATION: scan={raw!r}")
+            damage_area = AREAS[area_code]
+
         repair_flag = damage_flag == "r"
         warranty_flag = damage_flag == "war"
         turnback_flag = damage_flag == "tbk"
-        claim_flag = match.group(4).lower()
-        is_oem = bool(match.group(5))
-
-        # Validate area code against config
-        if area_code not in AREAS:
-            log.warning("Parsing: AMBIGUOUS_LOCATION — scan='%s'", raw)
-            continue
 
         if is_oem and repair_flag:
             log.warning("Parsing: OEM_REPAIR_NORMALIZED — scan='%s'", raw)
         elif repair_flag and area_code not in REPAIR_ELIGIBLE_AREAS:
-            log.warning("Parsing: INVALID_REPAIR — scan='%s'", raw)
-            continue
+            raise ValueError(f"INVALID_REPAIR: scan={raw!r}")
 
         if is_oem and warranty_flag:
-            log.warning("Parsing: INVALID_WARRANTY_OEM — scan='%s'", raw)
-            continue
+            raise ValueError(f"INVALID_WARRANTY_OEM: scan={raw!r}")
 
         if turnback_flag:
             damage_type = "Turnback"
@@ -971,7 +1010,6 @@ def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_da
             damage_type = "Repair" if repair_flag and not is_oem else "Replacement"
         damage_rule = resolve_damage_type(damage_type)
         force_avis_order = is_oem or bool(damage_rule and damage_rule.forces_avis_order)
-        damage_area = AREAS[area_code]
         # Claim status values must match allowed UI options.
         claim = "Listed" if claim_flag else "Missing"
 
@@ -992,8 +1030,13 @@ def parse_descriptions_to_manifest(descriptions: list[tuple[str, str]], email_da
         }
         mva_list.append(mva)
 
-    if missing_type_count > 0:
-        log.warning("Parsing: %d entries missing/empty Type value — using default location '%s'", missing_type_count, LOCATION)
+    if skipped_scans:
+        log.warning(
+            "Parsing: Skipped %d malformed scan(s); %d valid scan(s) retained. "
+            "Correct skipped scans in Orca and resubmit them.",
+            skipped_scans,
+            len(mva_list),
+        )
     log.info("Parsing: Manifest built — %d valid MVAs", len(mva_list))
     return manifest, mva_list
 
@@ -1624,7 +1667,23 @@ def _send_email(message: OutboundEmail) -> None:
 # ─── Pipeline Orchestrator ────────────────────────────────────────────────────
 
 
-def run_pipeline() -> int | None:
+def _explain_page_timeout(exc: BaseException) -> str | None:
+    """Return a plain-language message for a Playwright page timeout, else None."""
+    exc_type = type(exc)
+    if not (exc_type.__module__.startswith("playwright") and exc_type.__name__ == "TimeoutError"):
+        return None
+    url_match = re.search(r'navigating to "([^"]+)"', str(exc))
+    target = f" ({url_match.group(1)})" if url_match else ""
+    return (
+        f"The web page did not respond in time{target}. "
+        "Your FieldPO login has likely expired — log in to FieldPO in the browser, then run again."
+    )
+
+
+def run_pipeline(
+    after_batch: Callable[[date], int | None] | None = None,
+    processing_date: date | None = None,
+) -> int:
     """Execute the end-to-end pipeline with step-level error handling."""
     # Broad exception handling is intentional here to fail-fast by stage
     # while preserving a stable top-level orchestrator process.
@@ -1633,6 +1692,7 @@ def run_pipeline() -> int | None:
     log.info("GlassOrchestrator pipeline starting")
     log.info("=" * 60)
 
+    effective_processing_date = processing_date or date.today()
     processed_messages = 0
     while True:
         # Step 1: Input acquisition
@@ -1657,28 +1717,32 @@ def run_pipeline() -> int | None:
                 log.info("=" * 60)
                 log.info("GlassOrchestrator pipeline completed successfully")
                 log.info("=" * 60)
-            return
+            return 0
 
         # If input-acquisition stubs omit UID support, keep legacy single-payload behavior.
         is_uidless_payload = source_uid is None
 
         # Step 2: Parsing
         try:
-            manifest, mva_list = parse_descriptions_to_manifest(descriptions, email_date)
+            manifest, mva_list = parse_descriptions_to_manifest(
+                descriptions,
+                email_date,
+                processing_date=effective_processing_date,
+            )
         except Exception as exc:
             log.error("Parsing failed — %s", exc, exc_info=True)
-            return
+            return 1
 
         if not manifest:
-            log.info("Pipeline complete — no valid MVAs after parsing")
-            return
+            log.error("Parsing failed — email produced no valid MVAs")
+            return 1
 
         # Step 2b: Cycle-day tracking (local JSON state)
         try:
             apply_cycle_day_tracking(manifest, mva_list, email_date)
         except Exception as exc:
-            # Tracking should not block operational processing.
             log.error("Cycle tracking failed — %s", exc, exc_info=True)
+            return 1
 
         # Step 3: Worker
         try:
@@ -1686,24 +1750,28 @@ def run_pipeline() -> int | None:
         except subprocess.CalledProcessError as exc:
             log.error("Worker failed — non-zero exit code %d. "
                       "Pipeline ABORTED. No data will be persisted.", exc.returncode)
-            return
+            return 1
         except Exception as exc:
             log.error("Worker failed — %s. Pipeline ABORTED.", exc, exc_info=True)
-            return
+            return 1
 
         # Step 4: Validate worker output freshness
         try:
             validate_results_freshness(RESULTS_PATH)
         except RuntimeError as exc:
             log.error("Worker output validation failed — %s. Pipeline ABORTED.", exc)
-            return
+            return 1
 
         # Step 5: Merge
         try:
             df_merged = merge_manifest_with_results(manifest)
+            batch_date = datetime.strptime(
+                str(df_merged.iloc[0]["Inventory Date"]),
+                "%m/%d/%Y",
+            ).date()
         except Exception as exc:
             log.error("Merge failed — %s", exc, exc_info=True)
-            return
+            return 1
 
         # Step 6: Persist
         try:
@@ -1711,7 +1779,7 @@ def run_pipeline() -> int | None:
             log.info("Persistence: %d new row(s) written", len(df_new_rows))
         except Exception as exc:
             log.error("Persistence failed — %s", exc, exc_info=True)
-            return
+            return 1
 
         # Step 7: Notify when explicitly enabled
         if NOTIFICATIONS_ENABLED:
@@ -1721,18 +1789,34 @@ def run_pipeline() -> int | None:
                 notify_order_items(eligible_rows)
             except Exception as exc:
                 log.error("Notification failed — %s", exc, exc_info=True)
-                # Notification failure is non-fatal for data persistence; pipeline ends here
-                return
+                return 1
         else:
             log.info("Notification: Disabled by configuration")
 
-        # Step 8: Mark source email as read only after successful completion.
+        # Step 8: Complete date-scoped downstream work before acknowledging the email.
+        if after_batch is not None:
+            try:
+                callback_result = after_batch(batch_date)
+                if callback_result not in (None, 0):
+                    raise RuntimeError(f"downstream callback returned {callback_result}")
+            except Exception as exc:
+                explanation = _explain_page_timeout(exc)
+                log.error(
+                    "Downstream processing failed for Inventory Date %s — %s",
+                    batch_date.isoformat(),
+                    explanation or exc,
+                    exc_info=True,
+                )
+                return 1
+
+        # Step 9: Mark source email as read only after successful completion.
         if source_uid is not None:
             try:
                 _mark_message_seen(source_uid)
                 log.info("Input: Marked source email as read (uid=%s)", source_uid.decode(errors="ignore"))
             except Exception as exc:
-                log.warning("Input: Failed to mark source email as read — %s", exc)
+                log.error("Input: Failed to mark source email as read — %s", exc)
+                return 1
 
         processed_messages += 1
         if is_uidless_payload:
@@ -1740,10 +1824,10 @@ def run_pipeline() -> int | None:
             log.info("=" * 60)
             log.info("GlassOrchestrator pipeline completed successfully")
             log.info("=" * 60)
-            return
+            return 0
 
 
 # ─── Entry Point ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    sys.exit(run_pipeline() or 0)
+    sys.exit(run_pipeline())

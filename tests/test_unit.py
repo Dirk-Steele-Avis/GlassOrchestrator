@@ -10,7 +10,8 @@ UT-7: Location Extraction from Type Column
 
 import re
 import json
-from datetime import datetime
+from datetime import date, datetime
+from unittest.mock import Mock
 
 import pandas as pd
 import pytest
@@ -22,7 +23,6 @@ from GlassOrchestrator import (
     _load_runtime_config,
     _extract_body,
     _extract_internaldate_from_fetch_response,
-    _extract_location_from_type,
     _parse_email_datetime,
     _parse_html_descriptions,
     _validate_email_credentials,
@@ -33,6 +33,49 @@ from GlassOrchestrator import (
 
 
 # ─── UT-1: Suffix Regex Accuracy ─────────────────────────────────────────────
+
+
+class TestUnreadEmailSelection:
+    def test_fetches_newest_numeric_uid(self, monkeypatch):
+        mail = Mock()
+        mail.uid.return_value = ("OK", [b"99 101 100"])
+        message = Mock()
+        sent_at = datetime(2026, 10, 11)
+        descriptions = [("1011", "56518347WS")]
+        fetch_message = Mock(return_value=(message, sent_at))
+        extract_descriptions = Mock(return_value=(descriptions, sent_at))
+        monkeypatch.setattr(GlassOrchestrator, "_connect_to_inbox", lambda: mail)
+        monkeypatch.setattr(GlassOrchestrator, "_fetch_message_by_id", fetch_message)
+        monkeypatch.setattr(
+            GlassOrchestrator, "_extract_descriptions_from_message", extract_descriptions
+        )
+
+        assert GlassOrchestrator.fetch_input_descriptions() == (
+            descriptions, sent_at, b"101"
+        )
+        fetch_message.assert_called_once_with(mail, b"101")
+        extract_descriptions.assert_called_once_with(message, fallback_sent_at=sent_at)
+        mail.logout.assert_called_once_with()
+        assert [call.args[0] for call in mail.uid.call_args_list] == ["search"]
+
+    def test_newest_fetch_failure_does_not_try_older_email(self, monkeypatch):
+        mail = Mock()
+        mail.uid.return_value = ("OK", [b"99 101"])
+        fetch_message = Mock(side_effect=RuntimeError("Failed to fetch message uid b'101'"))
+        extract_descriptions = Mock()
+        monkeypatch.setattr(GlassOrchestrator, "_connect_to_inbox", lambda: mail)
+        monkeypatch.setattr(GlassOrchestrator, "_fetch_message_by_id", fetch_message)
+        monkeypatch.setattr(
+            GlassOrchestrator, "_extract_descriptions_from_message", extract_descriptions
+        )
+
+        with pytest.raises(RuntimeError, match="Failed to fetch message uid"):
+            GlassOrchestrator.fetch_input_descriptions()
+
+        fetch_message.assert_called_once_with(mail, b"101")
+        extract_descriptions.assert_not_called()
+        mail.logout.assert_called_once_with()
+        assert [call.args[0] for call in mail.uid.call_args_list] == ["search"]
 
 
 class TestUT1_SuffixRegex:
@@ -66,6 +109,30 @@ class TestUT1_SuffixRegex:
         assert m.group(2) == "WS"
         assert m.group(3) == ""
         assert m.group(4) == "c"
+
+    def test_temporary_orca_date_correction_matches_exact_email_batch(self):
+        descriptions = [
+            ("1009", f"{mva}WS")
+            for mva in sorted(GlassOrchestrator.TEMPORARY_ORCA_DATE_CORRECTION_MVAS)
+        ]
+
+        manifest, mva_list = parse_descriptions_to_manifest(
+            descriptions,
+            datetime(2026, 10, 9),
+            processing_date=date(2026, 10, 9),
+        )
+
+        assert set(mva_list) == GlassOrchestrator.TEMPORARY_ORCA_DATE_CORRECTION_MVAS
+        assert {entry["Inventory Date"] for entry in manifest.values()} == {"10/10/2026"}
+
+    def test_temporary_orca_date_correction_does_not_match_other_batch(self):
+        manifest, _ = parse_descriptions_to_manifest(
+            [("1009", "56518347WS")],
+            datetime(2026, 10, 9),
+            processing_date=date(2026, 10, 9),
+        )
+
+        assert manifest["56518347"]["Inventory Date"] == "10/09/2026"
 
     def test_warranty_suffix(self):
         """59340120WSwar → warranty flag captured in group 3"""
@@ -108,6 +175,74 @@ class TestUT1_SuffixRegex:
         assert manifest["61147446"]["Action"] == "Turnback"
         assert manifest["61147446"]["_FORCE_AVIS_ORDER"] is True
 
+    @pytest.mark.parametrize("delimiter_at_top", [True, False])
+    def test_combined_email_allows_empty_location(self, delimiter_at_top):
+        descriptions = [
+            ("1004", "61147446wstbk"),
+            ("1004", "60092491ws"),
+        ]
+        descriptions.insert(0 if delimiter_at_top else len(descriptions), ("1004", " Break "))
+
+        manifest, mva_list = parse_descriptions_to_manifest(
+            descriptions, datetime(2026, 10, 4)
+        )
+
+        assert mva_list == ["61147446", "60092491"]
+        assert set(manifest) == set(mva_list)
+        for entry in manifest.values():
+            assert entry["Location"] == ("APO" if delimiter_at_top else "BB")
+            assert entry["Inventory Date"] == "10/04/2026"
+
+    @pytest.mark.parametrize("descriptions", [[], [("1004", "break")]])
+    def test_email_without_scans_is_rejected(self, descriptions):
+        with pytest.raises(ValueError, match="must contain at least one scan"):
+            parse_descriptions_to_manifest(descriptions, datetime(2026, 10, 4))
+
+    @pytest.mark.parametrize("delimiter_at_top", [True, False])
+    def test_edge_break_skips_malformed_scan(self, delimiter_at_top, caplog):
+        descriptions = [("1004", "not-a-scan")]
+        descriptions.insert(0 if delimiter_at_top else len(descriptions), ("1004", "break"))
+
+        assert parse_descriptions_to_manifest(
+            descriptions, datetime(2026, 10, 4)
+        ) == ({}, [])
+        assert "MALFORMED_SCAN: scan='not-a-scan'; skipped" in caplog.text
+
+    @pytest.mark.parametrize("delimiter_at_top", [True, False])
+    def test_edge_break_rejects_mixed_dates(self, delimiter_at_top):
+        descriptions = [("1004", "60092491ws")]
+        descriptions.insert(0 if delimiter_at_top else len(descriptions), ("1005", "break"))
+
+        with pytest.raises(ValueError, match="requires one shared MDD or MMDD date"):
+            parse_descriptions_to_manifest(descriptions, datetime(2026, 10, 4))
+
+    def test_email_without_break_routes_all_scans_to_apo(self):
+        descriptions = [
+            ("924", "61751340src"),
+            ("924", "61147446wsctbk"),
+        ]
+
+        manifest, mva_list = parse_descriptions_to_manifest(
+            descriptions, datetime(2026, 9, 24)
+        )
+
+        assert mva_list == ["61751340", "61147446"]
+        assert manifest["61751340"]["Location"] == "APO"
+        assert manifest["61147446"]["Location"] == "APO"
+        assert manifest["61147446"]["Inventory Date"] == "09/24/2026"
+
+    def test_email_without_break_rejects_mixed_dates(self):
+        descriptions = [
+            ("923", "61147446wstbk"),
+            ("924", "60092491ws"),
+        ]
+
+        with pytest.raises(
+            ValueError,
+            match="Orca email requires one shared MDD or MMDD date",
+        ):
+            parse_descriptions_to_manifest(descriptions, datetime(2026, 9, 24))
+
     def test_combined_email_rejects_multiple_break_delimiters(self):
         descriptions = [
             ("0918", "02000521wstbk"),
@@ -120,7 +255,7 @@ class TestUT1_SuffixRegex:
         with pytest.raises(ValueError, match="exactly one 'break' delimiter"):
             parse_descriptions_to_manifest(descriptions, datetime(2026, 9, 18))
 
-    def test_combined_email_rejects_non_mmdd_type(self):
+    def test_combined_email_rejects_type_with_location(self):
         descriptions = [
             ("0918bb", "02000521wstbk"),
             ("0918bb", "break"),
@@ -129,29 +264,26 @@ class TestUT1_SuffixRegex:
 
         with pytest.raises(
             ValueError,
-            match=r"row 1 has Type='0918bb'; expected MMDD format",
+            match=r"row 1 has Type='0918bb'; expected MDD or MMDD date without location",
         ):
             parse_descriptions_to_manifest(descriptions, datetime(2026, 9, 18))
 
-    def test_combined_email_temporarily_accepts_0922bb_type(self):
+    def test_email_without_break_rejects_type_with_location(self):
         descriptions = [
-            ("0922bb", "02000521wstbk"),
-            ("0922bb", "break"),
-            ("0922bb", "61147446wstbk"),
+            ("0922APO", "02000521wstbk"),
+            ("0922APO", "61147446wstbk"),
         ]
 
-        manifest, mva_list = parse_descriptions_to_manifest(
-            descriptions, datetime(2026, 9, 22)
-        )
-
-        assert mva_list == ["02000521", "61147446"]
-        assert manifest["02000521"]["Location"] == "BB"
-        assert manifest["61147446"]["Location"] == "APO"
+        with pytest.raises(
+            ValueError,
+            match=r"row 1 has Type='0922APO'; expected MDD or MMDD date without location",
+        ):
+            parse_descriptions_to_manifest(descriptions, datetime(2026, 9, 22))
 
     def test_claim_then_turnback_suffix_is_normalized(self):
         """WSctbk is normalized to turnback+listed instead of rejected."""
         manifest, mva_list = parse_descriptions_to_manifest(
-            [("0910APO", "62155822WSctbk")], datetime(2026, 9, 10)
+            [("0910", "62155822WSctbk")], datetime(2026, 9, 10)
         )
         assert mva_list == ["62155822"]
         assert manifest["62155822"]["Action"] == "Turnback"
@@ -160,7 +292,7 @@ class TestUT1_SuffixRegex:
     def test_claim_then_repair_suffix_is_normalized(self):
         """WScr is normalized to repair+listed instead of rejected."""
         manifest, mva_list = parse_descriptions_to_manifest(
-            [("0910APO", "59787534WScr")], datetime(2026, 9, 10)
+            [("0910", "59787534WScr")], datetime(2026, 9, 10)
         )
         assert mva_list == ["59787534"]
         assert manifest["59787534"]["Action"] == "Repair"
@@ -169,7 +301,7 @@ class TestUT1_SuffixRegex:
     def test_lowercase_scan_matches_case_insensitively(self):
         """59193750wsc → parser accepts scanner-lowercase area/suffix values."""
         manifest, mva_list = parse_descriptions_to_manifest(
-            [("0305APO", "59193750wsc")], datetime(2026, 3, 5)
+            [("0305", "59193750wsc")], datetime(2026, 3, 5)
         )
         assert manifest["59193750"]["Action"] == "Replacement"
         assert manifest["59193750"]["Area"] == "Windshield"
@@ -179,7 +311,7 @@ class TestUT1_SuffixRegex:
     def test_spaced_lowercase_scan_is_normalized(self):
         """58898324 wsc → parser accepts scanner spacing before lowercase suffix values."""
         manifest, mva_list = parse_descriptions_to_manifest(
-            [("0907APO", "58898324 wsc")], datetime(2026, 9, 7)
+            [("0907", "58898324 wsc")], datetime(2026, 9, 7)
         )
         assert manifest["58898324"]["Action"] == "Replacement"
         assert manifest["58898324"]["Area"] == "Windshield"
@@ -189,7 +321,7 @@ class TestUT1_SuffixRegex:
     def test_spaced_repair_and_claim_scan_is_normalized(self):
         """59409641 wsrc → parser accepts scanner spacing before lowercase repair/claim suffix values."""
         manifest, mva_list = parse_descriptions_to_manifest(
-            [("0907APO", "59409641 wsrc")], datetime(2026, 9, 7)
+            [("0907", "59409641 wsrc")], datetime(2026, 9, 7)
         )
         assert manifest["59409641"]["Action"] == "Repair"
         assert manifest["59409641"]["Area"] == "Windshield"
@@ -199,7 +331,7 @@ class TestUT1_SuffixRegex:
     @pytest.mark.parametrize("camera_code", ["cam", "CAM", "Cam", "cAm"])
     def test_camera_category_has_no_claim_indicator(self, camera_code):
         manifest, mva_list = parse_descriptions_to_manifest(
-            [("0904APO", f"62155822{camera_code}")], datetime(2026, 9, 4)
+            [("0904", f"62155822{camera_code}")], datetime(2026, 9, 4)
         )
         assert manifest["62155822"]["Action"] == "Replacement"
         assert manifest["62155822"]["Area"] == "Camera"
@@ -224,7 +356,7 @@ class TestUT1_SuffixRegex:
 
     def test_oem_routes_to_avis_without_changing_area(self):
         manifest, _ = parse_descriptions_to_manifest(
-            [("0305APO", "59340120LFDc OEM")], datetime(2026, 3, 5)
+            [("0305", "59340120LFDc OEM")], datetime(2026, 3, 5)
         )
         row = manifest["59340120"]
         assert row["Action"] == "Replacement"
@@ -234,7 +366,7 @@ class TestUT1_SuffixRegex:
 
     def test_oem_repair_normalizes_to_replacement(self, caplog):
         manifest, _ = parse_descriptions_to_manifest(
-            [("0305APO", "59340120WSrc OEM")], datetime(2026, 3, 5)
+            [("0305", "59340120WSrc OEM")], datetime(2026, 3, 5)
         )
         row = manifest["59340120"]
         assert row["Action"] == "Replacement"
@@ -256,7 +388,7 @@ class TestUT1_SuffixRegex:
     def test_phase2_mapping_plain(self):
         """End-to-end: 59340120WS → Replacement, WS, Missing"""
         manifest, mva_list = parse_descriptions_to_manifest(
-            [("0305APO", "59340120WS")], datetime(2026, 3, 5)
+            [("0305", "59340120WS")], datetime(2026, 3, 5)
         )
         assert "59340120" in manifest
         assert manifest["59340120"]["Action"] == "Replacement"
@@ -267,35 +399,35 @@ class TestUT1_SuffixRegex:
 
     def test_phase2_mapping_repair(self):
         """59340120WSr → Repair, Windshield, Missing"""
-        manifest, _ = parse_descriptions_to_manifest([("0305APO", "59340120WSr")], datetime(2026, 3, 5))
+        manifest, _ = parse_descriptions_to_manifest([("0305", "59340120WSr")], datetime(2026, 3, 5))
         assert manifest["59340120"]["Action"] == "Repair"
         assert manifest["59340120"]["Area"] == "Windshield"
         assert manifest["59340120"]["Claim#"] == "Missing"
 
     def test_phase2_mapping_claim(self):
         """59340120WSc → Replacement, Windshield, Listed"""
-        manifest, _ = parse_descriptions_to_manifest([("0305APO", "59340120WSc")], datetime(2026, 3, 5))
+        manifest, _ = parse_descriptions_to_manifest([("0305", "59340120WSc")], datetime(2026, 3, 5))
         assert manifest["59340120"]["Action"] == "Replacement"
         assert manifest["59340120"]["Area"] == "Windshield"
         assert manifest["59340120"]["Claim#"] == "Listed"
 
     def test_phase2_mapping_warranty(self):
         """59340120WSwar → Warranty, Windshield, Missing"""
-        manifest, _ = parse_descriptions_to_manifest([("0305APO", "59340120WSwar")], datetime(2026, 3, 5))
+        manifest, _ = parse_descriptions_to_manifest([("0305", "59340120WSwar")], datetime(2026, 3, 5))
         assert manifest["59340120"]["Action"] == "Warranty"
         assert manifest["59340120"]["Area"] == "Windshield"
         assert manifest["59340120"]["Claim#"] == "Missing"
 
     def test_phase2_mapping_warranty_claim(self):
         """59340120WSwarc → Warranty, Windshield, Listed"""
-        manifest, _ = parse_descriptions_to_manifest([("0305APO", "59340120WSwarc")], datetime(2026, 3, 5))
+        manifest, _ = parse_descriptions_to_manifest([("0305", "59340120WSwarc")], datetime(2026, 3, 5))
         assert manifest["59340120"]["Action"] == "Warranty"
         assert manifest["59340120"]["Area"] == "Windshield"
         assert manifest["59340120"]["Claim#"] == "Listed"
 
     def test_phase2_mapping_turnback(self):
         """59340120WStbk → Turnback, Windshield, Missing"""
-        manifest, _ = parse_descriptions_to_manifest([("0305APO", "59340120WStbk")], datetime(2026, 3, 5))
+        manifest, _ = parse_descriptions_to_manifest([("0305", "59340120WStbk")], datetime(2026, 3, 5))
         assert manifest["59340120"]["Action"] == "Turnback"
         assert manifest["59340120"]["Area"] == "Windshield"
         assert manifest["59340120"]["Claim#"] == "Missing"
@@ -303,7 +435,7 @@ class TestUT1_SuffixRegex:
 
     def test_phase2_mapping_turnback_claim(self):
         """59340120WStbkc → Turnback, Windshield, Listed"""
-        manifest, _ = parse_descriptions_to_manifest([("0305APO", "59340120WStbkc")], datetime(2026, 3, 5))
+        manifest, _ = parse_descriptions_to_manifest([("0305", "59340120WStbkc")], datetime(2026, 3, 5))
         assert manifest["59340120"]["Action"] == "Turnback"
         assert manifest["59340120"]["Area"] == "Windshield"
         assert manifest["59340120"]["Claim#"] == "Listed"
@@ -359,7 +491,7 @@ class TestEmailCredentialValidation:
 
     def test_phase2_mapping_both(self):
         """59340120WSrc → Repair, Windshield, Listed"""
-        manifest, _ = parse_descriptions_to_manifest([("0305APO", "59340120WSrc")], datetime(2026, 3, 5))
+        manifest, _ = parse_descriptions_to_manifest([("0305", "59340120WSrc")], datetime(2026, 3, 5))
         assert manifest["59340120"]["Action"] == "Repair"
         assert manifest["59340120"]["Area"] == "Windshield"
         assert manifest["59340120"]["Claim#"] == "Listed"
@@ -367,10 +499,10 @@ class TestEmailCredentialValidation:
     def test_phase2_all_four_variations(self):
         """Process all four flag combinations in one batch."""
         descriptions = [
-            ("0305APO", "59340120WS"),    # Replacement, Windshield, Missing
-            ("0305APO", "59340121WSr"),   # Repair, Windshield, Missing (WS only)
-            ("0305APO", "59340122BWc"),   # Replacement, Back Window, Listed
-            ("0305APO", "59340123WSrc"),  # Repair, Windshield, Listed
+            ("0305", "59340120WS"),    # Replacement, Windshield, Missing
+            ("0305", "59340121WSr"),   # Repair, Windshield, Missing (WS only)
+            ("0305", "59340122BWc"),   # Replacement, Back Window, Listed
+            ("0305", "59340123WSrc"),  # Repair, Windshield, Listed
         ]
         manifest, mva_list = parse_descriptions_to_manifest(descriptions, datetime(2026, 3, 5))
         assert len(manifest) == 4
@@ -393,37 +525,62 @@ class TestEmailCredentialValidation:
 
 
 class TestUT1b_ScanErrorCodes:
-    """Error scans are logged and excluded from processing.
-    The manifest must NOT contain any entry for an errored scan."""
+    """Malformed scans are skipped; invalid damage combinations remain fatal."""
 
-    def test_ambiguous_location(self):
-        """Unknown area code → AMBIGUOUS_LOCATION logged, scan excluded."""
+    @pytest.mark.parametrize("invalid_scan", ["58004052wcr", "garbage", "59340120ZZ"])
+    def test_malformed_scan_is_logged_and_skipped(self, invalid_scan, caplog):
         manifest, mva_list = parse_descriptions_to_manifest(
-            [("0305APO", "59340120ZZ")], datetime(2026, 3, 5)
+            [
+                ("1015", "59340120WS"),
+                ("1015", invalid_scan),
+                ("1015", "break"),
+                ("1015", "59340121WSr"),
+            ],
+            datetime(2026, 10, 15),
         )
-        assert manifest == {}
-        assert mva_list == []
+
+        assert mva_list == ["59340120", "59340121"]
+        assert set(manifest) == set(mva_list)
+        assert manifest["59340120"]["Location"] == "BB"
+        assert manifest["59340121"]["Location"] == "APO"
+        assert manifest["59340121"]["Action"] == "Repair"
+        assert f"MALFORMED_SCAN: scan={invalid_scan!r}; skipped" in caplog.text
+        assert "Skipped 1 malformed scan(s); 2 valid scan(s) retained" in caplog.text
+        assert any(record.levelname == "WARNING" for record in caplog.records)
 
     def test_invalid_repair_on_non_windshield(self):
-        """Repair flag on non-repair-eligible area → INVALID_REPAIR logged, scan excluded."""
-        manifest, mva_list = parse_descriptions_to_manifest(
-            [("0305APO", "59340120BWr")], datetime(2026, 3, 5)
-        )
-        assert manifest == {}
-        assert mva_list == []
+        with pytest.raises(ValueError, match="INVALID_REPAIR"):
+            parse_descriptions_to_manifest(
+                [("0305", "59340120BWr")], datetime(2026, 3, 5)
+            )
 
-    def test_malformed_scan(self):
-        """Unparseable scan string → MALFORMED_SCAN logged, scan excluded."""
+    def test_bare_warranty_scan_is_valid_damage_type(self):
         manifest, mva_list = parse_descriptions_to_manifest(
-            [("0305APO", "garbage")], datetime(2026, 3, 5)
+            [("0925", "59340120WS"), ("0925", "59187380war")],
+            datetime(2026, 9, 24),
+            processing_date=date(2026, 9, 24),
         )
-        assert manifest == {}
-        assert mva_list == []
+
+        assert mva_list == ["59340120", "59187380"]
+        assert manifest["59187380"]["Action"] == "Warranty"
+        assert manifest["59187380"]["Area"] == "Warranty"
+        assert manifest["59187380"]["Claim#"] == "Missing"
+
+    def test_bare_warranty_claim_scan_is_listed(self):
+        manifest, _ = parse_descriptions_to_manifest(
+            [("0925", "59187380warc")],
+            datetime(2026, 9, 24),
+            processing_date=date(2026, 9, 24),
+        )
+
+        assert manifest["59187380"]["Action"] == "Warranty"
+        assert manifest["59187380"]["Area"] == "Warranty"
+        assert manifest["59187380"]["Claim#"] == "Listed"
 
     def test_spec_example_wsrc(self):
         """59193750WSrc → Repair, Windshield, Listed (spec example 1)."""
         manifest, mva_list = parse_descriptions_to_manifest(
-            [("0305APO", "59193750WSrc")], datetime(2026, 3, 5)
+            [("0305", "59193750WSrc")], datetime(2026, 3, 5)
         )
         assert manifest["59193750"]["Action"] == "Repair"
         assert manifest["59193750"]["Area"] == "Windshield"
@@ -433,7 +590,7 @@ class TestUT1b_ScanErrorCodes:
     def test_spec_example_lfdc(self):
         """59536396LFDc → Replacement, Left Front Door, Listed."""
         manifest, mva_list = parse_descriptions_to_manifest(
-            [("0305APO", "59536396LFDc")], datetime(2026, 3, 5)
+            [("0305", "59536396LFDc")], datetime(2026, 3, 5)
         )
         assert manifest["59536396"]["Action"] == "Replacement"
         assert manifest["59536396"]["Area"] == "Left Front Door"
@@ -443,7 +600,7 @@ class TestUT1b_ScanErrorCodes:
     def test_spec_example_bw(self):
         """61066902BW → Replacement, Back Window, Missing (spec example 3)."""
         manifest, mva_list = parse_descriptions_to_manifest(
-            [("0305APO", "61066902BW")], datetime(2026, 3, 5)
+            [("0305", "61066902BW")], datetime(2026, 3, 5)
         )
         assert manifest["61066902"]["Action"] == "Replacement"
         assert manifest["61066902"]["Area"] == "Back Window"
@@ -453,7 +610,7 @@ class TestUT1b_ScanErrorCodes:
     def test_rfw_area_label(self):
         """59400084RFWc → Replacement, Right Front Window, Listed."""
         manifest, mva_list = parse_descriptions_to_manifest(
-            [("0427APO", "59400084RFWc")], datetime(2026, 4, 27)
+            [("0427", "59400084RFWc")], datetime(2026, 4, 27)
         )
         assert manifest["59400084"]["Action"] == "Replacement"
         assert manifest["59400084"]["Area"] == "Right Front Window"
@@ -462,7 +619,7 @@ class TestUT1b_ScanErrorCodes:
 
     def test_rvm_area_label(self):
         manifest, mva_list = parse_descriptions_to_manifest(
-            [("0427APO", "59400085RVM")], datetime(2026, 4, 27)
+            [("0427", "59400085RVM")], datetime(2026, 4, 27)
         )
         assert manifest["59400085"]["Action"] == "Replacement"
         assert manifest["59400085"]["Area"] == "Rear View Mirror"
@@ -519,10 +676,10 @@ class TestUT2_HTMLExtraction:
         html = """
         <table id="rowData">
             <tr><th>Type</th><th>Description</th></tr>
-            <tr><td>0830APO</td><td>62155855WS OEM</td></tr>
+            <tr><td>0830</td><td>62155855WS OEM</td></tr>
         </table>
         """
-        assert _parse_html_descriptions(html) == [("0830APO", "62155855WS OEM")]
+        assert _parse_html_descriptions(html) == [("0830", "62155855WS OEM")]
 
     def test_returns_empty_on_no_table(self):
         result = _parse_html_descriptions("<html><body><p>No table</p></body></html>")
@@ -565,23 +722,23 @@ class TestUT2_HTMLExtraction:
         html = """
         <table id="rowData">
           <tr><th>Type</th><th>Name</th><th>Description</th></tr>
-          <tr><td>0427APO</td><td>56642073WSrc 60425330WSrc</td><td></td></tr>
+          <tr><td>0427</td><td>56642073WSrc 60425330WSrc</td><td></td></tr>
         </table>
         """
         result = _parse_html_descriptions(html)
-        assert ("0427APO", "56642073WSrc") in result
-        assert ("0427APO", "60425330WSrc") in result
+        assert ("0427", "56642073WSrc") in result
+        assert ("0427", "60425330WSrc") in result
 
     def test_description_preferred_over_name(self):
         """When Description has content it is preferred over Name."""
         html = """
         <table>
           <tr><th>Type</th><th>Name</th><th>Description</th></tr>
-          <tr><td>0305APO</td><td>NameMVA</td><td>59340120WSc</td></tr>
+          <tr><td>0305</td><td>NameMVA</td><td>59340120WSc</td></tr>
         </table>
         """
         result = _parse_html_descriptions(html)
-        assert result == [("0305APO", "59340120WSc")]
+        assert result == [("0305", "59340120WSc")]
 
         def test_type_column_recovery_when_name_and_description_empty(self):
                 """Recover scans when malformed export places all data in Type column."""
@@ -643,63 +800,48 @@ class TestUT3_Idempotency:
 
 
 class TestUT4_Sanitization:
-    """Ensure malformed entries do not reach the worker MVA list.
-    Malformed scans are logged and excluded from both the manifest and mva_list."""
+    """Ensure malformed entries are logged and excluded from the batch."""
 
-    def test_too_short(self):
-        manifest, mva_list = parse_descriptions_to_manifest([("0305APO", "12345")], datetime(2026, 3, 5))
-        assert manifest == {}
-        assert mva_list == []
-
-    def test_no_digits(self):
-        manifest, mva_list = parse_descriptions_to_manifest([("0305APO", "abcdefgh")], datetime(2026, 3, 5))
-        assert manifest == {}
-        assert mva_list == []
-
-    def test_too_long(self):
-        """9 numeric digits with no valid area code — MALFORMED_SCAN."""
-        manifest, mva_list = parse_descriptions_to_manifest([("0305APO", "123456789")], datetime(2026, 3, 5))
-        assert manifest == {}
-        assert mva_list == []
+    @pytest.mark.parametrize(
+        "scan", ["12345", "abcdefgh", "123456789", "5934012!", "   ", "59340120x"]
+    )
+    def test_malformed_scan_produces_no_rows(self, scan, caplog):
+        assert parse_descriptions_to_manifest(
+            [("0305", scan)], datetime(2026, 3, 5)
+        ) == ({}, [])
+        assert f"MALFORMED_SCAN: scan={scan.strip()!r}; skipped" in caplog.text
 
     def test_mixed_valid_and_invalid(self):
-        """Valid scans with area codes reach mva_list; invalid scans are silently excluded."""
+        """Invalid scans do not discard valid sibling scans."""
         descriptions = [
-            ("0305APO", "59340120WS"),   # valid
-            ("0305APO", "12345"),          # too short → excluded
-            ("0305APO", "abcdefgh"),       # no digits → excluded
-            ("0305APO", "59340121WSr"),   # valid
+            ("0305", "59340120WS"),   # valid
+            ("0305", "12345"),          # too short → excluded
+            ("0305", "abcdefgh"),       # no digits → excluded
+            ("0305", "59340121WSr"),   # valid
         ]
-        manifest, mva_list = parse_descriptions_to_manifest(descriptions, datetime(2026, 3, 5))
-        assert len(manifest) == 2   # only valid entries
-        assert set(mva_list) == {"59340120", "59340121"}
-
-    def test_special_characters(self):
-        manifest, mva_list = parse_descriptions_to_manifest([("0305APO", "5934012!")], datetime(2026, 3, 5))
-        assert manifest == {}
-        assert mva_list == []
-
-    def test_whitespace_only(self):
-        manifest, mva_list = parse_descriptions_to_manifest([("0305APO", "   ")], datetime(2026, 3, 5))
-        assert manifest == {}
-        assert mva_list == []
-
-    def test_invalid_suffix(self):
-        """Lowercase 'x' is not a valid area code — MALFORMED_SCAN, excluded."""
-        manifest, mva_list = parse_descriptions_to_manifest([("0305APO", "59340120x")], datetime(2026, 3, 5))
-        assert manifest == {}
-        assert mva_list == []
+        manifest, mva_list = parse_descriptions_to_manifest(
+            descriptions, datetime(2026, 3, 5)
+        )
+        assert mva_list == ["59340120", "59340121"]
+        assert set(manifest) == set(mva_list)
 
     def test_lowercase_directional_area_is_accepted(self):
         """Directional codes remain case-insensitive."""
         manifest, mva_list = parse_descriptions_to_manifest(
-            [("0505apo", "51085661lfd")], datetime(2026, 5, 5)
+            [("0505", "51085661lfd")], datetime(2026, 5, 5)
         )
         assert manifest["51085661"]["Action"] == "Replacement"
         assert manifest["51085661"]["Area"] == "Left Front Door"
         assert manifest["51085661"]["Location"] == "APO"
         assert manifest["51085661"]["Claim#"] == "Missing"
         assert mva_list == ["51085661"]
+
+    def test_temporary_bk_typo_maps_exact_scan_to_bw(self):
+        manifest, _ = parse_descriptions_to_manifest(
+            [("0305", "60687185bk")], datetime(2026, 3, 5)
+        )
+        assert manifest["60687185"]["Action"] == "Replacement"
+        assert manifest["60687185"]["Area"] == "Back Window"
 
     @pytest.mark.parametrize(
         "legacy_code,expected_area",
@@ -715,7 +857,7 @@ class TestUT4_Sanitization:
     )
     def test_legacy_orientation_first_area_is_normalized(self, legacy_code, expected_area):
         manifest, mva_list = parse_descriptions_to_manifest(
-            [("0505APO", f"51085661{legacy_code}")], datetime(2026, 5, 5)
+            [("0505", f"51085661{legacy_code}")], datetime(2026, 5, 5)
         )
         assert manifest["51085661"]["Area"] == expected_area
         assert mva_list == ["51085661"]
@@ -896,85 +1038,55 @@ class TestUT6_NotificationPayload:
         assert "60853262" in sent_messages[0].html_body
 
 
-# ─── UT-7: Location Extraction from Type Column ─────────────────────────────
-
-
-class TestUT7_LocationExtraction:
-    """Verify location suffix extraction from Type column (e.g., '0420APO' → 'APO')."""
-
-    def test_apo_suffix(self):
-        """Type column '0420APO' → Location 'APO'."""
-        assert _extract_location_from_type("0420APO") == "APO"
-
-    def test_bb_suffix(self):
-        """Type column '0420BB' → Location 'BB'."""
-        assert _extract_location_from_type("0420BB") == "BB"
-
-    def test_lowercase_suffix_normalized(self):
-        """Type column '0420apo' → Location 'APO' (case-insensitive)."""
-        assert _extract_location_from_type("0420apo") == "APO"
-
-    def test_mixed_case_bb(self):
-        """Type column '0420Bb' → Location 'BB'."""
-        assert _extract_location_from_type("0420Bb") == "BB"
-
-    def test_no_suffix_uses_default(self):
-        """Type column '0420' (no suffix) → falls back to default location."""
-        result = _extract_location_from_type("0420")
-        # Should return the config default location
-        assert result == "APO"
-
-    def test_empty_string_uses_default(self):
-        """Empty Type column → falls back to default location."""
-        result = _extract_location_from_type("")
-        assert result == "APO"
-
-    def test_none_value_uses_default(self):
-        """None Type column → falls back to default location."""
-        result = _extract_location_from_type(None)
-        assert result == "APO"
-
-    def test_whitespace_trimmed(self):
-        """Type column ' 0420APO ' → Location 'APO' (whitespace trimmed)."""
-        assert _extract_location_from_type(" 0420APO ") == "APO"
-
-    def test_unknown_suffix_uses_default(self):
-        """Type column '0420XYZ' (unknown suffix) → falls back to default."""
-        result = _extract_location_from_type("0420XYZ")
-        assert result == "APO"
-
-    def test_manifest_uses_extracted_location(self):
-        """parse_descriptions_to_manifest correctly extracts location from Type."""
-        manifest, _ = parse_descriptions_to_manifest(
-            [("0305BB", "59340120WS")], datetime(2026, 3, 5)
-        )
-        assert manifest["59340120"]["Location"] == "BB"
-
+class TestUT7_TypeDate:
     def test_manifest_uses_type_mmdd_for_inventory_date(self):
-        """Type '0502APO' should drive Inventory Date to 05/02/current year."""
+        """Type '0502' should drive Inventory Date to 05/02/current year."""
         manifest, _ = parse_descriptions_to_manifest(
-            [("0502APO", "59340120WS")], datetime(2026, 5, 1)
+            [("0502", "59340120WS")], datetime(2026, 5, 1)
         )
         assert manifest["59340120"]["Inventory Date"] == "05/02/2026"
         assert manifest["59340120"]["Original Date"] == "05/02/2026"
 
-    def test_manifest_type_invalid_date_falls_back_to_email_date(self):
-        """Invalid Type MMDD (e.g. 0230) should fall back to email Date header day."""
-        manifest, _ = parse_descriptions_to_manifest(
-            [("0230APO", "59340120WS")], datetime(2026, 5, 1)
-        )
-        assert manifest["59340120"]["Inventory Date"] == "05/01/2026"
+    def test_manifest_type_invalid_date_is_rejected(self):
+        with pytest.raises(ValueError, match="must equal processing date"):
+            parse_descriptions_to_manifest(
+                [("0230", "59340120WS")], datetime(2026, 2, 28)
+            )
 
-    def test_manifest_type_slash_date_is_rejected_and_falls_back(self):
-        """Slash format is invalid; parser should fall back to email Date header day."""
+    def test_manifest_accepts_next_date(self):
         manifest, _ = parse_descriptions_to_manifest(
-            [("05/02APO", "59340120WS")], datetime(2026, 5, 1)
+            [("0925", "59340120WS")],
+            datetime(2026, 9, 24),
+            processing_date=date(2026, 9, 24),
         )
-        assert manifest["59340120"]["Inventory Date"] == "05/01/2026"
+        assert manifest["59340120"]["Inventory Date"] == "09/25/2026"
 
-    def test_manifest_type_letter_o_in_date_is_rejected_and_falls_back(self):
-        """Strict MMDD requires digits; letter O typo should fall back to email date."""
+    def test_manifest_accepts_new_year_rollover(self):
         manifest, _ = parse_descriptions_to_manifest(
-            [("05O2APO", "59340120WS")], datetime(2026, 5, 1)
+            [("0101", "59340120WS")],
+            datetime(2026, 12, 31),
+            processing_date=date(2026, 12, 31),
         )
-        assert manifest["59340120"]["Inventory Date"] == "05/01/2026"
+        assert manifest["59340120"]["Inventory Date"] == "01/01/2027"
+
+    def test_manifest_rejects_date_beyond_tomorrow(self):
+        with pytest.raises(ValueError, match="must equal processing date"):
+            parse_descriptions_to_manifest(
+                [("0926", "59340120WS")],
+                datetime(2026, 9, 24),
+                processing_date=date(2026, 9, 24),
+            )
+
+    def test_manifest_type_slash_date_is_rejected(self):
+        """Slash format is invalid and aborts parsing."""
+        with pytest.raises(ValueError, match="expected MDD or MMDD date without location"):
+            parse_descriptions_to_manifest(
+                [("05/02", "59340120WS")], datetime(2026, 5, 1)
+            )
+
+    def test_manifest_type_letter_o_in_date_is_rejected(self):
+        """Strict MMDD requires digits; a letter O typo aborts parsing."""
+        with pytest.raises(ValueError, match="expected MDD or MMDD date without location"):
+            parse_descriptions_to_manifest(
+                [("05O2", "59340120WS")], datetime(2026, 5, 1)
+            )

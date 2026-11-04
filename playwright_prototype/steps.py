@@ -24,6 +24,12 @@ log = logging.getLogger(__name__)
 DATA_ENTRY_SUBMIT_DELAY_MS = 2000
 BUTTON_PUSH_DELAY_MS = 2000
 UI_SETTLE_DELAY_MS = 1500
+# Compass opens the vehicle tab from the homepage Search click; Playwright waits
+# for that navigation inside click(), so slow page loads count against it.
+COMPASS_HOME_SEARCH_SUBMIT_TIMEOUT_MS = 30_000
+MARK_COMPLETE_ENABLED_TIMEOUT_MS = 20_000
+MARK_COMPLETE_POST_ENABLED_SETTLE_MS = 1_000
+MARK_COMPLETE_MENU_ITEM_NAME = re.compile(r"^\s*Mark Complete\b")
 OPEN_WORK_ITEMS_COUNT_WAIT_MS = 5_000
 OPEN_WORK_ITEMS_COUNT_POLL_MS = 250
 OPEN_WORK_ITEMS_ZERO_CONFIRM_DELAY_MS = 250
@@ -36,12 +42,20 @@ _OPEN_WORK_ITEMS_BADGE_TEXT_PATTERN = re.compile(r"^\d+$")
 COMPASS_VEHICLES_BUTTON_SELECTOR = "[data-test-id='workshop-inline-button']"
 COMPASS_SCAN_TAB_SELECTOR = 'button[role="tab"][data-key="scan"]'
 COMPASS_MVA_VIN_INPUT_SELECTOR = "[data-testid='mva-vin-input']"
-COMPASS_MVA_VIN_SUBMIT_SELECTOR = "[data-testid='mva-vin-submit']"
 COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR = (
     "input[type='search'][placeholder='Keyword Search (other fields)']"
 )
 COMPASS_WORKSHOP_OBJECT_TABLE_SELECTOR = "[data-test-id='workshop-object-table']"
 COMPASS_WORKSHOP_OBJECT_TITLE_SELECTOR = "[data-test-id='workshop-object-title']"
+COMPASS_ACTIVE_FILTER_SELECTOR = "span.bp6-tag[role='button']:has(b)"
+COMPASS_FILTER_CLEAR_SELECTOR = "svg[data-icon='cross']"
+COMPASS_MVA_FILTER_INPUT_SELECTOR = (
+    "div.bp6-popover-content:visible "
+    "input.bp6-multi-select-tag-input-input:visible"
+)
+COMPASS_MVA_FILTER_OPTION_SELECTOR = (
+    "div.bp6-popover-content:visible li[role='option']:visible"
+)
 COMPASS_HOME_MVA_INPUT_SELECTOR = 'input[placeholder="MVA number"]'
 COMPASS_OVERVIEW_MVA_VALUE_SELECTOR = (
     "xpath=//div[@role='listitem']"
@@ -194,7 +208,7 @@ async def _fill_rvm_complaint_form(page: Page, mva: str) -> None:
     yes_label = scope.locator("label", has_text=re.compile(r"^\s*Yes\s*$", re.I)).first
     await yes_label.click(timeout=10_000)
 
-    for section, value in (("Category", "Glass Damage"), ("Sub-Category", "Mechanical Issue")):
+    for section, value in (("Category", "Mechanical Issue"), ("Sub-Category", "Interior Component Damaged")):
         section_heading = scope.get_by_role(
             "heading", name=re.compile(rf"^\s*{re.escape(section)}\s*$", re.I)
         ).first
@@ -270,6 +284,65 @@ async def _wait_for_vehicle_details_ready(page: Page, mva: str, timeout_ms: int 
     )
 
 
+async def _clear_vehicle_search_filters(page: Page) -> None:
+    active_filters = page.locator(COMPASS_ACTIVE_FILTER_SELECTOR)
+    cleared: list[str] = []
+    active_count = await active_filters.count()
+
+    while active_count:
+        active_filter = active_filters.first
+        filter_text = " ".join((await active_filter.inner_text()).split())
+        await active_filter.hover()
+        clear = active_filter.locator(COMPASS_FILTER_CLEAR_SELECTOR)
+        if await clear.count() != 1 or not await clear.first.is_visible():
+            raise RuntimeError(
+                f"Active Compass filter {filter_text!r} must expose exactly one clear control"
+            )
+        await clear.first.click(timeout=5_000)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            next_count = await active_filters.count()
+            if next_count == active_count - 1:
+                active_count = next_count
+                break
+            await page.wait_for_timeout(100)
+        else:
+            raise RuntimeError(f"Active Compass filter {filter_text!r} did not clear")
+        cleared.append(filter_text)
+
+    keyword = page.locator(COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR)
+    if await keyword.count() != 1:
+        raise RuntimeError("Compass vehicle search must contain exactly one keyword field")
+    await keyword.first.wait_for(state="visible", timeout=8_000)
+    await keyword.first.fill("")
+    log.info("[STEPS] Compass vehicle search filters cleared: %s", cleared)
+
+
+async def _search_by_mva_filter(page: Page, mva: str) -> None:
+    await _clear_vehicle_search_filters(page)
+
+    by_mva = page.get_by_role("button", name=re.compile(r"^Search\s+by\s+MVA$", re.I))
+    if await by_mva.count() != 1:
+        raise RuntimeError("Compass vehicle search must contain exactly one Search by MVA button")
+    await by_mva.first.wait_for(state="visible", timeout=8_000)
+    await by_mva.first.click(timeout=5_000)
+
+    filter_input = page.locator(COMPASS_MVA_FILTER_INPUT_SELECTOR)
+    await filter_input.first.wait_for(state="visible", timeout=8_000)
+    if await filter_input.count() != 1:
+        raise RuntimeError("Search by MVA must open exactly one MVA filter input")
+    await filter_input.first.fill("")
+    await filter_input.first.fill(mva)
+
+    exact_options = page.locator(COMPASS_MVA_FILTER_OPTION_SELECTOR).filter(
+        has_text=re.compile(rf"^\s*{re.escape(mva)}\s*$")
+    )
+    await exact_options.first.wait_for(state="visible", timeout=8_000)
+    if await exact_options.count() != 1:
+        raise RuntimeError(f"Search by MVA must return exactly one filter option for {mva}")
+    await exact_options.first.click(timeout=5_000)
+
+
 async def _enter_mva(page: Page, mva: str) -> Page:
     """Type an MVA into the strict Workshop search field and submit.
 
@@ -282,40 +355,15 @@ async def _enter_mva(page: Page, mva: str) -> Page:
             raise RuntimeError("Compass homepage must contain exactly one Search button")
         await home_mva_input.first.fill(mva)
         await page.wait_for_timeout(DATA_ENTRY_SUBMIT_DELAY_MS)
-        async with page.context.expect_page(timeout=10_000) as new_page_info:
-            await search_button.first.click(timeout=5_000)
+        async with page.context.expect_page(
+            timeout=COMPASS_HOME_SEARCH_SUBMIT_TIMEOUT_MS
+        ) as new_page_info:
+            await search_button.first.click(timeout=COMPASS_HOME_SEARCH_SUBMIT_TIMEOUT_MS)
         vehicle_page = await new_page_info.value
         await vehicle_page.wait_for_load_state("domcontentloaded")
         return vehicle_page
 
-    # Prefer dedicated MVA/VIN input when present.
-    mva_input = page.locator(COMPASS_MVA_VIN_INPUT_SELECTOR).first
-    if await mva_input.is_visible(timeout=2_000):
-        await mva_input.click(timeout=5_000)
-        await mva_input.press("Control+a")
-        await mva_input.press("Backspace")
-        await mva_input.fill(mva)
-        await page.wait_for_timeout(DATA_ENTRY_SUBMIT_DELAY_MS)
-
-        submit_btn = page.locator(COMPASS_MVA_VIN_SUBMIT_SELECTOR).first
-        await submit_btn.wait_for(state="visible", timeout=5_000)
-        await submit_btn.click(timeout=5_000)
-        return page
-
-    # Keyword Search mode (confirmed in user-provided screenshot).
-    by_mva = page.get_by_role("button", name=re.compile(r"^Search\s+by\s+MVA$", re.I)).first
-    keyword = page.locator(COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR).first
-
-    await by_mva.wait_for(state="visible", timeout=8_000)
-    await by_mva.click(timeout=5_000)
-
-    await keyword.wait_for(state="visible", timeout=8_000)
-    await keyword.click(timeout=5_000)
-    await keyword.press("Control+a")
-    await keyword.press("Backspace")
-    await keyword.fill(mva)
-    await page.wait_for_timeout(DATA_ENTRY_SUBMIT_DELAY_MS)
-    await keyword.press("Enter")
+    await _search_by_mva_filter(page, mva)
     return page
 
 
@@ -513,6 +561,18 @@ async def _confirm_mark_complete(page: Page, note: str = "Done") -> None:
     await page.wait_for_timeout(10_000)
 
 
+async def _wait_until_enabled(locator, timeout_ms: int) -> None:
+    """Wait for exactly one visible, enabled element; raise with the locator on timeout."""
+    from playwright.async_api import expect
+
+    try:
+        await expect(locator).to_have_count(1, timeout=timeout_ms)
+        await expect(locator).to_be_visible(timeout=timeout_ms)
+        await expect(locator).to_be_enabled(timeout=timeout_ms)
+    except AssertionError as exc:
+        raise RuntimeError(f"{locator} not enabled within {timeout_ms} ms: {exc}") from exc
+
+
 async def close_open_work_item(page: Page, mva: str, complaint_type: str = "Glass", note: str = "Done") -> str:
     """Open the live Open Work Items row and close it through the action menu."""
     row_title = "GLASS-GLASS" if complaint_type == "Glass" else f"{complaint_type}-{complaint_type}".upper()
@@ -534,11 +594,17 @@ async def close_open_work_item(page: Page, mva: str, complaint_type: str = "Glas
     menu_text = (await menu_overlay.inner_text()).strip()
     log.info("[STEPS] %s — action menu opened: %s", mva, menu_text.replace("\n", " | "))
 
-    mark_complete_menu_item = detail_page.locator(
-        "xpath=(//*[@role='menu']//*[contains(normalize-space(.), 'Mark Complete')])[1]"
-    ).first
-    await mark_complete_menu_item.wait_for(state="visible", timeout=20_000)
-    await detail_page.wait_for_timeout(UI_SETTLE_DELAY_MS)
+    # Compass appends a description to the item name, e.g. "Mark Complete Work item must be open...".
+    mark_complete_menu_item = menu_overlay.get_by_role("menuitem", name=MARK_COMPLETE_MENU_ITEM_NAME)
+    menu_item_names = await menu_overlay.get_by_role("menuitem").all_inner_texts()
+    log.info(
+        "[STEPS] %s — action menu items: %s",
+        mva,
+        [" ".join(name.split()) for name in menu_item_names],
+    )
+    # Compass renders Mark Complete disabled for several seconds after the menu opens.
+    await _wait_until_enabled(mark_complete_menu_item, MARK_COMPLETE_ENABLED_TIMEOUT_MS)
+    await detail_page.wait_for_timeout(MARK_COMPLETE_POST_ENABLED_SETTLE_MS)
     await mark_complete_menu_item.click(timeout=10_000)
     await detail_page.wait_for_timeout(UI_SETTLE_DELAY_MS)
 

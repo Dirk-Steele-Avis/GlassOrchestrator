@@ -7,6 +7,12 @@ from invoice_workflow.contracts import Stage
 
 def classify_failure(stage: str, detail: str) -> str:
     normalized = detail.lower()
+    if "vendor recalibration is not permitted" in normalized:
+        return "RECALIBRATION_IN_HOUSE"
+    if "recalibration must be exactly" in normalized:
+        return "RECALIBRATION_AMOUNT_INVALID"
+    if "recalibration customer address" in normalized:
+        return "RECALIBRATION_LOCATION_INVALID"
     if "subject/pdf po mismatch" in normalized:
         return "PO_SUBJECT_PDF_MISMATCH"
     if "subject does not contain one exact po number" in normalized:

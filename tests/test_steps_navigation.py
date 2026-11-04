@@ -8,7 +8,7 @@ Focus:
 
 import asyncio
 import logging
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -49,9 +49,41 @@ def test_compass_home_vehicle_search_submits_exact_mva():
     page.get_by_role.assert_called_once_with("button", name="Search", exact=True)
     mva_input.fill.assert_awaited_once_with("059733310")
     page.wait_for_timeout.assert_awaited_once_with(DATA_ENTRY_SUBMIT_DELAY_MS)
-    page.context.expect_page.assert_called_once_with(timeout=10_000)
-    search_button.click.assert_awaited_once_with(timeout=5_000)
+    page.context.expect_page.assert_called_once_with(timeout=30_000)
+    search_button.click.assert_awaited_once_with(timeout=30_000)
     vehicle_page.wait_for_load_state.assert_awaited_once_with("domcontentloaded")
+
+
+def test_compass_home_vehicle_search_click_timeout_fails_without_retry():
+    from playwright_prototype.steps import navigate_to_mva
+
+    page = MagicMock()
+    page.url = "https://compass.example/home"
+    mva_input = MagicMock()
+    mva_input.count = AsyncMock(return_value=1)
+    mva_input.first = mva_input
+    mva_input.is_visible = AsyncMock(return_value=True)
+    mva_input.fill = AsyncMock()
+    search_button = MagicMock()
+    search_button.count = AsyncMock(return_value=1)
+    search_button.first = search_button
+    search_button.click = AsyncMock(side_effect=TimeoutError("Locator.click: Timeout 30000ms exceeded."))
+    expect_page = AsyncMock()
+    expect_page.__aenter__ = AsyncMock(return_value=MagicMock())
+    expect_page.__aexit__ = AsyncMock(return_value=None)
+    page.context.expect_page.return_value = expect_page
+    page.locator.return_value = mva_input
+    page.get_by_role.return_value = search_button
+    page.wait_for_timeout = AsyncMock()
+
+    with patch("playwright_prototype.steps.get_config", return_value=""), patch(
+        "playwright_prototype.steps._open_vehicle_search_context", AsyncMock(return_value=page)
+    ), patch("playwright_prototype.steps._search_by_mva_filter", AsyncMock()) as filter_search:
+        with pytest.raises(RuntimeError, match=r"navigate_to_mva failed for 062296533: .*Timeout 30000ms"):
+            asyncio.run(navigate_to_mva(page, "062296533"))
+
+    search_button.click.assert_awaited_once_with(timeout=30_000)
+    filter_search.assert_not_awaited()
 
 
 def test_compass_home_vehicle_search_rejects_ambiguous_search_button():
@@ -71,6 +103,102 @@ def test_compass_home_vehicle_search_rejects_ambiguous_search_button():
         asyncio.run(_enter_mva(page, "059733310"))
 
     mva_input.fill.assert_not_called()
+
+
+def test_clear_vehicle_search_filters_removes_every_filter_and_keyword():
+    from playwright_prototype.steps import (
+        COMPASS_ACTIVE_FILTER_SELECTOR,
+        COMPASS_FILTER_CLEAR_SELECTOR,
+        COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR,
+        _clear_vehicle_search_filters,
+    )
+
+    page = MagicMock()
+    active_filters = MagicMock()
+    active_filter = MagicMock()
+    clear = MagicMock()
+    keyword = MagicMock()
+
+    active_filters.count = AsyncMock(side_effect=[2, 1, 0])
+    active_filters.first = active_filter
+    active_filter.inner_text = AsyncMock(
+        side_effect=["Search by MVA 011111111", "Search by VIN TESTVIN"]
+    )
+    active_filter.hover = AsyncMock()
+    active_filter.locator.return_value = clear
+    clear.count = AsyncMock(return_value=1)
+    clear.first = clear
+    clear.is_visible = AsyncMock(return_value=True)
+    clear.click = AsyncMock()
+    keyword.count = AsyncMock(return_value=1)
+    keyword.first = keyword
+    keyword.wait_for = AsyncMock()
+    keyword.fill = AsyncMock()
+    page.locator.side_effect = lambda selector: {
+        COMPASS_ACTIVE_FILTER_SELECTOR: active_filters,
+        COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR: keyword,
+    }[selector]
+    page.wait_for_timeout = AsyncMock()
+
+    asyncio.run(_clear_vehicle_search_filters(page))
+
+    assert active_filter.hover.await_count == 2
+    assert active_filter.locator.call_args_list == [
+        call(COMPASS_FILTER_CLEAR_SELECTOR),
+        call(COMPASS_FILTER_CLEAR_SELECTOR),
+    ]
+    assert clear.click.await_count == 2
+    keyword.wait_for.assert_awaited_once_with(state="visible", timeout=8_000)
+    keyword.fill.assert_awaited_once_with("")
+
+
+def test_reused_vehicle_search_selects_exact_mva_filter_option():
+    from playwright_prototype.steps import (
+        COMPASS_HOME_MVA_INPUT_SELECTOR,
+        COMPASS_MVA_FILTER_INPUT_SELECTOR,
+        COMPASS_MVA_FILTER_OPTION_SELECTOR,
+        _enter_mva,
+    )
+
+    page = MagicMock()
+    home_input = MagicMock()
+    home_input.count = AsyncMock(return_value=0)
+    filter_input = MagicMock()
+    filter_input.first = filter_input
+    filter_input.wait_for = AsyncMock()
+    filter_input.count = AsyncMock(return_value=1)
+    filter_input.fill = AsyncMock()
+    options = MagicMock()
+    exact_options = MagicMock()
+    options.filter.return_value = exact_options
+    exact_options.first = exact_options
+    exact_options.wait_for = AsyncMock()
+    exact_options.count = AsyncMock(return_value=1)
+    exact_options.click = AsyncMock()
+    by_mva = MagicMock()
+    by_mva.count = AsyncMock(return_value=1)
+    by_mva.first = by_mva
+    by_mva.wait_for = AsyncMock()
+    by_mva.click = AsyncMock()
+    page.locator.side_effect = lambda selector: {
+        COMPASS_HOME_MVA_INPUT_SELECTOR: home_input,
+        COMPASS_MVA_FILTER_INPUT_SELECTOR: filter_input,
+        COMPASS_MVA_FILTER_OPTION_SELECTOR: options,
+    }[selector]
+    page.get_by_role.return_value = by_mva
+
+    with patch(
+        "playwright_prototype.steps._clear_vehicle_search_filters",
+        new=AsyncMock(),
+    ) as clear_filters:
+        result = asyncio.run(_enter_mva(page, "059733310"))
+
+    assert result is page
+    clear_filters.assert_awaited_once_with(page)
+    by_mva.wait_for.assert_awaited_once_with(state="visible", timeout=8_000)
+    by_mva.click.assert_awaited_once_with(timeout=5_000)
+    assert filter_input.fill.await_args_list == [call(""), call("059733310")]
+    exact_options.click.assert_awaited_once_with(timeout=5_000)
 
 
 def _make_vehicle_result_page(result_count=1, wait_error=None):
@@ -413,19 +541,39 @@ class TestOpenWorkItemsZeroCountProbe:
 
         open_row.assert_awaited_once_with(open_row.call_args.args[0], "GLASS-GLASS")
 
-    def test_success_closes_detail_tab_and_restores_vehicle_tab(self):
-        from playwright_prototype.steps import close_open_work_item
-
-        vehicle_page = MagicMock()
-        vehicle_page.bring_to_front = AsyncMock()
+    @staticmethod
+    def _detail_page() -> tuple[MagicMock, MagicMock]:
         detail_page = MagicMock()
         detail_page.wait_for_load_state = AsyncMock()
         detail_page.wait_for_timeout = AsyncMock()
-        detail_page.locator.return_value.first = MagicMock()
-        detail_page.locator.return_value.first.wait_for = AsyncMock()
-        detail_page.locator.return_value.first.inner_text = AsyncMock(return_value="Mark Complete")
-        detail_page.locator.return_value.first.click = AsyncMock()
+        menu = MagicMock()
+        menu.wait_for = AsyncMock()
+        menu.inner_text = AsyncMock(return_value="Mark Complete")
+        item = MagicMock()
+        item.click = AsyncMock()
+        item.all_inner_texts = AsyncMock(return_value=["Mark Complete\nWork item must be open"])
+        menu.get_by_role.return_value = item
+        detail_page.locator.return_value.first = menu
         detail_page.close = AsyncMock()
+        return detail_page, item
+
+    def test_success_waits_for_enabled_then_settles_before_click(self):
+        from playwright_prototype.steps import (
+            MARK_COMPLETE_ENABLED_TIMEOUT_MS,
+            MARK_COMPLETE_MENU_ITEM_NAME,
+            MARK_COMPLETE_POST_ENABLED_SETTLE_MS,
+            close_open_work_item,
+        )
+
+        vehicle_page = MagicMock()
+        vehicle_page.bring_to_front = AsyncMock()
+        detail_page, item = self._detail_page()
+        events = []
+        detail_page.wait_for_timeout.side_effect = lambda ms: events.append(("wait", ms))
+        item.click.side_effect = lambda **kwargs: events.append(("click", kwargs))
+
+        async def wait_enabled(locator, timeout_ms):
+            events.append(("enabled", locator, timeout_ms))
 
         with patch(
             "playwright_prototype.steps._has_stable_zero_open_work_items_count",
@@ -437,15 +585,94 @@ class TestOpenWorkItemsZeroCountProbe:
             "playwright_prototype.steps._click_action_menu",
             new=AsyncMock(),
         ), patch(
+            "playwright_prototype.steps._wait_until_enabled",
+            new=AsyncMock(side_effect=wait_enabled),
+        ), patch(
             "playwright_prototype.steps._confirm_mark_complete",
             new=AsyncMock(),
         ):
             result = asyncio.run(close_open_work_item(vehicle_page, "050106803"))
 
         assert result == "GLASS-GLASS"
+        assert detail_page.locator.return_value.first.get_by_role.call_args_list[0] == call(
+            "menuitem", name=MARK_COMPLETE_MENU_ITEM_NAME
+        )
+        assert MARK_COMPLETE_POST_ENABLED_SETTLE_MS == 1_000
+        start = next(i for i, event in enumerate(events) if event[0] == "enabled")
+        assert events[start:start + 3] == [
+            ("enabled", item, MARK_COMPLETE_ENABLED_TIMEOUT_MS),
+            ("wait", MARK_COMPLETE_POST_ENABLED_SETTLE_MS),
+            ("click", {"timeout": 10_000}),
+        ]
         detail_page.close.assert_awaited_once_with()
         vehicle_page.bring_to_front.assert_awaited_once_with()
 
+    def test_mark_complete_never_enabled_fails_without_click(self):
+        from playwright_prototype.steps import close_open_work_item
+
+        detail_page, item = self._detail_page()
+
+        with patch(
+            "playwright_prototype.steps._has_stable_zero_open_work_items_count",
+            new=AsyncMock(return_value=False),
+        ), patch(
+            "playwright_prototype.steps._open_open_work_items_row",
+            new=AsyncMock(return_value=(detail_page, "GLASS-GLASS")),
+        ), patch(
+            "playwright_prototype.steps._click_action_menu",
+            new=AsyncMock(),
+        ), patch(
+            "playwright_prototype.steps._wait_until_enabled",
+            new=AsyncMock(side_effect=RuntimeError("Mark Complete not enabled within 20000 ms")),
+        ), patch(
+            "playwright_prototype.steps._confirm_mark_complete",
+            new=AsyncMock(),
+        ) as confirm:
+            with pytest.raises(RuntimeError, match="not enabled within 20000 ms"):
+                asyncio.run(close_open_work_item(MagicMock(), "062296533"))
+
+        item.click.assert_not_awaited()
+        confirm.assert_not_awaited()
+        detail_page.close.assert_not_awaited()
+
+    @pytest.mark.browser
+    def test_wait_until_enabled_tracks_delayed_menu_item_enable(self):
+        from playwright.async_api import async_playwright
+        from playwright_prototype.steps import MARK_COMPLETE_MENU_ITEM_NAME, _wait_until_enabled
+
+        menu_html = """
+            <ul role="menu" class="bp6-menu">
+              <li role="none"><a id="mc" role="menuitem" data-test-id="workshop-menu-item-button"
+                 tabindex="-1" aria-disabled="true" class="bp6-menu-item bp6-disabled">
+                 <div class="bp6-fill"><div>Mark Complete</div>
+                 <div class="bp6-text-small">Work item must be open and have an op code</div></div></a></li>
+              <li role="none"><a role="menuitem" data-test-id="workshop-menu-item-button"
+                 class="bp6-menu-item"><div class="bp6-fill"><div>Mark Canceled</div></div></a></li>
+            </ul>
+        """
+
+        async def run_probe():
+            async with async_playwright() as playwright:
+                browser = await playwright.chromium.launch(headless=True)
+                page = await browser.new_page()
+                await page.set_content(
+                    menu_html
+                    + "<script>setTimeout(() => document.getElementById('mc')"
+                    ".removeAttribute('aria-disabled'), 700)</script>"
+                )
+                item = page.get_by_role("menu").get_by_role("menuitem", name=MARK_COMPLETE_MENU_ITEM_NAME)
+                assert await item.is_disabled()
+                await _wait_until_enabled(item, 5_000)
+                enabled = await item.is_enabled()
+
+                await page.set_content(menu_html)
+                stuck = page.get_by_role("menu").get_by_role("menuitem", name=MARK_COMPLETE_MENU_ITEM_NAME)
+                with pytest.raises(RuntimeError, match="not enabled within 500 ms"):
+                    await _wait_until_enabled(stuck, 500)
+                await browser.close()
+                return enabled
+
+        assert asyncio.run(run_probe()) is True
 
 class TestNavigateToMvaFailFast:
     """URL-template handling should be explicit and fail-fast."""

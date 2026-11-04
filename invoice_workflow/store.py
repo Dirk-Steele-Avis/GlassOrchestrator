@@ -41,6 +41,20 @@ class InvoiceState:
     last_error: str
 
 
+@dataclass(frozen=True, slots=True)
+class InvoiceLookupRecord:
+    invoice_number: str
+    received_at: str
+    subject_po_number: str
+    pdf_po_number: str
+    vin: str
+    mva: str
+    invoice_amount: str
+    identity_status: StageStatus
+    outlook_status: StageStatus
+    last_error: str
+
+
 class InvoiceRepository:
     """The only data-access layer for completed-invoice workflow state."""
 
@@ -311,6 +325,37 @@ class InvoiceRepository:
                 (internet_message_id,),
             ).fetchone()
         return _row_to_state(row) if row is not None else None
+
+    def find_by_vin(self, vin: str) -> tuple[InvoiceLookupRecord, ...]:
+        if not self.database_path.is_file():
+            raise FileNotFoundError(f"Invoice ledger not found: {self.database_path}")
+        with self.connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT invoice_number, received_at, subject_po_number,
+                       pdf_po_number, vin, mva, invoice_amount,
+                       identity_status, outlook_status, last_error
+                FROM invoices
+                WHERE vin = ?
+                ORDER BY received_at, invoice_number
+                """,
+                (vin,),
+            ).fetchall()
+        return tuple(
+            InvoiceLookupRecord(
+                invoice_number=str(row["invoice_number"]),
+                received_at=str(row["received_at"]),
+                subject_po_number=str(row["subject_po_number"]),
+                pdf_po_number=str(row["pdf_po_number"]),
+                vin=str(row["vin"]),
+                mva=str(row["mva"]),
+                invoice_amount=str(row["invoice_amount"]),
+                identity_status=StageStatus(str(row["identity_status"])),
+                outlook_status=StageStatus(str(row["outlook_status"])),
+                last_error=str(row["last_error"]),
+            )
+            for row in rows
+        )
 
     def get_review_history(self, internet_message_id: str) -> ReviewHistory | None:
         """Return failure evidence for one exact message without creating state."""

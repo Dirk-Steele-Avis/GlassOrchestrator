@@ -34,7 +34,7 @@ class StrictIdentityResolver:
         if local_error:
             return IdentityResult(StageStatus.BLOCKED, detail=local_error)
 
-        fieldpo = self._fieldpo_reader.read_identity(invoice.subject_po_number)
+        fieldpo = self._fieldpo_reader.read_identity(invoice.pdf_po_number)
         sheet_mvas = tuple(self._sheet_reader.find_mvas_by_vin(invoice.vin))
         invalid_sheet_mvas = tuple(
             mva for mva in sheet_mvas if _MVA_PATTERN.fullmatch(mva) is None
@@ -43,6 +43,8 @@ class StrictIdentityResolver:
             return IdentityResult(
                 StageStatus.BLOCKED,
                 detail=f"Sheet contains invalid MVA values for VIN {invoice.vin}",
+                fieldpo_snapshot=fieldpo,
+                sheet_mvas=sheet_mvas,
             )
         distinct_sheet_mvas = tuple(dict.fromkeys(sheet_mvas))
         if len(distinct_sheet_mvas) != 1:
@@ -52,15 +54,19 @@ class StrictIdentityResolver:
                     f"Expected exactly one distinct Sheet MVA for VIN {invoice.vin}, "
                     f"found {len(distinct_sheet_mvas)}"
                 ),
+                fieldpo_snapshot=fieldpo,
+                sheet_mvas=sheet_mvas,
             )
         sheet_mva = distinct_sheet_mvas[0]
-        if fieldpo.po_number != invoice.subject_po_number:
+        if fieldpo.po_number != invoice.pdf_po_number:
             return IdentityResult(
                 StageStatus.BLOCKED,
                 detail=(
-                    f"FieldPO PO mismatch: expected {invoice.subject_po_number}, "
+                    f"FieldPO PO mismatch: expected {invoice.pdf_po_number}, "
                     f"found {fieldpo.po_number}"
                 ),
+                fieldpo_snapshot=fieldpo,
+                sheet_mvas=sheet_mvas,
             )
         if fieldpo.vin != invoice.vin:
             return IdentityResult(
@@ -69,6 +75,8 @@ class StrictIdentityResolver:
                     f"FieldPO VIN mismatch: expected {invoice.vin}, "
                     f"found {fieldpo.vin}"
                 ),
+                fieldpo_snapshot=fieldpo,
+                sheet_mvas=sheet_mvas,
             )
         if fieldpo.mva != sheet_mva:
             return IdentityResult(
@@ -77,6 +85,8 @@ class StrictIdentityResolver:
                     f"FieldPO MVA mismatch: expected {sheet_mva}, "
                     f"found {fieldpo.mva}"
                 ),
+                fieldpo_snapshot=fieldpo,
+                sheet_mvas=sheet_mvas,
             )
         if fieldpo.authorized_amount != invoice.invoice_amount:
             return IdentityResult(
@@ -85,6 +95,8 @@ class StrictIdentityResolver:
                     f"Authorized amount mismatch: invoice {invoice.invoice_amount}, "
                     f"FieldPO {fieldpo.authorized_amount}"
                 ),
+                fieldpo_snapshot=fieldpo,
+                sheet_mvas=sheet_mvas,
             )
 
         return IdentityResult(
@@ -92,21 +104,23 @@ class StrictIdentityResolver:
             identity=ValidatedIdentity(
                 internet_message_id=invoice.internet_message_id,
                 invoice_number=invoice.invoice_number,
-                po_number=invoice.subject_po_number,
+                po_number=invoice.pdf_po_number,
                 vin=invoice.vin,
                 mva=sheet_mva,
                 invoice_amount=invoice.invoice_amount,
                 authorized_amount=fieldpo.authorized_amount,
             ),
+            fieldpo_snapshot=fieldpo,
+            sheet_mvas=sheet_mvas,
         )
 
 
 def _validate_local_invoice(invoice: ParsedInvoice) -> str:
-    if _PO_PATTERN.fullmatch(invoice.subject_po_number) is None:
-        return "Invoice subject does not contain one exact PO number"
     if _PO_PATTERN.fullmatch(invoice.pdf_po_number) is None:
         return "Invoice PDF does not contain one exact PO number"
-    if invoice.subject_po_number != invoice.pdf_po_number:
+    if invoice.subject_po_number and _PO_PATTERN.fullmatch(invoice.subject_po_number) is None:
+        return "Invoice subject contains an invalid PO number"
+    if invoice.subject_po_number and invoice.subject_po_number != invoice.pdf_po_number:
         return (
             f"Subject/PDF PO mismatch: {invoice.subject_po_number} != "
             f"{invoice.pdf_po_number}"

@@ -71,12 +71,15 @@ No worker exposes an invoice execution CLI. Diagnostics, retries, and production
 
 `identity.py` receives one parsed immutable invoice plus injected read-only Sheet and FieldPO identity ports. One strict route applies:
 
-1. Subject PO and PDF PO must both exist and agree.
-2. The PO must match the exact FieldPO PO.
+1. The PDF must contain exactly one valid PO. The subject PO is optional; when present, it must match the PDF PO.
+2. The PDF PO must match the exact FieldPO PO.
 3. Invoice VIN must match FieldPO VIN.
 4. The Sheet must resolve that VIN to exactly one valid MVA.
 5. FieldPO MVA must equal the Sheet MVA.
-6. Invoice and authorized amounts must satisfy the configured exact policy.
+6. Invoice and authorized amounts must match exactly.
+7. Immediately before approval, FieldPO PO, VIN, MVA, and authorized amount are read again and must still match. The PO must be `IN PROGRESS`, and Work Order Created By must be `Steele, Dirk`. No minimum invoice-age gate applies.
+
+Approval runs after Compass closure. It approves only the exact validated PO and closes the associated FieldPO work order; the success response must confirm both before Outlook finalization. Approval or closure failures move that invoice to Needs Review and prevent it from being marked Processed.
 
 Missing, conflicting, or ambiguous values block before any mutation. The workflow never chooses a newest or oldest Sheet row when MVAs conflict.
 

@@ -71,7 +71,7 @@ class TestFT1_WorkerCrashHandling:
         monkeypatch.setattr("GlassOrchestrator.CSV_PATH", tmp_path / "GlassDataParser.csv")
 
         # Mock input acquisition to return test data (bypass Gmail)
-        mock_descriptions = [("0305APO", "59340120WS"), ("0305APO", "59340121WSr")]
+        mock_descriptions = [("0305", "59340120WS"), ("0305", "59340121WSr")]
         mock_date = datetime(2026, 3, 5)
         monkeypatch.setattr(
             "GlassOrchestrator.fetch_input_descriptions",
@@ -132,7 +132,7 @@ class TestFT1_WorkerCrashHandling:
         monkeypatch.setattr("GlassOrchestrator.CSV_PATH", tmp_path / "GlassDataParser.csv")
         monkeypatch.setattr(
             "GlassOrchestrator.fetch_input_descriptions",
-            lambda: ([("0305APO", "59340120WS")], datetime(2026, 3, 5)),
+            lambda: ([("0305", "59340120WS")], datetime(2026, 3, 5)),
         )
 
         persist_called = False
@@ -204,7 +204,7 @@ class TestFT2_StaleResultsProtection:
         monkeypatch.setattr("GlassOrchestrator.DATA_DIR", tmp_path)
         monkeypatch.setattr("GlassOrchestrator.CSV_PATH", tmp_path / "GlassDataParser.csv")
 
-        mock_descriptions = [("0305APO", "59340120WS")]
+        mock_descriptions = [("0305", "59340120WS")]
         mock_date = datetime(2026, 3, 5)
         monkeypatch.setattr(
             "GlassOrchestrator.fetch_input_descriptions",
@@ -268,11 +268,11 @@ class TestFT3_NotificationConsistency:
 
         monkeypatch.setattr(
             "GlassOrchestrator.fetch_input_descriptions",
-            lambda: ([("0309APO", "59654641WS"), ("0309APO", "01712003WS")], email_date),
+            lambda: ([("0309", "59654641WS"), ("0309", "01712003WS")], email_date),
         )
         monkeypatch.setattr(
             "GlassOrchestrator.parse_descriptions_to_manifest",
-            lambda descriptions, dt: ({"59654641": {}, "01712003": {}}, ["59654641", "01712003"]),
+            lambda descriptions, dt, **kwargs: ({"59654641": {}, "01712003": {}}, ["59654641", "01712003"]),
         )
         monkeypatch.setattr("GlassOrchestrator.apply_cycle_day_tracking", lambda *args, **kwargs: None)
         monkeypatch.setattr("GlassOrchestrator.parse_glass_data_results", lambda *args, **kwargs: None)
@@ -288,6 +288,6 @@ class TestFT3_NotificationConsistency:
 
         monkeypatch.setattr("GlassOrchestrator.notify_order_items", spy_notify)
 
-        run_pipeline()
+        run_pipeline(processing_date=email_date.date())
 
         assert notified_mvas == ["59654641"]

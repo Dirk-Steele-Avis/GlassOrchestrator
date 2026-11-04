@@ -157,7 +157,7 @@ def test_collect_candidates_filters_today_normalizes_mva_and_damage_type():
         )
     ]
     assert summary.total_rows_read == 3
-    assert summary.rows_for_day == 2
+    assert summary.rows_for_date == 2
     assert summary.skipped_invalid == 1
 
 
@@ -172,7 +172,7 @@ def test_collect_candidates_processes_only_first_duplicate_occurrence(caplog):
 
     assert [candidate.mva for candidate in candidates] == ["012345678"]
     assert [candidate.row_index for candidate in candidates] == [2]
-    assert summary.rows_for_day == 2
+    assert summary.rows_for_date == 2
     assert "Row 3 skipped duplicate MVA 012345678" in caplog.text
 
 
@@ -241,11 +241,8 @@ def test_process_candidates_adds_work_item_to_existing_complaint(monkeypatch):
 
 def test_process_candidates_creates_complaint_then_work_item(monkeypatch):
     _, _ = _mock_processing_session(monkeypatch)
-    monkeypatch.setattr(
-        complaints,
-        "_inspect_glass_complaint",
-        MagicMock(return_value=complaints.LookupResult(False, "glass_damage_not_present")),
-    )
+    inspect = MagicMock(return_value=complaints.LookupResult(False, "glass_damage_not_present"))
+    monkeypatch.setattr(complaints, "_inspect_glass_complaint", inspect)
     monkeypatch.setattr(
         complaints,
         "_has_open_glass_work_item",
@@ -266,6 +263,32 @@ def test_process_candidates_creates_complaint_then_work_item(monkeypatch):
     assert create_complaint.call_args.kwargs["damage_expectation"] == "repair"
     assert create_complaint.call_args.kwargs["area"] == "Rear View Mirror"
     create_work_item.assert_called_once()
+    assert create_work_item.call_args.args[2:] == (
+        "Mechanical Issue",
+        "Interior Component Damaged",
+    )
+    assert inspect.call_args.args[2:] == ("Mechanical Issue", "Interior Component Damaged")
+
+
+def test_process_candidates_stops_on_rvm_subcategory_mismatch(monkeypatch):
+    _, _ = _mock_processing_session(monkeypatch)
+    monkeypatch.setattr(
+        complaints,
+        "_inspect_glass_complaint",
+        MagicMock(return_value=complaints.LookupResult(False, "rvm_subcategory_mismatch")),
+    )
+    create_complaint = MagicMock()
+    create_work_item = MagicMock()
+    monkeypatch.setattr(complaints, "_create_complaint_only", create_complaint)
+    monkeypatch.setattr(complaints, "_create_work_item_for_glass_complaint", create_work_item)
+
+    summary = complaints._process_candidates(
+        [_candidate(area="Rear View Mirror")], False, complaints.RunSummary()
+    )
+
+    assert summary.failed == 1
+    create_complaint.assert_not_called()
+    create_work_item.assert_not_called()
 
 
 def test_process_candidates_stops_row_when_complaint_creation_fails(monkeypatch):
@@ -369,16 +392,22 @@ def test_process_candidates_routes_lookup_through_gated_helper(monkeypatch):
     )
 
     assert summary.skipped_existing == 1
-    resolve_lookup.assert_called_once_with(context, page, runtime_config, "012345678")
+    resolve_lookup.assert_called_once_with(context, page, runtime_config, "012345678", "Glass Damage")
 
 
-def test_parse_args_defaults_to_live_spreadsheet_mode(monkeypatch):
+def test_parse_args_requires_explicit_target(monkeypatch):
     monkeypatch.setattr("sys.argv", ["create_compass_complaints.py"])
 
-    args = complaints._parse_args()
+    with pytest.raises(SystemExit) as exc_info:
+        complaints._parse_args()
 
-    assert args.mva is None
-    assert args.dry_run is False
+    assert exc_info.value.code == 2
+
+
+def test_parse_inventory_date_arg_requires_iso_format():
+    assert complaints._parse_inventory_date_arg("2026-09-25") == date(2026, 9, 25)
+    with pytest.raises(RuntimeError, match="YYYY-MM-DD"):
+        complaints._parse_inventory_date_arg("09/25/2026")
 
 
 def test_inspect_glass_complaint_matches_exact_title(monkeypatch):
@@ -388,10 +417,57 @@ def test_inspect_glass_complaint_matches_exact_title(monkeypatch):
     page.locator.return_value.first = table
     monkeypatch.setattr(complaints, "_read_title_texts", lambda _table: ["Glass Damage"])
 
-    result = complaints._inspect_glass_complaint(page, "012345678")
+    result = complaints._inspect_glass_complaint(page, "012345678", "Glass Damage")
 
     assert result.exists is True
     assert result.reason == "glass_damage_found"
+
+
+def test_rvm_form_fields_keep_mechanical_issue_interior_component_and_rvm_description():
+    assert complaints._complaint_fields_for_area("Rear View Mirror", None) == (
+        "Mechanical Issue",
+        "Interior Component Damaged",
+        "RVM",
+    )
+
+
+def test_inspect_rvm_complaint_matches_category_and_damage_condition(monkeypatch):
+    table = MagicMock()
+    table.inner_text.return_value = "Active Complaints"
+    page = MagicMock()
+    page.locator.return_value.first = table
+    monkeypatch.setattr(
+        complaints,
+        "_read_complaint_rows",
+        lambda _table: [("Mechanical Issue", "Interior Component Damaged", 2)],
+    )
+
+    result = complaints._inspect_glass_complaint(
+        page, "012345678", "Mechanical Issue", "Interior Component Damaged"
+    )
+
+    assert result.exists is True
+    assert result.reason == "rvm_found"
+
+
+def test_inspect_rvm_complaint_ignores_glass_damage_only(monkeypatch):
+    table = MagicMock()
+    table.inner_text.return_value = "Active Complaints Glass Damage"
+    page = MagicMock()
+    page.locator.return_value.first = table
+    monkeypatch.setattr(complaints, "_read_title_texts", lambda _table: ["Glass Damage"])
+
+    monkeypatch.setattr(
+        complaints,
+        "_read_complaint_rows",
+        lambda _table: [("Mechanical Issue", "Air Conditioning/Heat", 2)],
+    )
+    result = complaints._inspect_glass_complaint(
+        page, "012345678", "Mechanical Issue", "Interior Component Damaged"
+    )
+
+    assert result.exists is False
+    assert result.reason == "rvm_subcategory_mismatch"
 
 
 def test_inspect_glass_complaint_via_api_filters_to_active_glass_only():
@@ -418,7 +494,7 @@ def test_inspect_glass_complaint_via_api_filters_to_active_glass_only():
         ]
     )
 
-    result = complaints._inspect_glass_complaint_via_api(page, {}, "054019932")
+    result = complaints._inspect_glass_complaint_via_api(page, {}, "054019932", "Glass Damage")
 
     assert result.exists is True
     assert result.reason == "api_glass_complaint_found"
@@ -443,7 +519,7 @@ def test_inspect_glass_complaint_via_api_ignores_active_non_glass_complaints():
         ]
     )
 
-    result = complaints._inspect_glass_complaint_via_api(page, {}, "054019932")
+    result = complaints._inspect_glass_complaint_via_api(page, {}, "054019932", "Glass Damage")
 
     assert result.exists is False
     assert result.reason == "api_glass_complaint_not_present"
@@ -458,7 +534,9 @@ def test_resolve_glass_complaint_lookup_uses_ui_when_flag_disabled(monkeypatch):
     monkeypatch.setattr(complaints, "_inspect_glass_complaint", ui_mock)
     monkeypatch.setattr(complaints, "_inspect_glass_complaint_via_api", api_mock)
 
-    result = complaints._resolve_glass_complaint_lookup(MagicMock(), MagicMock(), {}, "012345678")
+    result = complaints._resolve_glass_complaint_lookup(
+        MagicMock(), MagicMock(), {}, "012345678", "Glass Damage"
+    )
 
     assert result is ui_lookup
     ui_mock.assert_called_once()
@@ -481,6 +559,7 @@ def test_resolve_glass_complaint_lookup_falls_back_to_ui_on_api_error(monkeypatc
         MagicMock(),
         {complaints.COMPASS_COMPLAINT_API_FLAG: True},
         "012345678",
+        "Glass Damage",
     )
 
     assert result is ui_lookup
@@ -556,14 +635,60 @@ def test_select_vehicle_search_result_waits_for_exact_result():
     ]
 
 
+def test_clear_vehicle_search_filters_removes_active_filters_and_keyword(monkeypatch):
+    page = MagicMock()
+    active_filters = MagicMock()
+    active_filter = MagicMock()
+    clear = MagicMock()
+    keyword = MagicMock()
+    page.locator.return_value = active_filters
+    active_filters.count.side_effect = [1, 0]
+    active_filters.first = active_filter
+    active_filter.inner_text.return_value = "Search by VIN\nKNDP..."
+    active_filter.locator.return_value = clear
+    clear.count.return_value = 1
+    clear.first.is_visible.return_value = True
+    monkeypatch.setattr(complaints, "_wait_for_keyword_search_input", lambda _page: keyword)
+
+    complaints._clear_vehicle_search_filters(page)
+
+    active_filter.hover.assert_called_once_with()
+    clear.first.click.assert_called_once_with(timeout=5000)
+    keyword.fill.assert_called_once_with("")
+
+
+def test_clear_vehicle_search_filters_requires_one_clear_control(monkeypatch):
+    page = MagicMock()
+    active_filters = MagicMock()
+    active_filter = MagicMock()
+    clear = MagicMock()
+    page.locator.return_value = active_filters
+    active_filters.count.return_value = 1
+    active_filters.first = active_filter
+    active_filter.inner_text.return_value = "Search by VIN\nKNDP..."
+    active_filter.locator.return_value = clear
+    clear.count.return_value = 0
+    monkeypatch.setattr(complaints, "_wait_for_keyword_search_input", MagicMock())
+
+    with pytest.raises(RuntimeError, match="must expose exactly one clear control"):
+        complaints._clear_vehicle_search_filters(page)
+
+
 def test_search_mva_requires_confirmed_vehicle_details(monkeypatch):
     page = MagicMock()
     by_mva = MagicMock()
     page.get_by_role.return_value.first = by_mva
-    keyword = MagicMock()
+    filter_input = MagicMock()
+    filter_input.count.return_value = 1
+    options = MagicMock()
+    exact_options = MagicMock()
+    exact_options.count.return_value = 1
+    options.filter.return_value = exact_options
+    page.locator.side_effect = [filter_input, options]
+    clear_filters = MagicMock()
     select_result = MagicMock()
     confirm_details = MagicMock(side_effect=RuntimeError("MVA mismatch"))
-    monkeypatch.setattr(complaints, "_wait_for_keyword_search_input", lambda _page: keyword)
+    monkeypatch.setattr(complaints, "_clear_vehicle_search_filters", clear_filters)
     monkeypatch.setattr(complaints, "_select_vehicle_search_result", select_result)
     monkeypatch.setattr(complaints, "_wait_for_vehicle_details_mva", confirm_details)
 
@@ -573,23 +698,29 @@ def test_search_mva_requires_confirmed_vehicle_details(monkeypatch):
     except RuntimeError as exc:
         assert str(exc) == "MVA mismatch"
 
+    clear_filters.assert_called_once_with(page)
     by_mva.click.assert_called_once_with(timeout=5000)
-    keyword.fill.assert_called_once_with("059379600")
-    keyword.press.assert_called_once_with("Enter")
+    filter_input.first.fill.assert_any_call("")
+    filter_input.first.fill.assert_any_call("059379600")
+    exact_options.first.click.assert_called_once_with(timeout=5000)
     select_result.assert_called_once_with(page, "059379600")
     confirm_details.assert_called_once_with(page, "059379600")
 
 
 def test_has_open_glass_work_item_accepts_glass_complaint_attached_count(monkeypatch):
     page = MagicMock()
-    monkeypatch.setattr(complaints, "_find_glass_row_index_blueprint", lambda _page: 4)
+    monkeypatch.setattr(
+        complaints,
+        "_find_glass_row_index_blueprint",
+        lambda _page, _title, _damage_condition=None: 4,
+    )
     monkeypatch.setattr(
         complaints,
         "_attached_work_items_count_blueprint",
         lambda _page, _row_index: 1,
     )
 
-    exists, reason = complaints._has_open_glass_work_item(page)
+    exists, reason = complaints._has_open_glass_work_item(page, "Glass Damage")
 
     assert exists is True
     assert reason == "glass_complaint_attached_work_items=1"
@@ -597,14 +728,18 @@ def test_has_open_glass_work_item_accepts_glass_complaint_attached_count(monkeyp
 
 def test_has_open_glass_work_item_rejects_zero_on_glass_complaint(monkeypatch):
     page = MagicMock()
-    monkeypatch.setattr(complaints, "_find_glass_row_index_blueprint", lambda _page: 4)
+    monkeypatch.setattr(
+        complaints,
+        "_find_glass_row_index_blueprint",
+        lambda _page, _title, _damage_condition=None: 4,
+    )
     monkeypatch.setattr(
         complaints,
         "_attached_work_items_count_blueprint",
         lambda _page, _row_index: 0,
     )
 
-    exists, reason = complaints._has_open_glass_work_item(page)
+    exists, reason = complaints._has_open_glass_work_item(page, "Glass Damage")
 
     assert exists is False
     assert reason == "glass_complaint_attached_work_items=0"
@@ -621,12 +756,12 @@ def test_run_returns_nonzero_when_any_candidate_fails(monkeypatch):
     monkeypatch.setattr(
         complaints,
         "_build_single_candidate",
-        MagicMock(return_value=([_candidate()], complaints.RunSummary(total_rows_read=1, rows_for_day=1))),
+        MagicMock(return_value=([_candidate()], complaints.RunSummary(total_rows_read=1, rows_for_date=1))),
     )
     monkeypatch.setattr(
         complaints,
         "_process_candidates",
-        MagicMock(return_value=complaints.RunSummary(total_rows_read=1, rows_for_day=1, failed=1)),
+        MagicMock(return_value=complaints.RunSummary(total_rows_read=1, rows_for_date=1, failed=1)),
     )
 
     assert complaints.run() == 1
@@ -642,12 +777,12 @@ def test_run_returns_zero_when_all_candidates_succeed(monkeypatch):
     monkeypatch.setattr(
         complaints,
         "_build_single_candidate",
-        MagicMock(return_value=([_candidate()], complaints.RunSummary(total_rows_read=1, rows_for_day=1))),
+        MagicMock(return_value=([_candidate()], complaints.RunSummary(total_rows_read=1, rows_for_date=1))),
     )
     monkeypatch.setattr(
         complaints,
         "_process_candidates",
-        MagicMock(return_value=complaints.RunSummary(total_rows_read=1, rows_for_day=1, created=1)),
+        MagicMock(return_value=complaints.RunSummary(total_rows_read=1, rows_for_date=1, created=1)),
     )
 
     assert complaints.run() == 0

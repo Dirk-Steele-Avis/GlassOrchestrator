@@ -37,6 +37,8 @@ class ParsedInvoice:
     vin: str
     invoice_amount: Decimal
     pdf_path: str
+    is_recalibration: bool = False
+    invoice_total: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +78,8 @@ class IdentityResult:
     status: StageStatus
     identity: ValidatedIdentity | None = None
     detail: str = ""
+    fieldpo_snapshot: FieldPOIdentitySnapshot | None = None
+    sheet_mvas: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,6 +151,14 @@ class OutlookSource(Protocol):
 
 class IdentityResolver(Protocol):
     def resolve(self, invoice: ParsedInvoice) -> IdentityResult: ...
+
+
+class FieldPOApprover(Protocol):
+    def approve(
+        self,
+        invoice: ParsedInvoice,
+        identity: ValidatedIdentity,
+    ) -> None: ...
 
 
 class SheetIdentityReader(Protocol):

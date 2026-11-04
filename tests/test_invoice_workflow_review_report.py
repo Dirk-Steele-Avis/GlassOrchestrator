@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from dataclasses import replace
 from decimal import Decimal
 from unittest.mock import MagicMock
 
@@ -62,6 +63,26 @@ def test_report_keeps_all_rows_and_prioritizes_approved_then_match():
     assert summary.amount_matches == 2
     assert summary.amount_mismatches == 1
     assert all(row.historical_code == "AMOUNT_MISMATCH" for row in summary.rows)
+
+
+def test_review_report_uses_pdf_po_when_subject_po_is_missing():
+    invoice = replace(
+        _invoice("1000001"),
+        subject="[External] Invoice #1000001",
+        subject_po_number="",
+    )
+    repository = MagicMock()
+    repository.get_review_history.return_value = None
+    fieldpo = MagicMock()
+    fieldpo.read_review.return_value = FieldPOReviewSnapshot(
+        "IN PROGRESS", Decimal("340.00"),
+    )
+
+    summary = build_review_report(OutlookScanResult((invoice,), ()), repository, fieldpo)
+
+    fieldpo.read_review.assert_called_once_with(invoice.pdf_po_number)
+    assert summary.rows[0].subject_po_number == ""
+    assert summary.rows[0].pdf_po_number == invoice.pdf_po_number
 
 
 def test_report_exposes_missing_history_and_capture_or_fieldpo_failures(tmp_path):

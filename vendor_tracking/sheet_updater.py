@@ -278,6 +278,23 @@ class VendorSheetUpdater:
             if len(row) >= vin_col and normalize_vin_for_match(row[vin_col - 1]) == norm_vin
         ]
 
+    def find_rows_by_mva(self, mva: str) -> list[int]:
+        """Return every sheet row matching an exact eight- or nine-digit MVA."""
+        normalized_mva = str(mva or "").strip()
+        if not re.fullmatch(r"\d{8,9}", normalized_mva):
+            return []
+        normalized_mva = normalized_mva.zfill(9)
+        mva_col = self._col_index("MVA")
+        if mva_col is None:
+            return []
+
+        return [
+            row_idx
+            for row_idx, row in enumerate(self._all_values[1:], start=2)
+            if len(row) >= mva_col
+            and row[mva_col - 1].strip().zfill(9) == normalized_mva
+        ]
+
     def get_row_fields(self, row_index: int, column_names: list[str]) -> dict[str, str]:
         """Return named values from one cached sheet row."""
         if row_index < 2 or row_index > len(self._all_values):
