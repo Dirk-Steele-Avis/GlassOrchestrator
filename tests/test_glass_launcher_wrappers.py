@@ -151,6 +151,7 @@ def test_coverage_survey_wrapper_defines_explicit_subcommands() -> None:
     assert "zzz_glass_coverage_survey.pth" in content
     assert "coverage.process_startup()" in content
     assert ".coveragerc" in content
+    assert "coverage_survey_report.py" in content
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows launcher")

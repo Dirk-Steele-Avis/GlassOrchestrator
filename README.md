@@ -480,9 +480,19 @@ Run-CoverageSurvey.cmd stop     # disable recording; collected data is kept
 ```
 
 Typical use: `start`, run the normal workflows for a week, then `report`.
-Files and functions at 0% in the report never executed during the survey
-window — candidates for removal. The report can be rebuilt mid-survey at
-any time; data accumulates across runs.
+The report produces two outputs:
+
+- `reports\coverage_survey_report.html` — the high-level script usage
+  survey: per-script run counts, last-run times, 24/7 day-by-hour run
+  heatmaps, and a list of orphan `.py` files that no launcher or Copilot
+  skill can reach (built by `coverage_survey_report.py`). A script counts
+  as "run" only when its `if __name__ == "__main__"` block executed, so
+  imports are not miscounted as runs.
+- `htmlcov\index.html` — line-level drill-down; files and functions at 0%
+  never executed during the survey window.
+
+The report can be rebuilt mid-survey at any time; data accumulates across
+runs.
 
 Notes:
 - Configuration lives in `.coveragerc`; data files (`.coverage.*`) and the

@@ -67,6 +67,11 @@ echo Collected data files: %DATA_COUNT%
 exit /b 0
 
 :report
+"%VENV_PY%" coverage_survey_report.py
+if errorlevel 1 (
+  echo [ERROR] Script usage report generation failed.
+  exit /b 1
+)
 "%VENV_PY%" -m coverage combine --keep
 if not exist "%~dp0.coverage" (
   echo [ERROR] No survey data to report. Enable the survey and run the workflows first.
@@ -79,6 +84,7 @@ if errorlevel 1 (
 )
 "%VENV_PY%" -m coverage report
 echo.
-echo HTML report: %~dp0htmlcov\index.html
+echo Script usage report: %~dp0reports\coverage_survey_report.html
+echo HTML line report:    %~dp0htmlcov\index.html
 echo Files near 0%% coverage were never executed during the survey window.
 exit /b 0
