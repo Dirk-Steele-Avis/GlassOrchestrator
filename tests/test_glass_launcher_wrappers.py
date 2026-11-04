@@ -141,3 +141,67 @@ def test_morning_report_wrapper_generates_report_without_emailing() -> None:
     assert "Run-GlassBootstrap.cmd" in content
     assert "Copy report for Outlook" in content
     assert "send" not in content.lower()
+
+
+def test_coverage_survey_wrapper_defines_explicit_subcommands() -> None:
+    content = _read("Run-CoverageSurvey.cmd")
+    assert "Explicit subcommand required" in content
+    for subcommand in ("start", "stop", "status", "report"):
+        assert f'"%~1"=="{subcommand}"' in content
+    assert "zzz_glass_coverage_survey.pth" in content
+    assert "coverage.process_startup()" in content
+    assert ".coveragerc" in content
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows launcher")
+def test_coverage_survey_wrapper_rejects_missing_subcommand(tmp_path) -> None:
+    wrapper = tmp_path / "Run-CoverageSurvey.cmd"
+    wrapper.write_text(_read(wrapper.name), encoding="utf-8")
+    fake_python = tmp_path / ".venv" / "Scripts" / "python.exe"
+    fake_python.parent.mkdir(parents=True)
+    fake_python.write_bytes(b"")
+
+    result = subprocess.run(
+        [os.environ["ComSpec"], "/d", "/c", str(wrapper)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "Explicit subcommand required" in result.stdout
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows launcher")
+def test_coverage_survey_start_and_stop_toggle_hook() -> None:
+    hook = ROOT / ".venv" / "Lib" / "site-packages" / "zzz_glass_coverage_survey.pth"
+    if not (ROOT / ".venv" / "Scripts" / "python.exe").exists():
+        pytest.skip("project venv not available")
+    if hook.exists():
+        pytest.skip("survey currently enabled; not toggling an active survey")
+
+    wrapper = str(ROOT / "Run-CoverageSurvey.cmd")
+    try:
+        start = subprocess.run(
+            [os.environ["ComSpec"], "/d", "/c", wrapper, "start"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert start.returncode == 0, start.stdout + start.stderr
+        assert hook.exists()
+        assert "coverage.process_startup()" in hook.read_text(encoding="utf-8")
+
+        stop = subprocess.run(
+            [os.environ["ComSpec"], "/d", "/c", wrapper, "stop"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert stop.returncode == 0, stop.stdout + stop.stderr
+        assert not hook.exists()
+    finally:
+        hook.unlink(missing_ok=True)

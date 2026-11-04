@@ -466,6 +466,32 @@ Optional: pass specific targets to run a subset.
 Run-Tests.cmd tests/test_unit.py
 ```
 
+### Dead-Code Survey (runtime usage coverage)
+
+Find code that exists but is never used in real operation. The survey
+instruments every Python process launched from the project venv — no
+separate instrumented build is needed.
+
+```bash
+Run-CoverageSurvey.cmd start    # enable recording (writes a hook into .venv)
+Run-CoverageSurvey.cmd status   # show enabled/disabled and collected data file count
+Run-CoverageSurvey.cmd report   # merge data and build htmlcov\index.html
+Run-CoverageSurvey.cmd stop     # disable recording; collected data is kept
+```
+
+Typical use: `start`, run the normal workflows for a week, then `report`.
+Files and functions at 0% in the report never executed during the survey
+window — candidates for removal. The report can be rebuilt mid-survey at
+any time; data accumulates across runs.
+
+Notes:
+- Configuration lives in `.coveragerc`; data files (`.coverage.*`) and the
+  HTML report (`htmlcov/`) are gitignored.
+- Running `pytest` while the survey is active counts test-exercised code
+  as "used" — avoid test runs during the survey window.
+- The hook lives inside `.venv`, so rebuilding the venv silently disables
+  the survey; run `Run-CoverageSurvey.cmd status` to confirm it is active.
+
 ## File Layout
 
 ```
