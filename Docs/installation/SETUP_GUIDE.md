@@ -81,29 +81,21 @@ Helper scripts:
 Run full bootstrap + tests:
 
 ```powershell
-.\Run-Tests.cmd
+.venv\Scripts\python.exe -m pytest tests\
 ```
-
-This script will:
-
-- create `.venv` if missing,
-- install `requirements.txt`,
-- run the full test suite.
 
 ## 6) Run Orchestrator
 
-```powershell
-.\Run-GlassOrchestrator.cmd
-```
-
-For the simplified daily Glass flow, use these commands instead:
+Use the daily Glass flow commands:
 
 ```powershell
 .\Run-Glass-Intake.cmd
 .\Run-Glass-Closeout.cmd
 ```
 
-`Run-GlassOrchestrator.cmd` and the older component launchers remain in the repository for reference and troubleshooting, but they are deprecated for normal daily use.
+The full pipeline can also be run directly: `.venv\Scripts\python.exe GlassOrchestrator.py`.
+The older component launchers were removed in the dead-code cleanup; archived
+copies live under `run-archieve\`.
 
 ## Troubleshooting
 

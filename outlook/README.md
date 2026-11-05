@@ -1,7 +1,7 @@
 # AGN Invoice Automation (single file)
 
-Everything lives in **`agn_invoices.py`**. Double-click **`Run AGN Invoices.bat`**
-to run it, or use the command line for more control.
+Everything lives in **`agn_invoices.py`**. Run it from the command line
+with the project venv interpreter.
 
 ## One-time setup
 
@@ -21,7 +21,7 @@ update them.
 python agn_invoices.py
 ```
 
-or just double-click `Run AGN Invoices.bat`. This runs, in order:
+This runs, in order:
 
 1. **Extract** - reads new invoices from Outlook (`Inbox\AGN\Invoice`),
    saves PDFs, pulls VIN + amount, moves handled emails to `...\Invoice\Processed`

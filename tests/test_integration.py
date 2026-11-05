@@ -527,96 +527,10 @@ class TestIT5_SpreadsheetConfigurationHealth:
 
 class TestIT6_GlassWorkItemPhase:
     """
-    Integration tests for run_glass_work_item_phase().
-    Driver is mocked; tests verify full call path through check → create → sheet update.
+    Integration test for notification eligibility shared across phases.
+    (Selenium-based run_glass_work_item_phase tests were removed with the
+    legacy flows/ package.)
     """
-
-    def _make_handler(self, status: str = "created", mva: str = "11111111") -> MagicMock:
-        handler = MagicMock()
-        handler.create_work_item.return_value = {"status": status, "mva": mva}
-        return handler
-
-    def _make_sheet_client(self) -> MagicMock:
-        return MagicMock()
-
-    def test_no_existing_item_calls_create_with_correct_config(self):
-        """
-        Full path: check returns False → create_work_item called with correct
-        WorkItemConfig (mva, damage_type, location all matching manifest entry).
-        """
-        from flows.glass_work_item_phase import run_glass_work_item_phase
-
-        driver = MagicMock()
-        mock_handler = self._make_handler(status="created", mva="11111111")
-
-        with patch("flows.glass_work_item_phase.warmup_compass", return_value=True), \
-             patch("flows.glass_work_item_phase.navigate_to_mva", return_value=True), \
-             patch("flows.glass_work_item_phase.check_existing_work_item", return_value=False), \
-             patch("flows.glass_work_item_phase.create_work_item_handler", return_value=mock_handler):
-            run_glass_work_item_phase(
-                driver,
-                [{"mva": "11111111", "damage_type": "Replacement", "location": "WINDSHIELD"}],
-            )
-
-        mock_handler.create_work_item.assert_called_once()
-        config = mock_handler.create_work_item.call_args[0][0]
-        assert config.mva == "11111111"
-        assert config.damage_type == "REPLACEMENT"   # WorkItemConfig normalizes to uppercase
-        assert config.location == "WINDSHIELD"
-
-    def test_two_mva_manifest_one_skips_one_creates(self):
-        """
-        Two-MVA manifest: first has existing item (skipped), second does not (created).
-        Both are attempted; counts reflect actual outcomes.
-        """
-        from flows.glass_work_item_phase import run_glass_work_item_phase
-
-        driver = MagicMock()
-        mock_handler = self._make_handler(status="created", mva="22222222")
-        check_results = [True, False]  # first MVA skipped, second created
-
-        with patch("flows.glass_work_item_phase.warmup_compass", return_value=True), \
-             patch("flows.glass_work_item_phase.navigate_to_mva", return_value=True), \
-             patch("flows.glass_work_item_phase.check_existing_work_item",
-                   side_effect=check_results), \
-             patch("flows.glass_work_item_phase.create_work_item_handler",
-                   return_value=mock_handler):
-            result = run_glass_work_item_phase(
-                driver,
-                [
-                    {"mva": "11111111", "damage_type": "Replacement", "location": "WINDSHIELD"},
-                    {"mva": "22222222", "damage_type": "Replacement", "location": "WINDSHIELD"},
-                ],
-            )
-
-        assert result["processed"] == 2
-        assert result["skipped"] == 1
-        assert result["created"] == 1
-        assert result["failed"] == 0
-
-    def test_create_exception_does_not_propagate(self):
-        """
-        Exception raised inside create_work_item() must not propagate out of
-        run_glass_work_item_phase() — loop continues and failed count increments.
-        """
-        from flows.glass_work_item_phase import run_glass_work_item_phase
-
-        driver = MagicMock()
-        mock_handler = MagicMock()
-        mock_handler.create_work_item.side_effect = Exception("Compass timeout")
-
-        with patch("flows.glass_work_item_phase.warmup_compass", return_value=True), \
-             patch("flows.glass_work_item_phase.navigate_to_mva", return_value=True), \
-             patch("flows.glass_work_item_phase.check_existing_work_item", return_value=False), \
-             patch("flows.glass_work_item_phase.create_work_item_handler",
-                   return_value=mock_handler):
-            result = run_glass_work_item_phase(
-                driver,
-                [{"mva": "11111111", "damage_type": "Replacement", "location": "WINDSHIELD"}],
-            )
-
-        assert result["failed"] == 1
-        assert result["processed"] == 1
 
     def test_eligibility_consistent_between_phase6_and_phase7(self):
         """
@@ -634,31 +548,6 @@ class TestIT6_GlassWorkItemPhase:
         assert is_notification_eligible(replacement_row_phase7) is True
         assert is_notification_eligible(repair_row_phase6) is False
         assert is_notification_eligible(repair_row_phase7) is False
-
-    def test_work_item_created_column_updated_in_sheet_after_success(self):
-        """
-        After successful creation, sheet_client.mark_work_item_created() is called
-        with the correct MVA and tab_name.
-        """
-        from flows.glass_work_item_phase import run_glass_work_item_phase
-
-        driver = MagicMock()
-        mock_handler = self._make_handler(status="created", mva="11111111")
-        mock_sheet = self._make_sheet_client()
-
-        with patch("flows.glass_work_item_phase.warmup_compass", return_value=True), \
-             patch("flows.glass_work_item_phase.navigate_to_mva", return_value=True), \
-             patch("flows.glass_work_item_phase.check_existing_work_item", return_value=False), \
-             patch("flows.glass_work_item_phase.create_work_item_handler",
-                   return_value=mock_handler):
-            run_glass_work_item_phase(
-                driver,
-                [{"mva": "11111111", "damage_type": "Replacement", "location": "WINDSHIELD"}],
-                sheet_client=mock_sheet,
-                tab_name="GlassClaims",
-            )
-
-        mock_sheet.mark_work_item_created.assert_called_once_with("11111111", "GlassClaims")
 
 
 # ─── IT-7: All Area × Claim Combinations ─────────────────────────────────────
