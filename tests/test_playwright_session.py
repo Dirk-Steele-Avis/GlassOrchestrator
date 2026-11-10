@@ -1,6 +1,72 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
+
+def test_microsoft_auth_wait_holds_until_approval_completes():
+    from playwright_prototype import session
+
+    page = MagicMock()
+    page.url = "https://login.microsoftonline.com/common/oauth2/authorize"
+    page.goto = AsyncMock()
+
+    async def approve(_ms):
+        page.url = "https://avisbudget.palantirfoundry.com/workspace"
+
+    page.wait_for_timeout = AsyncMock(side_effect=approve)
+
+    asyncio.run(session._wait_for_microsoft_auth_completion(page))
+
+    page.wait_for_timeout.assert_awaited_once_with(session.MICROSOFT_AUTH_POLL_INTERVAL_MS)
+    page.goto.assert_not_awaited()
+
+
+def test_microsoft_auth_wait_timeout_raises_precise_error(monkeypatch):
+    from playwright_prototype import session
+
+    page = MagicMock()
+    page.url = "https://login.microsoftonline.com/common/oauth2/authorize"
+    page.wait_for_timeout = AsyncMock()
+    monkeypatch.setattr(session, "MICROSOFT_AUTH_COMPLETION_TIMEOUT_MS", 0)
+
+    with pytest.raises(RuntimeError, match="Microsoft authentication did not complete"):
+        asyncio.run(session._wait_for_microsoft_auth_completion(page))
+
+    page.wait_for_timeout.assert_not_awaited()
+
+
+def test_advance_waits_for_mfa_instead_of_navigating_away(monkeypatch):
+    from playwright_prototype import session
+
+    page = MagicMock()
+    page.url = session.LOGIN_URL
+    page.goto = AsyncMock()
+    page.wait_for_load_state = AsyncMock()
+
+    async def select_account(_page):
+        page.url = "https://login.microsoftonline.com/common/oauth2/authorize"
+
+    async def complete_auth(_page):
+        page.url = session.LOGIN_URL
+
+    auth_wait = AsyncMock(side_effect=complete_auth)
+
+    monkeypatch.setattr(session, "_allow_compass_home_consent", AsyncMock(return_value=False))
+    monkeypatch.setattr(session, "_is_on_workshop_home", AsyncMock(return_value=False))
+    monkeypatch.setattr(session, "_is_on_login_page", AsyncMock(return_value=False))
+    monkeypatch.setattr(session, "_is_on_sso_picker", AsyncMock(return_value=True))
+    monkeypatch.setattr(session, "_select_first_sso_account", AsyncMock(side_effect=select_account))
+    monkeypatch.setattr(session, "_wait_for_microsoft_auth_completion", auth_wait)
+    monkeypatch.setattr(session, "_is_on_compass_app_page", AsyncMock(return_value=True))
+    monkeypatch.setattr(session, "_is_on_wwid_screen", AsyncMock(return_value=False))
+
+    result = asyncio.run(session._advance_existing_session_page(page))
+
+    assert result is page
+    auth_wait.assert_awaited_once_with(page)
+    page.goto.assert_not_awaited()
+
 
 def test_exact_compass_home_consent_is_allowed():
     from playwright_prototype import session

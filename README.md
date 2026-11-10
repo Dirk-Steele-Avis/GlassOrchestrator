@@ -159,6 +159,14 @@ repair or warranty/OEM combinations also remain blocking errors.
 
 Closeout covers close candidate build, work-item closure, and the CompletedInvoices PO/invoice-side path.
 
+If a Microsoft sign-in page appears during Compass session setup, the workflow
+holds on that page for up to 30 seconds so the Authenticator prompt (including
+number matching) can be approved; it never navigates away while approval is
+pending. If sign-in does not complete in time, the run stops with a precise
+error. Compass vehicle navigation separately waits up to 20 seconds for the
+Vehicles button; if it remains unavailable, the batch stops and reports the
+navigation failure.
+
 Outside BB/APO, local-market windshield replacements have a separate $150
 camera/ADAS recalibration invoice with its own PO and invoice checks. These
 invoices do not create another Glass closure or overwrite replacement costs.

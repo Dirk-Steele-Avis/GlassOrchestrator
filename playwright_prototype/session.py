@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -18,6 +19,9 @@ from playwright_prototype.login import (
 
 log = logging.getLogger(__name__)
 BUTTON_PUSH_DELAY_MS = 2000
+MICROSOFT_AUTH_URL_FRAGMENT = "login.microsoftonline.com"
+MICROSOFT_AUTH_COMPLETION_TIMEOUT_MS = 30_000
+MICROSOFT_AUTH_POLL_INTERVAL_MS = 1_000
 COMPASS_HOME_MVA_INPUT_SELECTOR = 'input[placeholder="MVA number"]'
 COMPASS_HOME_ORIGIN = "https://compass-home.avisbudget.palantirfoundry.com/"
 COMPASS_HOME_CONSENT_TEXT = (
@@ -77,6 +81,30 @@ async def _select_first_sso_account(page: Page) -> None:
             continue
 
     raise RuntimeError("[SESSION] Unable to find/click first SSO account tile on picker")
+
+
+async def _wait_for_microsoft_auth_completion(page: Page) -> None:
+    """Hold on the Microsoft sign-in page until interactive authentication finishes.
+
+    Navigating away while an Authenticator number-match prompt is pending cancels
+    the sign-in request, so this polls the URL and only returns once it leaves
+    the Microsoft auth domain. Raises if authentication does not complete in time.
+    """
+    log.info(
+        "[SESSION] Microsoft sign-in page detected — waiting up to %ds for authentication "
+        "(approve any Authenticator prompt now)",
+        MICROSOFT_AUTH_COMPLETION_TIMEOUT_MS // 1000,
+    )
+    deadline = time.monotonic() + MICROSOFT_AUTH_COMPLETION_TIMEOUT_MS / 1000.0
+    while time.monotonic() < deadline:
+        if MICROSOFT_AUTH_URL_FRAGMENT not in (page.url or "").lower():
+            log.info("[SESSION] Microsoft authentication completed — landed at %s", page.url)
+            return
+        await page.wait_for_timeout(MICROSOFT_AUTH_POLL_INTERVAL_MS)
+    raise RuntimeError(
+        "[SESSION] Microsoft authentication did not complete within "
+        f"{MICROSOFT_AUTH_COMPLETION_TIMEOUT_MS // 1000}s; still on {page.url}"
+    )
 
 
 def _score_attached_page(page: Page) -> int:
@@ -213,8 +241,11 @@ async def _advance_existing_session_page(page: Page) -> Page:
         await page.wait_for_load_state("domcontentloaded")
 
     current_url = (page.url or "").lower()
-    if "m365.cloud.microsoft" in current_url or "login.microsoftonline.com" in current_url:
-        log.info("[SESSION] Moving from Microsoft auth page to Foundry home URL")
+    if MICROSOFT_AUTH_URL_FRAGMENT in current_url:
+        await _wait_for_microsoft_auth_completion(page)
+        current_url = (page.url or "").lower()
+    if "m365.cloud.microsoft" in current_url:
+        log.info("[SESSION] Moving from Microsoft post-auth page to Foundry home URL")
         await page.goto(FOUNDRY_HOME_URL, wait_until="domcontentloaded")
 
     on_compass_app = await _is_on_compass_app_page(page)
