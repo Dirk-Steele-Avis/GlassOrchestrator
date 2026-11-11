@@ -7,6 +7,7 @@ Scope rules (per operator workflow):
 4. Process only rows with the explicitly selected Inventory Date.
 
 Write behavior:
+- Only POs whose card shows "Created by Steele, Dirk" count as matches.
 - Exactly one FPO found: write the raw FPO value.
 - Multiple FPOs found: write "multi" for manual review.
 - No FPO found: write "missing".
@@ -45,6 +46,7 @@ ORCHESTRATOR_LOCAL_CONFIG_PATH = BASE_DIR / "orchestrator_config.local.json"
 SHARED_LOCAL_CONFIG_PATH = BASE_DIR / "config" / "config.local.json"
 
 FIELDPO_URL = "https://supply-chain.east.prod.sdp.abg.cloud/fieldpo/dashboard"
+REQUIRED_PO_CREATOR = "Steele, Dirk"
 FIELDPO_PROFILE_DIR = BASE_DIR / "outlook" / "browser_profile"
 BACKUP_DIR = BASE_DIR / "log" / "fieldpo_nextaction_backups"
 
@@ -170,41 +172,78 @@ def _go_to_active_work_order_tab(page, mva: str) -> bool:
     return True
 
 
-def _extract_fpo_values(page) -> list[str]:
-    # Scope extraction to the Purchase Orders section to avoid counting values
-    # from unrelated page regions (history, hidden DOM, etc.).
-    po_section_text = page.locator("text=Purchase Orders").first.locator("..").inner_text()
+def _extract_fpo_values_from_text(po_section_text: str) -> list[str]:
+    """Extract the eligible FPO value(s) from the Purchase Orders section text.
 
+    A PO only counts when its own card shows it was created by
+    REQUIRED_PO_CREATOR. Among eligible POs, the topmost workorder PO is the
+    source of truth, so only the first eligible value is returned.
+    """
     count_match = re.search(r"Purchase\s+Orders\s*\[(\d+)\]", po_section_text, re.IGNORECASE)
     declared_count = int(count_match.group(1)) if count_match else None
 
-    # In this UI the PO card line is rendered as "PO# FPO1079594".
+    # In this UI the PO card line is rendered as "PO# FPO1079594", and each
+    # card carries its own "Created by <name> on YYYY-MM-DD" line.
     po_pattern = re.compile(r"\bPO\s*#\s*([A-Z0-9\-]+)\b", re.IGNORECASE)
-    found: list[str] = [str(match).strip() for match in po_pattern.findall(po_section_text)]
-    found = [value for value in found if value and value.upper() not in {"PO", "FPO"}]
+    creator_pattern = re.compile(
+        r"Created\s+by\s+(.+?)\s+on\s+\d{4}-\d{2}-\d{2}", re.IGNORECASE
+    )
+
+    po_matches = [
+        match
+        for match in po_pattern.finditer(po_section_text)
+        if match.group(1).strip() and match.group(1).strip().upper() not in {"PO", "FPO"}
+    ]
+
+    eligible: list[str] = []
+    for idx, match in enumerate(po_matches):
+        po_value = match.group(1).strip()
+        segment_end = (
+            po_matches[idx + 1].start() if idx + 1 < len(po_matches) else len(po_section_text)
+        )
+        segment = po_section_text[match.end():segment_end]
+        creator_match = creator_pattern.search(segment)
+        creator = creator_match.group(1).strip() if creator_match else ""
+
+        if creator.casefold() != REQUIRED_PO_CREATOR.casefold():
+            log.info(
+                "PO %s skipped: created by %s, not %s.",
+                po_value,
+                creator or "<missing>",
+                REQUIRED_PO_CREATOR,
+            )
+            continue
+
+        eligible.append(po_value)
 
     # Preserve discovery order while de-duplicating.
     deduped: list[str] = []
     seen: set[str] = set()
-    for value in found:
+    for value in eligible:
         key = value.upper()
         if key not in seen:
             seen.add(key)
             deduped.append(value)
 
-    # Business rule update: an MVA can have multiple workorders, and the
-    # topmost workorder should be treated as the source of truth.
-    # We therefore take the first PO value shown in the section.
+    # Business rule: an MVA can have multiple workorders, and the topmost
+    # workorder is the source of truth, so take the first eligible PO value.
     if deduped:
         if declared_count is not None and declared_count > 1:
             log.info(
-                "Purchase Orders count is %d; selecting topmost PO value %s",
+                "Purchase Orders count is %d; selecting topmost eligible PO value %s",
                 declared_count,
                 deduped[0],
             )
         return [deduped[0]]
 
     return []
+
+
+def _extract_fpo_values(page) -> list[str]:
+    # Scope extraction to the Purchase Orders section to avoid counting values
+    # from unrelated page regions (history, hidden DOM, etc.).
+    po_section_text = page.locator("text=Purchase Orders").first.locator("..").inner_text()
+    return _extract_fpo_values_from_text(po_section_text)
 
 
 def _page_looks_like_no_fpo(page) -> bool:

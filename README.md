@@ -149,7 +149,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Set-GlassPassword.ps1
 
 ### Simplified Glass workflow
 
-Intake covers incoming inventory email, spreadsheet updates, FieldPO next-action, and complaint/work-item creation. The Orca email Type date is authoritative and may be today or tomorrow, allowing inventory to be entered the night before. Each email is persisted, processed through FieldPO and Compass for that exact date, and then marked read.
+Intake covers incoming inventory email, spreadsheet updates, FieldPO next-action, and complaint/work-item creation. The Orca email Type date is authoritative and may be today or tomorrow, allowing inventory to be entered the night before. Each email is persisted, processed through FieldPO and Compass for that exact date, and then marked read. The FieldPO next-action lookup only counts POs whose card shows they were created by `Steele, Dirk`; POs by anyone else are ignored, and a row with no eligible PO is written as `missing`.
 
 Malformed scan values are logged as warnings and skipped so valid scans can continue.
 Correct skipped scans in Orca and resubmit only those scans. The source email is

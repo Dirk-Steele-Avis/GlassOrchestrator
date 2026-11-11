@@ -72,10 +72,11 @@ An area-free warranty scan such as `59187380war` shall write `Action=Warranty`, 
 
 1. FieldPO and Compass shall receive the email Type date explicitly; neither stage shall infer `date.today()` or the latest sheet date.
 2. Each stage shall process all eligible Google Sheet rows whose Inventory Date equals the explicit Type date.
-3. If multiple unread emails share a Type date, each email shall trigger its own FieldPO-then-Compass pass after that email is persisted.
-4. Standalone FieldPO processing shall require `--inventory-date YYYY-MM-DD` or an explicit rollback mode.
-5. Standalone Compass processing shall require `--inventory-date YYYY-MM-DD`, `--mva`, or explicit CSV mode through its launcher.
-6. No receipt-file, maximum-date, today, or tomorrow fallback shall be used to select downstream rows.
+3. When the FieldPO next-action lookup searches for an existing PO, a PO shall count as a match only when its Purchase Orders card shows it was created by `Steele, Dirk`. POs created by anyone else, or with no creator shown, shall be ignored; if no eligible PO remains, the row shall be written as `missing`.
+4. If multiple unread emails share a Type date, each email shall trigger its own FieldPO-then-Compass pass after that email is persisted.
+5. Standalone FieldPO processing shall require `--inventory-date YYYY-MM-DD` or an explicit rollback mode.
+6. Standalone Compass processing shall require `--inventory-date YYYY-MM-DD`, `--mva`, or explicit CSV mode through its launcher.
+7. No receipt-file, maximum-date, today, or tomorrow fallback shall be used to select downstream rows.
 
 ## OEM Requirements
 
