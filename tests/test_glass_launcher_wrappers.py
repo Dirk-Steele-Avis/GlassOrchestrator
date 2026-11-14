@@ -23,7 +23,7 @@ def test_intake_wrapper_calls_expected_steps() -> None:
 
 def test_closeout_wrapper_supports_mva_and_batch_modes() -> None:
     content = _read("Run-Glass-Closeout.cmd")
-    assert "build_close_queue.py" in content
+    assert "build_close_queue.py" not in content
     assert "close_workitem.py" in content
     assert "invoice_workflow.cli" in content
     assert "--mva" in content
@@ -33,8 +33,8 @@ def test_closeout_wrapper_supports_mva_and_batch_modes() -> None:
 
 def test_closeout_wrapper_passes_invoice_work_item_results() -> None:
     content = _read("Run-Glass-Closeout.cmd")
-    assert content.count("--concise-console") == 5
-    assert content.count("--results-json data\\glass_closeout_work_items.json") == 5
+    assert content.count("--concise-console") == 3
+    assert content.count("--results-json data\\glass_closeout_work_items.json") == 3
     assert "--work-item-results data\\glass_closeout_work_items.json" in content
 
 
@@ -105,14 +105,57 @@ def test_closeout_stops_and_preserves_stage_failure_exit_code(tmp_path, argument
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows launcher")
-def test_unlimited_closeout_keeps_existing_three_stage_order(tmp_path):
+def test_unlimited_closeout_runs_unified_invoice_flow(tmp_path):
     result, calls = _run_closeout_wrapper(tmp_path, [])
     assert result.returncode == 0
-    assert len(calls) == 3
-    assert "build_close_queue.py --apply" in calls[0]
-    assert "WorkItems\\close_workitem.py" in calls[1]
-    assert "-m invoice_workflow.cli" in calls[2]
-    assert "--close-work-items" not in calls[2]
+    assert len(calls) == 1
+    assert "-m invoice_workflow.cli --close-work-items" in calls[0]
+    assert "--max-invoices" not in calls[0]
+    assert "--invoice-number" not in calls[0]
+    assert "build_close_queue.py" not in calls[0]
+    assert "WorkItems\\close_workitem.py" not in calls[0]
+    assert "--work-item-results data\\glass_closeout_work_items.json" in calls[0]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows launcher")
+def test_mva_mode_closes_work_items_without_invoice_stage(tmp_path):
+    result, calls = _run_closeout_wrapper(tmp_path, ["--mva", "059235573"])
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert len(calls) == 1
+    assert "WorkItems\\close_workitem.py --mvas \"059235573\"" in calls[0]
+    assert "invoice_workflow.cli" not in calls[0]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows launcher")
+def test_csv_mode_closes_work_items_without_invoice_stage(tmp_path):
+    result, calls = _run_closeout_wrapper(
+        tmp_path, ["--csv", "review.csv", "--max-rows", "2"],
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert len(calls) == 1
+    assert "WorkItems\\close_workitem.py --csv \"review.csv\" --max-rows 2" in calls[0]
+    assert "invoice_workflow.cli" not in calls[0]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows launcher")
+def test_sweep_mode_runs_only_the_sweep(tmp_path):
+    result, calls = _run_closeout_wrapper(
+        tmp_path, ["--sweep-terminal-to-needs-review"],
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert len(calls) == 1
+    assert "-m invoice_workflow.cli" in calls[0]
+    assert "--sweep-terminal-to-needs-review" in calls[0]
+    assert "--close-work-items" not in calls[0]
+    assert "close_workitem.py" not in calls[0]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows launcher")
+def test_plain_closeout_rejects_max_rows_without_csv(tmp_path):
+    result, calls = _run_closeout_wrapper(tmp_path, ["--max-rows", "2"])
+    assert result.returncode == 2
+    assert "--max-rows requires --csv" in result.stdout
+    assert calls == []
 
 
 def test_shared_bootstrap_exists() -> None:

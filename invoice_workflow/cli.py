@@ -292,40 +292,37 @@ def _run_live(
             flush=True,
         )
         repository = InvoiceRepository(DATABASE_PATH)
-        captured_scan = None
-        closeout_reviews: tuple[tuple[ParsedInvoice, str], ...] = ()
-        if args.close_work_items:
-            repository.initialize()
-            terminal_message_ids = frozenset(
-                repository.list_terminal_identity_message_ids()
-            )
-            captured_scan = outlook_source.scan_parent_invoices(
-                invoice_number=args.invoice_number,
-                max_invoices=args.max_invoices,
-                excluded_message_ids=(
-                    frozenset()
-                    if args.invoice_number is not None
-                    else terminal_message_ids
-                ),
-            )
-            for invoice in captured_scan.invoices:
-                if invoice.internet_message_id in terminal_message_ids:
-                    raise ValueError(
-                        f"Selected Invoice #{invoice.invoice_number} is already terminal "
-                        "by exact InternetMessageID; closeout was not started"
-                    )
-            reviews, deferred = _close_selected_work_items(
-                captured_scan, config, args.work_item_results, logger,
-            )
-            closeout_reviews = tuple(reviews)
-            removed = deferred | {invoice.internet_message_id for invoice, _ in reviews}
-            captured_scan = OutlookScanResult(
-                tuple(
-                    invoice for invoice in captured_scan.invoices
-                    if invoice.internet_message_id not in removed
-                ),
-                captured_scan.failures,
-            )
+        repository.initialize()
+        terminal_message_ids = frozenset(
+            repository.list_terminal_identity_message_ids()
+        )
+        captured_scan = outlook_source.scan_parent_invoices(
+            invoice_number=args.invoice_number,
+            max_invoices=args.max_invoices,
+            excluded_message_ids=(
+                frozenset()
+                if args.invoice_number is not None
+                else terminal_message_ids
+            ),
+        )
+        for invoice in captured_scan.invoices:
+            if invoice.internet_message_id in terminal_message_ids:
+                raise ValueError(
+                    f"Selected Invoice #{invoice.invoice_number} is already terminal "
+                    "by exact InternetMessageID; closeout was not started"
+                )
+        reviews, deferred = _close_selected_work_items(
+            captured_scan, config, args.work_item_results, logger,
+        )
+        closeout_reviews = tuple(reviews)
+        removed = deferred | {invoice.internet_message_id for invoice, _ in reviews}
+        captured_scan = OutlookScanResult(
+            tuple(
+                invoice for invoice in captured_scan.invoices
+                if invoice.internet_message_id not in removed
+            ),
+            captured_scan.failures,
+        )
         sheet_reader = GoogleSheetIdentityReader(
             spreadsheet_id=spreadsheet_id,
             sheet_name=sheet_name,
@@ -346,13 +343,11 @@ def _run_live(
             page.wait_for_url("**/fieldpo/dashboard**", timeout=120_000)
             fieldpo_identity_reader = FieldPOBrowserIdentityReader(page)
             resolver = StrictIdentityResolver(sheet_reader, fieldpo_identity_reader)
-            fieldpo_approver = None
-            if captured_scan is not None:
-                from invoice_workflow.identity_adapters import FieldPOBrowserApprover
+            from invoice_workflow.identity_adapters import FieldPOBrowserApprover
 
-                fieldpo_approver = FieldPOBrowserApprover(
-                    page, fieldpo_identity_reader,
-                )
+            fieldpo_approver = FieldPOBrowserApprover(
+                page, fieldpo_identity_reader,
+            )
             coordinator = CompletedInvoicesCoordinator(
                 outlook_source,
                 resolver,
@@ -360,15 +355,10 @@ def _run_live(
                 logger,
                 run_id=run_id,
             )
-            if captured_scan is not None:
-                return coordinator.run_captured(
-                    captured_scan, invoice_number=args.invoice_number,
-                    closeout_reviews=closeout_reviews,
-                    fieldpo_approver=fieldpo_approver,
-                )
-            return coordinator.run_live(
-                invoice_number=args.invoice_number,
-                max_invoices=args.max_invoices,
+            return coordinator.run_captured(
+                captured_scan, invoice_number=args.invoice_number,
+                closeout_reviews=closeout_reviews,
+                fieldpo_approver=fieldpo_approver,
             )
     finally:
         pythoncom.CoUninitialize()
@@ -535,11 +525,12 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--work-item-results", type=Path)
     parser.add_argument("--close-work-items", action="store_true")
     args = parser.parse_args(argv)
-    if args.close_work_items:
-        if args.max_invoices is None and args.invoice_number is None:
-            parser.error("--close-work-items requires --max-invoices or --invoice-number")
-        if args.sweep_terminal_to_needs_review:
+    if args.sweep_terminal_to_needs_review:
+        if args.close_work_items:
             parser.error("--close-work-items cannot be combined with --sweep-terminal-to-needs-review")
+    else:
+        if not args.close_work_items:
+            parser.error("a live closeout run requires --close-work-items")
         if args.work_item_results is None:
             parser.error("--close-work-items requires --work-item-results")
     return args

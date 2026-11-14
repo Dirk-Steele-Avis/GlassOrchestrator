@@ -194,23 +194,29 @@ read-only and never sends email.
 See [Docs/GlassMorningReportRequirements.md](Docs/GlassMorningReportRequirements.md)
 for the data, rendering, and failure contracts.
 
-`Run-Glass-Closeout.cmd` supports two operator modes:
+`Run-Glass-Closeout.cmd` supports these operator modes:
 
 ```bash
-Run-Glass-Closeout.cmd --mva 058524185
+Run-Glass-Closeout.cmd
 Run-Glass-Closeout.cmd --max-invoices 1
 Run-Glass-Closeout.cmd --Max 1
 Run-Glass-Closeout.cmd --invoice-number 5485994
-Run-Glass-Closeout.cmd
+Run-Glass-Closeout.cmd --mva 058524185
 ```
 
-Use `--mva` for a single-target work-item close and the default command for batch
-closeout. For development/validation, `--max-invoices N` (also `--Max N`)
-selects at most N eligible invoice emails, oldest first, **once before changes**.
+The default command runs the full closeout flow for every eligible invoice
+email: Sheet/queue updates, associated Glass work-item closure, invoice
+validation, exact FieldPO PO approval, FieldPO work-order closure, and email
+finalization. For development/validation, `--max-invoices N` (also `--Max N`)
+restricts that same flow to at most N eligible invoice emails, oldest first,
+selected **once before changes**.
 Only those same invoices can update the Sheet/queue, close associated work items,
 pass invoice validation, approve the exact FieldPO PO, close its FieldPO work
 order, and enter email finalization. Pre-existing queue rows for
 other MVAs are not processed. This is a live run, not a dry run.
+`--mva` (and `--csv`) close the targeted Glass work items only; they do not
+validate invoices, approve POs, or move invoice emails — run the default
+closeout afterwards to complete those stages.
 
 Use `--invoice-number N` to select an exact invoice number across all closeout
 stages. A PO number in the email subject is optional: the invoice PDF must
