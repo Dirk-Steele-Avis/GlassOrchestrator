@@ -1,5 +1,5 @@
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock
 
@@ -25,19 +25,27 @@ def _invoice() -> ParsedInvoice:
         vin="1C4SJSBP6SS537975",
         invoice_amount=Decimal("340.00"),
         pdf_path="invoice.pdf",
+        invoice_total=Decimal("340.00"),
     )
 
 
-def _resolver(sheet_mvas=("061093642",), **fieldpo_overrides):
+def _resolver(
+    sheet_mvas=("061093642",),
+    inventory_dates=(date(2026, 9, 1),),
+    **fieldpo_overrides,
+):
     invoice = _invoice()
     snapshot = FieldPOIdentitySnapshot(
         po_number=fieldpo_overrides.get("po_number", invoice.subject_po_number),
         vin=fieldpo_overrides.get("vin", invoice.vin),
         mva=fieldpo_overrides.get("mva", sheet_mvas[0] if sheet_mvas else "061093642"),
-        authorized_amount=fieldpo_overrides.get("authorized_amount", invoice.invoice_amount),
+        authorized_amount=fieldpo_overrides.get("authorized_amount", invoice.invoice_total),
+        created_by=fieldpo_overrides.get("created_by", "Steele, Dirk"),
+        created_on=fieldpo_overrides.get("created_on", date(2026, 9, 1)),
     )
     sheet = MagicMock()
     sheet.find_mvas_by_vin.return_value = sheet_mvas
+    sheet.find_inventory_dates_by_vin.return_value = inventory_dates
     fieldpo = MagicMock()
     fieldpo.read_identity.return_value = snapshot
     return StrictIdentityResolver(sheet, fieldpo), sheet, fieldpo
@@ -78,6 +86,7 @@ def test_separate_recalibration_po_still_requires_exact_authorized_amount(author
         subject_po_number="FPO1165259",
         pdf_po_number="FPO1165259",
         invoice_amount=Decimal("150.00"),
+        invoice_total=Decimal("150.00"),
     )
     resolver, _, fieldpo = _resolver(
         po_number="FPO1165259",
@@ -153,3 +162,80 @@ def test_fieldpo_mismatch_blocks(fieldpo_overrides, expected):
     assert expected in result.detail
     assert result.fieldpo_snapshot is not None
     assert result.sheet_mvas == ("061093642",)
+
+
+def test_missing_invoice_total_blocks_before_external_reads():
+    resolver, sheet, fieldpo = _resolver()
+
+    result = resolver.resolve(replace(_invoice(), invoice_total=None))
+
+    assert result.status is StageStatus.BLOCKED
+    assert "does not contain one exact Total" in result.detail
+    fieldpo.read_identity.assert_not_called()
+
+
+def test_price_is_compared_to_invoice_total_not_subtotal():
+    invoice = replace(
+        _invoice(), invoice_amount=Decimal("320.00"), invoice_total=Decimal("340.00")
+    )
+    resolver, _, _ = _resolver(authorized_amount=Decimal("340.00"))
+
+    result = resolver.resolve(invoice)
+
+    assert result.status is StageStatus.COMPLETE
+    assert result.identity.invoice_amount == Decimal("340.00")
+
+
+def test_calibration_po_total_does_not_match_parts_labor_invoice():
+    resolver, _, _ = _resolver(authorized_amount=Decimal("150.00"))
+
+    result = resolver.resolve(_invoice())
+
+    assert result.status is StageStatus.BLOCKED
+    assert "Authorized amount mismatch" in result.detail
+
+
+@pytest.mark.parametrize("creator", ["Other, User", "", "Dirk Steele"])
+def test_po_created_by_someone_else_blocks(creator):
+    resolver, _, _ = _resolver(created_by=creator)
+
+    result = resolver.resolve(_invoice())
+
+    assert result.status is StageStatus.BLOCKED
+    assert "PO creator mismatch" in result.detail
+
+
+@pytest.mark.parametrize("creator", ["Steele,Dirk", "STEELE, DIRK", " Steele,  Dirk "])
+def test_po_creator_match_ignores_case_and_spacing(creator):
+    resolver, _, _ = _resolver(created_by=creator)
+
+    assert resolver.resolve(_invoice()).status is StageStatus.COMPLETE
+
+
+def test_old_po_from_earlier_repair_blocks():
+    resolver, _, _ = _resolver(
+        inventory_dates=(date(2026, 3, 2), date(2026, 9, 1)),
+        created_on=date(2026, 3, 5),
+    )
+
+    result = resolver.resolve(_invoice())
+
+    assert result.status is StageStatus.BLOCKED
+    assert "PO created before Inventory Date" in result.detail
+
+
+def test_po_created_on_inventory_date_is_allowed():
+    resolver, _, _ = _resolver(
+        inventory_dates=(date(2026, 9, 1),), created_on=date(2026, 9, 1)
+    )
+
+    assert resolver.resolve(_invoice()).status is StageStatus.COMPLETE
+
+
+def test_missing_sheet_inventory_date_blocks():
+    resolver, _, _ = _resolver(inventory_dates=(None,))
+
+    result = resolver.resolve(_invoice())
+
+    assert result.status is StageStatus.BLOCKED
+    assert "no Inventory Date" in result.detail

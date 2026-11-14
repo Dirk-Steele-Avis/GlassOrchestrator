@@ -1,5 +1,5 @@
 from decimal import Decimal
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -43,6 +43,7 @@ def _approval_values(subject_po="FPO1131464"):
         vin="1C4SJSBP6SS537975",
         invoice_amount=Decimal("340.00"),
         pdf_path="invoice.pdf",
+        invoice_total=Decimal("340.00"),
     )
     identity = ValidatedIdentity(
         internet_message_id=invoice.internet_message_id,
@@ -64,6 +65,7 @@ def _approval_dependencies(
     live_mva="057935872",
     live_amount=Decimal("340.00"),
     creator="Steele, Dirk",
+    po_creator="Steele, Dirk",
     status="IN PROGRESS",
     amount="340.00",
 ):
@@ -75,6 +77,8 @@ def _approval_dependencies(
         vin=live_vin,
         mva=live_mva,
         authorized_amount=live_amount,
+        created_by=po_creator,
+        created_on=date(2026, 9, 1),
     )
     monkeypatch.setattr(agn_invoices, "read_work_order_created_by", MagicMock(return_value=creator))
     monkeypatch.setattr(agn_invoices, "po_exists", MagicMock(return_value=True))
@@ -152,6 +156,7 @@ def test_fieldpo_approver_rejects_subject_po_mismatch_before_live_action(monkeyp
         ({"live_po": "FPO9999999"}, "changed from validated PO"),
         ({"live_amount": Decimal("341.00")}, "does not match invoice amount"),
         ({"creator": "Another User"}, "Created By must be Steele, Dirk"),
+        ({"po_creator": "Another User"}, "PO creator mismatch"),
         ({"status": "APPROVED"}, "expected IN PROGRESS"),
         ({"amount": "341.00"}, "does not match invoice amount"),
     ],
@@ -196,3 +201,38 @@ def test_review_reader_rejects_unknown_or_ambiguous_status(card_text):
 
     with pytest.raises(ValueError, match="exactly one recognized FieldPO PO status"):
         reader.read_review("FPO1131464")
+
+def test_fieldpo_approver_requires_invoice_total(monkeypatch):
+    from dataclasses import replace
+
+    invoice, identity = _approval_values()
+    agn_invoices, approve, identity_reader = _approval_dependencies(monkeypatch)
+
+    with pytest.raises(ValueError, match="one exact Total"):
+        FieldPOBrowserApprover(MagicMock(), identity_reader).approve(
+            replace(invoice, invoice_total=None), identity
+        )
+
+    approve.assert_not_called()
+
+
+def test_extract_po_creator_reads_name_and_date():
+    from invoice_workflow.identity_adapters import _extract_po_creator
+
+    card = "PO # FPO1131464\nIN PROGRESS\n$340.00\nCreated by Steele, Dirk on 2026-09-01"
+
+    assert _extract_po_creator(card) == ("Steele, Dirk", date(2026, 9, 1))
+
+
+@pytest.mark.parametrize(
+    "card",
+    [
+        "PO # FPO1131464\nIN PROGRESS\n$340.00",
+        "Created by Steele, Dirk on 2026-09-01\nCreated by Other, User on 2026-09-02",
+    ],
+)
+def test_extract_po_creator_requires_exactly_one_line(card):
+    from invoice_workflow.identity_adapters import _extract_po_creator
+
+    with pytest.raises(ValueError, match="exactly one FieldPO PO creator line"):
+        _extract_po_creator(card)

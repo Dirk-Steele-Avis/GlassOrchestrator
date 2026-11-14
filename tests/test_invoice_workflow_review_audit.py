@@ -29,6 +29,7 @@ def _setup_audit():
         vin="7SAYGDEE9PA041152",
         invoice_amount=Decimal("340.00"),
         pdf_path="invoice.pdf",
+        invoice_total=Decimal("340.00"),
     )
     identity = ValidatedIdentity(
         internet_message_id=invoice.internet_message_id,

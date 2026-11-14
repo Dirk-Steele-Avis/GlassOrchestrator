@@ -13,6 +13,8 @@ from invoice_workflow.contracts import (
     ValidatedIdentity,
 )
 
+REQUIRED_PO_CREATOR = "Steele, Dirk"
+
 _PO_PATTERN = re.compile(r"FPO\d{7,}")
 _VIN_PATTERN = re.compile(r"[A-HJ-NPR-Z0-9]{17}")
 _MVA_PATTERN = re.compile(r"\d{9}")
@@ -88,11 +90,47 @@ class StrictIdentityResolver:
                 fieldpo_snapshot=fieldpo,
                 sheet_mvas=sheet_mvas,
             )
-        if fieldpo.authorized_amount != invoice.invoice_amount:
+        if _normalize_person(fieldpo.created_by) != _normalize_person(REQUIRED_PO_CREATOR):
             return IdentityResult(
                 StageStatus.BLOCKED,
                 detail=(
-                    f"Authorized amount mismatch: invoice {invoice.invoice_amount}, "
+                    f"PO creator mismatch: {invoice.pdf_po_number} created by "
+                    f"{fieldpo.created_by or '<missing>'}, expected {REQUIRED_PO_CREATOR}"
+                ),
+                fieldpo_snapshot=fieldpo,
+                sheet_mvas=sheet_mvas,
+            )
+        inventory_dates = [
+            value
+            for value in self._sheet_reader.find_inventory_dates_by_vin(invoice.vin)
+            if value is not None
+        ]
+        if not inventory_dates:
+            return IdentityResult(
+                StageStatus.BLOCKED,
+                detail=f"Sheet has no Inventory Date for VIN {invoice.vin}",
+                fieldpo_snapshot=fieldpo,
+                sheet_mvas=sheet_mvas,
+            )
+        # The latest Inventory Date is the current repair; a PO created before
+        # it belongs to an earlier repair of the same vehicle.
+        inventory_date = max(inventory_dates)
+        if fieldpo.created_on is None or fieldpo.created_on < inventory_date:
+            created = fieldpo.created_on.isoformat() if fieldpo.created_on else "<missing>"
+            return IdentityResult(
+                StageStatus.BLOCKED,
+                detail=(
+                    f"PO created before Inventory Date: {invoice.pdf_po_number} "
+                    f"created {created}, Inventory Date {inventory_date.isoformat()}"
+                ),
+                fieldpo_snapshot=fieldpo,
+                sheet_mvas=sheet_mvas,
+            )
+        if fieldpo.authorized_amount != invoice.invoice_total:
+            return IdentityResult(
+                StageStatus.BLOCKED,
+                detail=(
+                    f"Authorized amount mismatch: invoice total {invoice.invoice_total}, "
                     f"FieldPO {fieldpo.authorized_amount}"
                 ),
                 fieldpo_snapshot=fieldpo,
@@ -107,7 +145,7 @@ class StrictIdentityResolver:
                 po_number=invoice.pdf_po_number,
                 vin=invoice.vin,
                 mva=sheet_mva,
-                invoice_amount=invoice.invoice_amount,
+                invoice_amount=invoice.invoice_total,
                 authorized_amount=fieldpo.authorized_amount,
             ),
             fieldpo_snapshot=fieldpo,
@@ -127,4 +165,11 @@ def _validate_local_invoice(invoice: ParsedInvoice) -> str:
         )
     if _VIN_PATTERN.fullmatch(invoice.vin) is None:
         return f"Invoice VIN is invalid: {invoice.vin}"
+    if invoice.invoice_total is None:
+        return "Invoice PDF does not contain one exact Total"
     return ""
+
+
+def _normalize_person(value: str) -> str:
+    """Compare names ignoring case and spacing ("Steele,Dirk" == "Steele, Dirk")."""
+    return re.sub(r"\s+", "", value).casefold()

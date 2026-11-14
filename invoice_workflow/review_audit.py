@@ -95,10 +95,10 @@ def audit_invoice(
             f"Current FieldPO MVA is {review.mva or '<missing>'}; "
             f"verified Sheet MVA is {identity.mva}"
         )
-    if review.authorized_amount != invoice.invoice_amount:
+    if review.authorized_amount != invoice.invoice_total:
         blockers.append(
             f"Current FieldPO amount is {review.authorized_amount}; "
-            f"invoice amount is {invoice.invoice_amount}"
+            f"invoice total is {invoice.invoice_total}"
         )
     if review.po_status != "APPROVED":
         blockers.append(
