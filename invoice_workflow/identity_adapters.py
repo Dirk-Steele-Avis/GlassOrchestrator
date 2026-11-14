@@ -170,7 +170,7 @@ class FieldPOBrowserIdentityReader:
 
 
 class FieldPOBrowserReviewReader:
-    """Read current PO status and amount without mutating FieldPO."""
+    """Read current PO and work-order data without mutating FieldPO."""
 
     def __init__(
         self,
@@ -203,14 +203,26 @@ class FieldPOBrowserReviewReader:
             raise ValueError(
                 f"Expected exactly one recognized FieldPO PO status, found {len(statuses)}"
             )
+        from outlook import agn_invoices
+
         return FieldPOReviewSnapshot(
             po_status=statuses[0],
             authorized_amount=identity.authorized_amount,
+            work_order_created_by=agn_invoices.read_work_order_created_by(self._page),
+            po_number=identity.po_number,
+            vin=identity.vin,
+            mva=identity.mva,
         )
 
 
 class FieldPOBrowserApprover:
-    """Approve one already-validated PO and close its exact FieldPO work order."""
+    """Approve one validated PO; close its work order when it is the last open PO.
+
+    An invoice is PO-specific: only its exact PO is approved. FieldPO offers the
+    Close Work Order option only when the PO is the work order's last open PO;
+    when offered, closure is required and confirmed, otherwise the PO is approved
+    alone and the work order is left open for the remaining POs.
+    """
 
     def __init__(
         self,
@@ -220,7 +232,7 @@ class FieldPOBrowserApprover:
         self._page = page
         self._identity_reader = identity_reader or FieldPOBrowserIdentityReader(page)
 
-    def approve(self, invoice: ParsedInvoice, identity: ValidatedIdentity) -> None:
+    def approve(self, invoice: ParsedInvoice, identity: ValidatedIdentity) -> bool:
         from outlook import agn_invoices
 
         po_number = invoice.pdf_po_number.strip().upper()
@@ -301,13 +313,13 @@ class FieldPOBrowserApprover:
             request_permission=False,
             expected_po_number=po_number,
             close_work_order=True,
-            allow_open_if_closure_unavailable=False,
+            allow_open_if_closure_unavailable=True,
         )
-        if work_order_closed is not True:
+        if work_order_closed not in (True, False):
             raise RuntimeError(
-                f"FieldPO PO {po_number} approval and work-order closure "
-                "were not both confirmed"
+                f"FieldPO PO {po_number} approval was not confirmed"
             )
+        return work_order_closed
 
 
 def _parse_authorized_amount(value: str) -> Decimal:

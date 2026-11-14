@@ -373,7 +373,9 @@ class CompletedInvoicesCoordinator:
                         Stage.FIELDPO_WORK_ORDER,
                     )
                     try:
-                        fieldpo_approver.approve(invoice, identity)
+                        work_order_closed = fieldpo_approver.approve(
+                            invoice, identity
+                        )
                     except Exception as exc:
                         fieldpo_approval_failed += 1
                         detail = f"{type(exc).__name__}: {exc}"
@@ -435,6 +437,18 @@ class CompletedInvoicesCoordinator:
                     self._repository.finish_attempt(
                         work_order_attempt_id,
                         StageStatus.COMPLETE,
+                        (
+                            ""
+                            if work_order_closed
+                            else "Work order left open: FieldPO offered no "
+                            "closure because other POs remain open"
+                        ),
+                    )
+                    self._logger.info(
+                        f"fieldpo_approval_complete po={identity.po_number} "
+                        f"work_order_closed={work_order_closed}",
+                        invoice=invoice.invoice_number,
+                        stage=Stage.FIELDPO_PO,
                     )
                 outlook_attempt_id = self._repository.start_attempt(
                     invoice.internet_message_id,

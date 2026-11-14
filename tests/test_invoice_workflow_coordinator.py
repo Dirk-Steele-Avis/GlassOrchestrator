@@ -131,6 +131,38 @@ def test_scoped_closeout_approves_po_and_work_order_before_processed(tmp_path):
     assert state.outlook_status is StageStatus.COMPLETE
 
 
+def test_open_work_order_with_remaining_pos_still_moves_to_processed(tmp_path):
+    invoice = _invoice()
+    outlook = MagicMock()
+    resolver = MagicMock()
+    resolver.resolve.return_value = IdentityResult(
+        StageStatus.COMPLETE, identity=_identity(invoice),
+    )
+    approver = MagicMock()
+    approver.approve.return_value = False
+    repository = InvoiceRepository(tmp_path / "workflow.db")
+    with WorkflowRunLogger(tmp_path / "logs", "wo-open") as logger:
+        summary = CompletedInvoicesCoordinator(
+            outlook, resolver, repository, logger, run_id="wo-open",
+        ).run_captured(
+            OutlookScanResult((invoice,), ()),
+            fieldpo_approver=approver,
+        )
+
+    assert summary.exit_code == 0
+    outlook.move_to_processed.assert_called_once_with(invoice.internet_message_id)
+    state = repository.get_invoice(invoice.internet_message_id)
+    assert state.po_status is StageStatus.COMPLETE
+    assert state.work_order_status is StageStatus.COMPLETE
+    work_order_attempts = [
+        attempt
+        for attempt in repository.list_attempts(invoice.internet_message_id)
+        if attempt["stage"] == "fieldpo_work_order"
+    ]
+    assert len(work_order_attempts) == 1
+    assert "Work order left open" in str(work_order_attempts[0]["detail"])
+
+
 def test_fieldpo_approval_failure_moves_invoice_to_review_not_processed(tmp_path):
     invoice = _invoice()
     outlook = MagicMock()

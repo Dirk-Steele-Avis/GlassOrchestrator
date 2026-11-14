@@ -232,8 +232,14 @@ Compass, FieldPO is rechecked immediately before approval: the PDF PO must match
 the FieldPO PO (a subject PO is optional, but must match if present), VIN, Sheet
 MVA, and authorized amount must match exactly, PO status must be `IN PROGRESS`,
 and Work Order Created By must be `Steele, Dirk`. There is no minimum invoice
-age. Approval closes the FieldPO work order; the exact PO and closure must both
-be confirmed before the email moves to `Processed`. Any approval gate or
+age. An invoice is PO-specific: only its exact PO is approved. FieldPO offers
+Close Work Order only when that PO is the work order's last open PO; when
+offered, closure is required and confirmed, otherwise the PO is approved alone
+and the work order stays open for its remaining POs (the ledger records that it
+was left open). The approval dialog's
+Notify Supplier option is always unchecked before confirming, so the vendor is
+not emailed; if that checkbox is missing or cannot be unchecked, the approval
+fails. Any approval gate or
 confirmation failure sends only that invoice to **Needs Review**. If a navigation failure stops the remaining work-item
 closes, those not-attempted invoices are left in place for the next run.
 System failures (Outlook, Sheet connection, Edge launch, or missing/mismatched

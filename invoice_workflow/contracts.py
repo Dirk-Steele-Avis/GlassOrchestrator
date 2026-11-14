@@ -163,7 +163,9 @@ class FieldPOApprover(Protocol):
         self,
         invoice: ParsedInvoice,
         identity: ValidatedIdentity,
-    ) -> None: ...
+    ) -> bool:
+        """Approve the exact PO; return True if its work order was closed."""
+        ...
 
 
 class SheetIdentityReader(Protocol):

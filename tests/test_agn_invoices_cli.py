@@ -380,16 +380,21 @@ def test_direct_approval_keeps_work_order_open_until_final_listed_po(monkeypatch
 def test_approval_stays_open_when_closure_checkbox_is_unavailable(monkeypatch):
     page = MagicMock()
     checkbox_section = MagicMock()
-    filtered_section = MagicMock()
+    close_section = MagicMock()
+    notify_section = MagicMock()
     close_work_order = MagicMock()
     close_work_order.count.return_value = 0
+    notify_vendor = MagicMock()
+    notify_vendor.count.return_value = 1
+    notify_vendor.is_checked.side_effect = [True, False]
     success_message = MagicMock()
     success_message.count.return_value = 1
     success_message.inner_text.return_value = "PO# FPO1066268 approved and email sent to the supplier."
     page.get_by_role.return_value = MagicMock()
     page.locator.side_effect = [checkbox_section, success_message]
-    checkbox_section.filter.return_value = filtered_section
-    filtered_section.locator.return_value = close_work_order
+    checkbox_section.filter.side_effect = [close_section, notify_section]
+    close_section.locator.return_value = close_work_order
+    notify_section.locator.return_value = notify_vendor
 
     work_order_closed = agn_invoices.approve_displayed_po(
         page,
@@ -401,6 +406,7 @@ def test_approval_stays_open_when_closure_checkbox_is_unavailable(monkeypatch):
     )
 
     assert work_order_closed is False
+    notify_vendor.uncheck.assert_called_once_with()
     page.get_by_role.assert_any_call("button", name="Confirm", exact=True)
 
 
@@ -1619,10 +1625,14 @@ def test_approval_checks_close_work_order_before_confirming(monkeypatch, tmp_pat
     page = MagicMock()
     approve_button = MagicMock()
     checkbox_section = MagicMock()
-    filtered_section = MagicMock()
+    close_section = MagicMock()
+    notify_section = MagicMock()
     close_work_order = MagicMock()
     close_work_order.count.return_value = 1
     close_work_order.is_checked.side_effect = [False, True]
+    notify_vendor = MagicMock()
+    notify_vendor.count.return_value = 1
+    notify_vendor.is_checked.side_effect = [True, False]
     confirm_button = MagicMock()
     success_message = MagicMock()
     success_message.count.return_value = 1
@@ -1632,8 +1642,9 @@ def test_approval_checks_close_work_order_before_confirming(monkeypatch, tmp_pat
     )
     page.get_by_role.side_effect = [approve_button, confirm_button]
     page.locator.side_effect = [checkbox_section, success_message]
-    checkbox_section.filter.return_value = filtered_section
-    filtered_section.locator.return_value = close_work_order
+    checkbox_section.filter.side_effect = [close_section, notify_section]
+    close_section.locator.return_value = close_work_order
+    notify_section.locator.return_value = notify_vendor
     monkeypatch.setattr(agn_invoices, "go_to_active_work_order_tab", lambda current_page, vin: "056477761")
     monkeypatch.setattr(agn_invoices, "read_work_order_created_by", lambda current_page: "Steele, Dirk")
     monkeypatch.setattr(agn_invoices, "evaluate_checked_invoice", lambda result: {"reasons": []})
@@ -1652,6 +1663,7 @@ def test_approval_checks_close_work_order_before_confirming(monkeypatch, tmp_pat
     assert creator == "Steele, Dirk"
     assert reasons == []
     close_work_order.check.assert_called_once_with()
+    notify_vendor.uncheck.assert_called_once_with()
     confirm_button.click.assert_called_once_with()
     assert page.get_by_role.call_args_list == [
         (("button",), {"name": "Approve", "exact": True}),
@@ -1661,7 +1673,8 @@ def test_approval_checks_close_work_order_before_confirming(monkeypatch, tmp_pat
         (("div.checkboxSection",), {}),
         (("div.successMsg",), {}),
     ]
-    filtered_section.locator.assert_called_once_with("input.checkboxInput[type='checkbox']")
+    close_section.locator.assert_called_once_with("input.checkboxInput[type='checkbox']")
+    notify_section.locator.assert_called_once_with("input.checkboxInput[type='checkbox']")
     success_message.wait_for.assert_called_once_with(state="visible", timeout=30000)
     audit = json.loads((tmp_path / "po_approval_audit.jsonl").read_text(encoding="utf-8"))
     assert audit["outcome"] == "approved"
@@ -1673,17 +1686,22 @@ def test_approval_checks_close_work_order_before_confirming(monkeypatch, tmp_pat
 def test_approval_fails_when_success_message_does_not_confirm_closure(monkeypatch):
     page = MagicMock()
     checkbox_section = MagicMock()
-    filtered_section = MagicMock()
+    close_section = MagicMock()
+    notify_section = MagicMock()
     close_work_order = MagicMock()
     close_work_order.count.return_value = 1
     close_work_order.is_checked.return_value = True
+    notify_vendor = MagicMock()
+    notify_vendor.count.return_value = 1
+    notify_vendor.is_checked.return_value = False
     success_message = MagicMock()
     success_message.count.return_value = 1
     success_message.inner_text.return_value = "PO# FPO1080762 approved."
     page.get_by_role.return_value = MagicMock()
     page.locator.side_effect = [checkbox_section, success_message]
-    checkbox_section.filter.return_value = filtered_section
-    filtered_section.locator.return_value = close_work_order
+    checkbox_section.filter.side_effect = [close_section, notify_section]
+    close_section.locator.return_value = close_work_order
+    notify_section.locator.return_value = notify_vendor
     monkeypatch.setattr(agn_invoices, "go_to_active_work_order_tab", lambda current_page, vin: "056477761")
     monkeypatch.setattr(agn_invoices, "read_work_order_created_by", lambda current_page: "Steele, Dirk")
     monkeypatch.setattr(agn_invoices, "evaluate_checked_invoice", lambda result: {"reasons": []})
@@ -1819,6 +1837,42 @@ def test_approval_does_not_confirm_without_close_work_order_checkbox(monkeypatch
     )
 
     with pytest.raises(RuntimeError, match="Approval was not confirmed"):
+        agn_invoices.approve_one_vin(
+            page, _approval_row(), request_permission=False
+        )
+
+    page.get_by_role.assert_called_once_with("button", name="Approve", exact=True)
+
+
+def test_approval_does_not_confirm_without_notify_supplier_checkbox(monkeypatch):
+    page = MagicMock()
+    approve_button = MagicMock()
+    checkbox_section = MagicMock()
+    close_section = MagicMock()
+    notify_section = MagicMock()
+    close_work_order = MagicMock()
+    close_work_order.count.return_value = 1
+    close_work_order.is_checked.return_value = True
+    notify_vendor = MagicMock()
+    notify_vendor.count.return_value = 0
+    page.get_by_role.return_value = approve_button
+    page.locator.return_value = checkbox_section
+    checkbox_section.filter.side_effect = [close_section, notify_section]
+    close_section.locator.return_value = close_work_order
+    notify_section.locator.return_value = notify_vendor
+    monkeypatch.setattr(agn_invoices, "go_to_active_work_order_tab", lambda current_page, vin: "056477761")
+    monkeypatch.setattr(agn_invoices, "read_work_order_created_by", lambda current_page: "Steele, Dirk")
+    monkeypatch.setattr(agn_invoices, "evaluate_checked_invoice", lambda result: {"reasons": []})
+    monkeypatch.setattr(agn_invoices, "click_into_po", lambda current_page: None)
+    monkeypatch.setattr(
+        agn_invoices,
+        "read_po_status_and_amount",
+        lambda current_page: ("IN PROGRESS", "340.00"),
+    )
+
+    with pytest.raises(
+        RuntimeError, match="Expected exactly one Notify Supplier checkbox, found 0"
+    ):
         agn_invoices.approve_one_vin(
             page, _approval_row(), request_permission=False
         )
