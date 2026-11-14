@@ -244,6 +244,35 @@ run and reports the configured profile and the Playwright error. If that user
 data directory is already in use, close its Edge session before retrying; no
 alternate profile or automatic retry is used.
 
+To see why an invoice was sent to Needs Review, use the project Copilot skill
+`/invoice-review-reason` and provide an MVA, VIN, or PO. The
+underlying read-only command can also be run directly:
+
+```bash
+.venv\Scripts\python.exe -m invoice_workflow.review_lookup --po FPO1197467
+```
+
+The lookup prints each matching ledger record and its recorded reason for review,
+such as a price, MVA, or VIN mismatch. If an identifier matches multiple records,
+each record and reason is shown separately. It does not rerun closeout or contact
+Outlook, Sheets, or FieldPO. New Needs Review moves retain their original reason;
+older records may only have their blocked/failed attempt recorded. Only the
+provided identifier is searched; when it has no match, try another known MVA,
+VIN, or PO. Invoice numbers are not lookup keys.
+
+To audit all messages currently in Needs Review, use `/audit-needs-review` or
+run:
+
+```bash
+.venv\Scripts\python.exe -m invoice_workflow.review_audit
+```
+
+This report rechecks invoice identity against the Sheet and live FieldPO data.
+It lists a Processed candidate only when the current identity and PO/creator
+checks pass and the ledger confirms the required approval and closures. Items
+that pass identity checks but have an unverified remaining gate are reported
+separately. The audit does not move messages or modify workflow data.
+
 The unused standalone launchers were removed in the dead-code cleanup. The
 supported launchers are `Run-Glass-Intake.cmd`, `Run-Glass-Closeout.cmd`,
 `Run-Glass-Morning-Report.cmd`, and `Run-CloseWorkItems.cmd` (plus the shared

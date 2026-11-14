@@ -60,6 +60,7 @@ class ReviewHistory:
     stage: str
     status: StageStatus
     detail: str
+    code: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,6 +95,10 @@ class FieldPOIdentitySnapshot:
 class FieldPOReviewSnapshot:
     po_status: str
     authorized_amount: Decimal
+    work_order_created_by: str = ""
+    po_number: str = ""
+    vin: str = ""
+    mva: str = ""
 
 
 @dataclass(frozen=True, slots=True)

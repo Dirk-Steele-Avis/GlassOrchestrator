@@ -535,6 +535,36 @@ def test_scan_needs_review_reads_only_exact_new_format_without_moves(tmp_path):
     malformed_subject_po.Attachments[0].SaveAsFile.assert_not_called()
 
 
+def test_needs_review_audit_reports_items_with_unrecognized_subjects(tmp_path):
+    valid_invoice = _message(
+        "[External] Invoice #5294412 (PO # FPO1131464)",
+        "<valid-review@example>",
+    )
+    unrecognized = _message("Unexpected subject", "<unrecognized@example>")
+    namespace, _, needs_review = _folder_tree([])
+    needs_review.Items = [valid_invoice, unrecognized]
+    source = OutlookInvoiceSource(
+        namespace,
+        account_name="Dirk.Steele@avisbudget.com",
+        attachment_directory=tmp_path,
+        pdf_parser=lambda path: InvoicePdfData(
+            po_number="FPO1131464",
+            vin="1C4SJSBP6SS537975",
+            amount=Decimal("340.00"),
+        ),
+    )
+
+    result = source.scan_needs_review_for_audit()
+
+    assert len(result.invoices) == 1
+    assert result.invoices[0].internet_message_id == "<valid-review@example>"
+    assert len(result.failures) == 1
+    assert result.failures[0].internet_message_id == "<unrecognized@example>"
+    assert "Subject does not contain an invoice number" in result.failures[0].detail
+    valid_invoice.Move.assert_not_called()
+    unrecognized.Move.assert_not_called()
+
+
 def test_scanned_needs_review_message_moves_to_processed_by_exact_id(tmp_path):
     exact_review = _message(
         "[External] Invoice #5294412 (PO # FPO1131464)",
