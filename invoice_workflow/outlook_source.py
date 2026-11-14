@@ -96,6 +96,19 @@ class OutlookInvoiceSource:
             progress=None,
         )
 
+    def scan_needs_review_for_audit(self) -> OutlookScanResult:
+        """Read every mail item in Needs Review and report unparseable items."""
+        folder = self._get_existing_child_folder("Needs Review")
+        return self._scan_folders(
+            (folder,),
+            invoice_number=None,
+            max_invoices=None,
+            excluded_message_ids=frozenset(),
+            exact_subject_only=False,
+            progress=None,
+            include_unrecognized=True,
+        )
+
     def archive_expired_processed_invoices(
         self,
         *,
@@ -143,6 +156,7 @@ class OutlookInvoiceSource:
         excluded_message_ids: frozenset[str],
         exact_subject_only: bool,
         progress: Callable[[str], None] | None,
+        include_unrecognized: bool = False,
     ) -> OutlookScanResult:
         candidates: list[tuple[Any, str | None]] = []
         for folder in folders:
@@ -152,12 +166,20 @@ class OutlookInvoiceSource:
                 if getattr(message, "Class", None) != 43:
                     continue
                 subject = str(getattr(message, "Subject", "") or "")
-                if exact_subject_only and _REVIEW_SUBJECT_PATTERN.fullmatch(subject.strip()) is None:
+                if (
+                    not include_unrecognized
+                    and exact_subject_only
+                    and _REVIEW_SUBJECT_PATTERN.fullmatch(subject.strip()) is None
+                ):
                     continue
                 number_match = _INVOICE_NUMBER_PATTERN.search(subject)
-                if number_match is None:
+                if number_match is None and not include_unrecognized:
                     continue
-                if invoice_number is not None and number_match.group(1) != invoice_number:
+                if (
+                    invoice_number is not None
+                    and number_match is not None
+                    and number_match.group(1) != invoice_number
+                ):
                     continue
                 try:
                     message_id = _internet_message_id(message)

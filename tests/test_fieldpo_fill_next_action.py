@@ -80,3 +80,61 @@ def test_collect_blank_guard_rows_uses_explicit_inventory_date():
     )
 
     assert rows == [(3, "22222222")]
+
+
+def _po_section(*cards: str) -> str:
+    return f"Purchase Orders [{len(cards)}]\n" + "\n".join(cards)
+
+
+def _po_card(po: str, description: str, creator_line: str) -> str:
+    return f"PO# {po}\n{description}\nAGN GLASS LLC\n{creator_line}"
+
+
+def test_extract_fpo_counts_po_created_by_steele_dirk():
+    text = _po_section(
+        _po_card("FPO1178730", "Glass Parts and Install", "Created by Steele, Dirk on 2026-10-19"),
+    )
+
+    assert fieldpo._extract_fpo_values_from_text(text) == ["FPO1178730"]
+
+
+def test_extract_fpo_excludes_po_created_by_other_user():
+    text = _po_section(
+        _po_card("FPO1178731", "Glass Parts and Install", "Created by Other, User on 2026-10-19"),
+    )
+
+    assert fieldpo._extract_fpo_values_from_text(text) == []
+
+
+def test_extract_fpo_excludes_po_without_creator_line():
+    text = _po_section(
+        _po_card("FPO1178732", "Glass Parts and Install", "No creator shown"),
+    )
+
+    assert fieldpo._extract_fpo_values_from_text(text) == []
+
+
+def test_extract_fpo_skips_other_creator_and_selects_topmost_steele_po():
+    text = _po_section(
+        _po_card("FPO1178731", "Glass Calibration", "Created by Other, User on 2026-10-19"),
+        _po_card("FPO1178730", "Glass Parts and Install", "Created by Steele, Dirk on 2026-10-19"),
+    )
+
+    assert fieldpo._extract_fpo_values_from_text(text) == ["FPO1178730"]
+
+
+def test_extract_fpo_selects_topmost_when_multiple_steele_pos():
+    text = _po_section(
+        _po_card("FPO1178731", "Glass Calibration", "Created by Steele, Dirk on 2026-10-19"),
+        _po_card("FPO1178730", "Glass Parts and Install", "Created by Steele, Dirk on 2026-10-19"),
+    )
+
+    assert fieldpo._extract_fpo_values_from_text(text) == ["FPO1178731"]
+
+
+def test_extract_fpo_creator_match_is_case_insensitive():
+    text = _po_section(
+        _po_card("FPO1178733", "Glass Parts and Install", "Created by STEELE, DIRK on 2026-10-19"),
+    )
+
+    assert fieldpo._extract_fpo_values_from_text(text) == ["FPO1178733"]

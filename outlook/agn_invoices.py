@@ -1608,9 +1608,14 @@ def approve_displayed_po(
     page.get_by_role("button", name="Approve", exact=True).click()
     page.wait_for_timeout(1000)
 
-    close_wo_checkbox = page.locator("div.checkboxSection").filter(
-        has_text=re.compile(r"^\s*Close Work Order\s*$")
-    ).locator("input.checkboxInput[type='checkbox']")
+    checkbox_sections = page.locator("div.checkboxSection")
+
+    def _dialog_checkbox(label):
+        return checkbox_sections.filter(
+            has_text=re.compile(rf"^\s*{label}\s*$")
+        ).locator("input.checkboxInput[type='checkbox']")
+
+    close_wo_checkbox = _dialog_checkbox("Close Work Order")
     checkbox_count = close_wo_checkbox.count()
     effective_close_work_order = close_work_order
     if close_work_order and checkbox_count == 0 and allow_open_if_closure_unavailable:
@@ -1639,6 +1644,20 @@ def approve_displayed_po(
             raise RuntimeError(
                 "Close Work Order checkbox remained checked. Approval was not confirmed."
             )
+
+    notify_supplier_checkbox = _dialog_checkbox("Notify Supplier")
+    notify_supplier_count = notify_supplier_checkbox.count()
+    if notify_supplier_count != 1:
+        raise RuntimeError(
+            f"Expected exactly one Notify Supplier checkbox, found {notify_supplier_count}. "
+            "Approval was not confirmed."
+        )
+    if notify_supplier_checkbox.is_checked():
+        notify_supplier_checkbox.uncheck()
+    if notify_supplier_checkbox.is_checked():
+        raise RuntimeError(
+            "Notify Supplier checkbox remained checked. Approval was not confirmed."
+        )
 
     page.get_by_role("button", name="Confirm", exact=True).click()
     success_message = page.locator("div.successMsg")

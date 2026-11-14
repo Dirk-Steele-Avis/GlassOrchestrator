@@ -1,0 +1,18 @@
+# Runtime usage survey configuration (see README "Dead-code survey").
+# Used by coverage.process_startup() when the survey hook is enabled via
+# Run-CoverageSurvey.cmd start. Every Python process launched from the
+# project venv then records which lines execute.
+
+[run]
+# One data file per process (.coverage.<host>.<pid>.<rand>) so concurrent
+# runs never clobber each other; Run-CoverageSurvey.cmd report merges them.
+parallel = True
+source = .
+omit =
+    tests/*
+    .venv/*
+relative_files = True
+
+[report]
+skip_empty = True
+sort = cover

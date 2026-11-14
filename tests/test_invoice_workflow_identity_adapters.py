@@ -20,6 +20,7 @@ def _reader(card_text: str):
     po_result = page.get_by_text.return_value
     po_result.count.return_value = 1
     po_result.locator.return_value.inner_text.return_value = card_text
+    page.locator.return_value.inner_text.return_value = "Steele, Dirk"
     identity_reader = MagicMock()
     identity_reader.read_identity.return_value = FieldPOIdentitySnapshot(
         po_number="FPO1131464",
@@ -93,8 +94,11 @@ def test_fieldpo_approver_checks_exact_gates_and_closes_work_order(monkeypatch):
     agn_invoices, approve, identity_reader = _approval_dependencies(monkeypatch)
     page = MagicMock()
 
-    FieldPOBrowserApprover(page, identity_reader).approve(invoice, identity)
+    work_order_closed = FieldPOBrowserApprover(page, identity_reader).approve(
+        invoice, identity
+    )
 
+    assert work_order_closed is True
     identity_reader.read_identity.assert_called_once_with(identity.po_number)
     agn_invoices.po_exists.assert_called_once_with(page, identity.po_number)
     agn_invoices.click_into_po.assert_called_once_with(page, identity.po_number)
@@ -104,8 +108,29 @@ def test_fieldpo_approver_checks_exact_gates_and_closes_work_order(monkeypatch):
         request_permission=False,
         expected_po_number=identity.po_number,
         close_work_order=True,
-        allow_open_if_closure_unavailable=False,
+        allow_open_if_closure_unavailable=True,
     )
+
+
+def test_fieldpo_approver_leaves_work_order_open_when_other_pos_remain(monkeypatch):
+    invoice, identity = _approval_values()
+    agn_invoices, approve, identity_reader = _approval_dependencies(monkeypatch)
+    approve.return_value = False
+
+    work_order_closed = FieldPOBrowserApprover(MagicMock(), identity_reader).approve(
+        invoice, identity
+    )
+
+    assert work_order_closed is False
+
+
+def test_fieldpo_approver_rejects_unconfirmed_approval_result(monkeypatch):
+    invoice, identity = _approval_values()
+    agn_invoices, approve, identity_reader = _approval_dependencies(monkeypatch)
+    approve.return_value = None
+
+    with pytest.raises(RuntimeError, match="approval was not confirmed"):
+        FieldPOBrowserApprover(MagicMock(), identity_reader).approve(invoice, identity)
 
 
 def test_fieldpo_approver_rejects_subject_po_mismatch_before_live_action(monkeypatch):
@@ -117,15 +142,6 @@ def test_fieldpo_approver_rejects_subject_po_mismatch_before_live_action(monkeyp
 
     identity_reader.read_identity.assert_not_called()
     agn_invoices.approve_displayed_po.assert_not_called()
-
-
-def test_fieldpo_approver_rejects_unconfirmed_work_order_closure(monkeypatch):
-    invoice, identity = _approval_values()
-    agn_invoices, approve, identity_reader = _approval_dependencies(monkeypatch)
-    approve.return_value = False
-
-    with pytest.raises(RuntimeError, match="were not both confirmed"):
-        FieldPOBrowserApprover(MagicMock(), identity_reader).approve(invoice, identity)
 
 
 @pytest.mark.parametrize(
@@ -160,6 +176,10 @@ def test_review_reader_reads_status_only_from_exact_po_card(status):
 
     assert snapshot.po_status == status
     assert snapshot.authorized_amount == Decimal("340.00")
+    assert snapshot.work_order_created_by == "Steele, Dirk"
+    assert snapshot.po_number == "FPO1131464"
+    assert snapshot.vin == "1C4SJSBP6SS537975"
+    assert snapshot.mva == "057935872"
     identity_reader.read_identity.assert_called_once_with("FPO1131464")
     page.get_by_text.assert_called_once_with("FPO1131464", exact=True)
 

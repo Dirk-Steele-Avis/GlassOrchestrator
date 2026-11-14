@@ -34,6 +34,10 @@ def test_initialize_configures_database_and_schema(tmp_path):
 
     with repository.connection() as connection:
         assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+        assert connection.execute(
+            "SELECT 1 FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'invoice_review_events'"
+        ).fetchone() is not None
         assert connection.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
         assert connection.execute("PRAGMA synchronous").fetchone()[0] == 2
         assert connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1

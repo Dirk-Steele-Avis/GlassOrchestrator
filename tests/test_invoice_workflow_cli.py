@@ -46,6 +46,21 @@ def test_scoped_limit_rejects_invalid_counts(limit):
     assert error.value.code == 2
 
 
+def test_unlimited_closeout_args_parse_without_a_limit():
+    args = cli._parse_args([
+        "--close-work-items", "--work-item-results", "results.json",
+    ])
+    assert args.close_work_items
+    assert args.max_invoices is None
+    assert args.invoice_number is None
+
+
+def test_live_run_requires_close_work_items():
+    with pytest.raises(SystemExit) as error:
+        cli._parse_args(["--work-item-results", "results.json"])
+    assert error.value.code == 2
+
+
 def _mock_scoped_runtime(monkeypatch, tmp_path):
     config = {
         "account_name": "test@example", "spreadsheet_id": "sheet",

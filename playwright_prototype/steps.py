@@ -160,7 +160,7 @@ async def _open_vehicle_search_context(page: Page, mva: str) -> Page:
     log.info("[STEPS] %s — MVA input not visible, opening Vehicles search page", mva)
 
     vehicles_button = current_page.locator(COMPASS_VEHICLES_BUTTON_SELECTOR).filter(has_text="Vehicles").first
-    await vehicles_button.wait_for(state="visible", timeout=8_000)
+    await vehicles_button.wait_for(state="visible", timeout=20_000)
 
     pages_before = list(current_page.context.pages)
     await vehicles_button.click(timeout=8_000)

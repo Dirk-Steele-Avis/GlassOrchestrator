@@ -13,6 +13,73 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 import pytest
 
 
+def test_vehicle_search_allows_twenty_seconds_after_authentication():
+    from playwright_prototype.steps import (
+        COMPASS_VEHICLES_BUTTON_SELECTOR,
+        _open_vehicle_search_context,
+    )
+
+    page = MagicMock()
+    vehicles = MagicMock()
+    vehicles.first = vehicles
+
+    async def wait_for_vehicles(*, state, timeout):
+        assert state == "visible"
+        if timeout < 18_000:
+            raise TimeoutError("Microsoft authentication still pending")
+
+    vehicles.wait_for = AsyncMock(side_effect=wait_for_vehicles)
+    vehicles.click = AsyncMock()
+    page.locator.return_value.filter.return_value = vehicles
+    page.context.pages = [page]
+    page.wait_for_timeout = AsyncMock()
+
+    with patch(
+        "playwright_prototype.steps._handle_compass_go_quick_fix", AsyncMock()
+    ), patch(
+        "playwright_prototype.steps._has_visible_mva_input", AsyncMock(return_value=False)
+    ), patch(
+        "playwright_prototype.steps._wait_for_mva_input_visible", AsyncMock(return_value=True)
+    ):
+        result = asyncio.run(_open_vehicle_search_context(page, "060712153"))
+
+    assert result is page
+    page.locator.assert_called_once_with(COMPASS_VEHICLES_BUTTON_SELECTOR)
+    page.locator.return_value.filter.assert_called_once_with(has_text="Vehicles")
+    vehicles.wait_for.assert_awaited_once_with(state="visible", timeout=20_000)
+    vehicles.click.assert_awaited_once_with(timeout=8_000)
+
+
+def test_vehicle_search_authentication_timeout_stops_without_click_or_retry():
+    from playwright_prototype.steps import navigate_to_mva
+
+    page = MagicMock()
+    page.url = "https://login.microsoftonline.com/"
+    vehicles = MagicMock()
+    vehicles.first = vehicles
+    vehicles.wait_for = AsyncMock(side_effect=TimeoutError("Timeout 20000ms exceeded"))
+    vehicles.click = AsyncMock()
+    page.locator.return_value.filter.return_value = vehicles
+
+    with patch(
+        "playwright_prototype.steps.get_config", return_value=""
+    ), patch(
+        "playwright_prototype.steps._handle_compass_go_quick_fix", AsyncMock()
+    ), patch(
+        "playwright_prototype.steps._has_visible_mva_input", AsyncMock(return_value=False)
+    ), patch(
+        "playwright_prototype.steps._enter_mva", AsyncMock()
+    ) as enter_mva:
+        with pytest.raises(
+            RuntimeError, match="navigate_to_mva failed for 060712153: Timeout 20000ms exceeded"
+        ):
+            asyncio.run(navigate_to_mva(page, "060712153"))
+
+    vehicles.wait_for.assert_awaited_once_with(state="visible", timeout=20_000)
+    vehicles.click.assert_not_awaited()
+    enter_mva.assert_not_awaited()
+
+
 def test_compass_home_vehicle_search_submits_exact_mva():
     from playwright_prototype.steps import (
         COMPASS_HOME_MVA_INPUT_SELECTOR,
