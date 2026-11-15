@@ -1,4 +1,4 @@
-"""Populate GlassClaims NextAction values from FieldPO by MVA.
+r"""Populate GlassClaims NextAction values from FieldPO by MVA.
 
 Scope rules (per operator workflow):
 1. Process only rows where Action is replacement.
@@ -6,11 +6,17 @@ Scope rules (per operator workflow):
 3. Verify rows where NextAction is non-blank and not a retry value.
 4. Process only rows with the explicitly selected Inventory Date.
 
-Write behavior:
-- Only POs whose card shows "Created by Steele, Dirk" count as matches.
-- Exactly one FPO found: write the raw FPO value.
-- Multiple FPOs found: write "multi" for manual review.
-- No FPO found: write "missing".
+Write behavior (never guess):
+- Only a FieldPO search result whose MVA exactly equals the row MVA is opened.
+- The vehicle's FieldPO VIN must equal the row VIN, otherwise write "review".
+- A PO counts only when its card shows "Created by Steele, Dirk" and it was
+  created no earlier than the inventory day (the row's Original Date minus
+  one day; the inventory is done the day before the official date).
+- One or more eligible POs: write them, comma-separated (one repair can have
+  e.g. a parts/labor PO and a calibration PO; closeout matches each invoice to
+  its PO by price).
+- No eligible PO: write "missing".
+- A verified sheet PO that no longer matches FieldPO: write "review".
 - FieldPO lookup error: stop the workflow.
 
 Run with:
@@ -24,7 +30,7 @@ import json
 import logging
 import re
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +53,13 @@ SHARED_LOCAL_CONFIG_PATH = BASE_DIR / "config" / "config.local.json"
 
 FIELDPO_URL = "https://supply-chain.east.prod.sdp.abg.cloud/fieldpo/dashboard"
 REQUIRED_PO_CREATOR = "Steele, Dirk"
+REVIEW_VALUE = "review"
+# The physical inventory (and PO creation) happens the day before the
+# official Original Date recorded in the sheet.
+INVENTORY_LEAD_DAYS = 1
+_VIN_PATTERN = re.compile(r"\bVIN\s*#?\s*:?\s*([A-HJ-NPR-Z0-9]{17})\b", re.IGNORECASE)
+_MVA_RESULT_PATTERN = re.compile(r"\bMVA\s*#?\s*:?\s*(\d{8,9})\b", re.IGNORECASE)
+_PO_LIST_PATTERN = re.compile(r"^\s*FPO\d+(\s*,\s*FPO\d+)*\s*$", re.IGNORECASE)
 FIELDPO_PROFILE_DIR = BASE_DIR / "outlook" / "browser_profile"
 BACKUP_DIR = BASE_DIR / "log" / "fieldpo_nextaction_backups"
 
@@ -145,7 +158,47 @@ def _ensure_fieldpo_login(page) -> None:
     _dismiss_attention_popup(page)
 
 
-def _go_to_active_work_order_tab(page, mva: str) -> bool:
+def _normalize_person(value: str) -> str:
+    """Compare names ignoring case and spacing ("Steele,Dirk" == "Steele, Dirk")."""
+    return re.sub(r"\s+", "", value).casefold()
+
+
+def _normalize_mva(value: str) -> str:
+    raw = str(value or "").strip()
+    return raw.zfill(9) if re.fullmatch(r"\d{8,9}", raw) else raw
+
+
+def _normalize_vin(value: str) -> str:
+    normalized = re.sub(r"[^A-Z0-9]", "", str(value or "").upper())
+    return normalized if len(normalized) == 17 else ""
+
+
+def _select_exact_mva_result(result_texts: list[str], mva: str) -> int | None:
+    """Return the index of the first search result whose MVA equals ``mva``.
+
+    FieldPO search can return results for other vehicles (partial matches), so
+    a result is only usable when its displayed MVA is an exact match.
+    """
+    target = _normalize_mva(mva)
+    for idx, text in enumerate(result_texts):
+        found = {_normalize_mva(value) for value in _MVA_RESULT_PATTERN.findall(text)}
+        if found == {target}:
+            return idx
+    return None
+
+
+def _extract_vin_from_text(text: str) -> str:
+    """Return the single VIN shown in ``text``, or "" when absent or ambiguous."""
+    vins = {match.upper() for match in _VIN_PATTERN.findall(text)}
+    return next(iter(vins)) if len(vins) == 1 else ""
+
+
+def _open_vehicle(page, mva: str) -> str:
+    """Open the exact-MVA FieldPO vehicle and return its VIN.
+
+    Returns "" when FieldPO has no result for exactly this MVA.
+    Leaves the page on the Vehicle Details tab.
+    """
     page.goto(FIELDPO_URL)
     _dismiss_attention_popup(page)
 
@@ -157,36 +210,55 @@ def _go_to_active_work_order_tab(page, mva: str) -> bool:
     _dismiss_attention_popup(page)
     page.wait_for_timeout(5000)
 
-    if page.locator("text=MVA#").count() == 0:
-        log.info("%s - FieldPO returned no workorder result. Writing missing.", mva)
-        return False
+    results = page.locator("text=MVA#")
+    result_texts = [
+        results.nth(idx).locator("xpath=..").inner_text() for idx in range(results.count())
+    ]
+    selected = _select_exact_mva_result(result_texts, mva)
+    if selected is None:
+        log.info(
+            "%s - FieldPO returned no result with this exact MVA (%d result(s) total).",
+            mva,
+            len(result_texts),
+        )
+        return ""
 
-    page.locator("text=MVA#").first.click()
-
+    results.nth(selected).click()
     _dismiss_attention_popup(page)
     page.wait_for_timeout(800)
 
+    page.get_by_text("Vehicle Details", exact=True).click()
+    _dismiss_attention_popup(page)
+    page.wait_for_timeout(800)
+    vin = _extract_vin_from_text(page.locator("body").inner_text())
+    if not vin:
+        raise RuntimeError(f"FieldPO vehicle page for MVA {mva} does not show exactly one VIN")
+    return vin
+
+
+def _go_to_active_work_order_tab(page) -> None:
     page.get_by_text("Active Work Order", exact=False).click()
     _dismiss_attention_popup(page)
     page.wait_for_timeout(1000)
-    return True
 
 
-def _extract_fpo_values_from_text(po_section_text: str) -> list[str]:
-    """Extract the eligible FPO value(s) from the Purchase Orders section text.
+def _extract_fpo_values_from_text(
+    po_section_text: str,
+    min_created_on: date | None = None,
+) -> list[str]:
+    """Extract every eligible FPO value from the Purchase Orders section text.
 
     A PO only counts when its own card shows it was created by
-    REQUIRED_PO_CREATOR. Among eligible POs, the topmost workorder PO is the
-    source of truth, so only the first eligible value is returned.
+    REQUIRED_PO_CREATOR and, when ``min_created_on`` is given, was created on
+    or after that date (older POs belong to an earlier repair). One repair can
+    legitimately have several POs (e.g. parts/labor and calibration), so all
+    eligible values are returned in page order.
     """
-    count_match = re.search(r"Purchase\s+Orders\s*\[(\d+)\]", po_section_text, re.IGNORECASE)
-    declared_count = int(count_match.group(1)) if count_match else None
-
     # In this UI the PO card line is rendered as "PO# FPO1079594", and each
     # card carries its own "Created by <name> on YYYY-MM-DD" line.
     po_pattern = re.compile(r"\bPO\s*#\s*([A-Z0-9\-]+)\b", re.IGNORECASE)
     creator_pattern = re.compile(
-        r"Created\s+by\s+(.+?)\s+on\s+\d{4}-\d{2}-\d{2}", re.IGNORECASE
+        r"Created\s+by\s+(.+?)\s+on\s+(\d{4}-\d{2}-\d{2})", re.IGNORECASE
     )
 
     po_matches = [
@@ -205,7 +277,7 @@ def _extract_fpo_values_from_text(po_section_text: str) -> list[str]:
         creator_match = creator_pattern.search(segment)
         creator = creator_match.group(1).strip() if creator_match else ""
 
-        if creator.casefold() != REQUIRED_PO_CREATOR.casefold():
+        if _normalize_person(creator) != _normalize_person(REQUIRED_PO_CREATOR):
             log.info(
                 "PO %s skipped: created by %s, not %s.",
                 po_value,
@@ -213,6 +285,17 @@ def _extract_fpo_values_from_text(po_section_text: str) -> list[str]:
                 REQUIRED_PO_CREATOR,
             )
             continue
+
+        if min_created_on is not None:
+            created_on = datetime.strptime(creator_match.group(2), "%Y-%m-%d").date()
+            if created_on < min_created_on:
+                log.info(
+                    "PO %s skipped: created %s, before Inventory Date %s.",
+                    po_value,
+                    created_on.isoformat(),
+                    min_created_on.isoformat(),
+                )
+                continue
 
         eligible.append(po_value)
 
@@ -225,25 +308,14 @@ def _extract_fpo_values_from_text(po_section_text: str) -> list[str]:
             seen.add(key)
             deduped.append(value)
 
-    # Business rule: an MVA can have multiple workorders, and the topmost
-    # workorder is the source of truth, so take the first eligible PO value.
-    if deduped:
-        if declared_count is not None and declared_count > 1:
-            log.info(
-                "Purchase Orders count is %d; selecting topmost eligible PO value %s",
-                declared_count,
-                deduped[0],
-            )
-        return [deduped[0]]
-
-    return []
+    return deduped
 
 
-def _extract_fpo_values(page) -> list[str]:
+def _extract_fpo_values(page, min_created_on: date | None = None) -> list[str]:
     # Scope extraction to the Purchase Orders section to avoid counting values
     # from unrelated page regions (history, hidden DOM, etc.).
     po_section_text = page.locator("text=Purchase Orders").first.locator("..").inner_text()
-    return _extract_fpo_values_from_text(po_section_text)
+    return _extract_fpo_values_from_text(po_section_text, min_created_on)
 
 
 def _page_looks_like_no_fpo(page) -> bool:
@@ -263,11 +335,32 @@ def _page_looks_like_no_fpo(page) -> bool:
     return False
 
 
-def _resolve_next_action(page, mva: str) -> str:
+def _resolve_next_action(page, mva: str, expected_vin: str, earliest_po_date: date) -> str:
+    """Return the NextAction value for one sheet row; never guess.
+
+    "missing" = FieldPO has no eligible PO for exactly this vehicle.
+    "review"  = FieldPO shows a different vehicle than the sheet row.
+    Otherwise the eligible PO number(s), comma-separated.
+    """
+    sheet_vin = _normalize_vin(expected_vin)
+    if not sheet_vin:
+        log.warning("%s - Sheet VIN %r is not a valid VIN. Writing review.", mva, expected_vin)
+        return REVIEW_VALUE
+
     try:
-        if not _go_to_active_work_order_tab(page, mva):
+        fieldpo_vin = _open_vehicle(page, mva)
+        if not fieldpo_vin:
             return "missing"
-        fpos = _extract_fpo_values(page)
+        if fieldpo_vin != sheet_vin:
+            log.warning(
+                "%s - FieldPO VIN %s does not match sheet VIN %s. Writing review.",
+                mva,
+                fieldpo_vin,
+                sheet_vin,
+            )
+            return REVIEW_VALUE
+        _go_to_active_work_order_tab(page)
+        fpos = _extract_fpo_values(page, earliest_po_date)
     except Exception as exc:
         if _page_looks_like_no_fpo(page):
             log.info("%s - No FPO found in FieldPO. Writing missing.", mva)
@@ -275,12 +368,10 @@ def _resolve_next_action(page, mva: str) -> str:
 
         raise RuntimeError(f"FieldPO lookup failed for MVA {mva}: {exc}") from exc
 
+    fpos = [value.strip().upper() for value in fpos if value.strip()]
     if not fpos:
         return "missing"
-    if len(fpos) > 1:
-        return "multi"
-    resolved = fpos[0].strip()
-    return resolved or "missing"
+    return ", ".join(fpos)
 
 
 def _next_action_cell(row: list[str], next_action_col_1based: int) -> str:
@@ -448,8 +539,69 @@ def _normalize_next_action_for_compare(value: str) -> str:
         return "missing"
     if lowered == "multi":
         return "multi"
+    if lowered == REVIEW_VALUE:
+        return REVIEW_VALUE
 
     return raw.upper()
+
+
+def _po_set(value: str) -> frozenset[str] | None:
+    """Return the PO numbers in a NextAction value, or None if it is not a PO list."""
+    if not _PO_LIST_PATTERN.fullmatch(str(value)):
+        return None
+    return frozenset(part.strip().upper() for part in str(value).split(","))
+
+
+def _verification_needs_review(existing_value: str, resolved: str) -> bool:
+    """True when a sheet PO value is contradicted by FieldPO.
+
+    Only PO-number values are judged; free-text notes (e.g. "need pic") are
+    never overwritten. Every sheet PO must still be an eligible FieldPO PO for
+    this vehicle; FieldPO may show extra POs added later (e.g. calibration).
+    """
+    existing_pos = _po_set(existing_value)
+    if existing_pos is None:
+        return False
+    resolved_pos = _po_set(resolved)
+    if resolved_pos is None:
+        return True
+    return not existing_pos <= resolved_pos
+
+
+def _row_earliest_po_dates(values: list[list[str]]) -> dict[int, date | None]:
+    """Map 1-based row index -> earliest allowed PO created date.
+
+    That is the row's Original Date (first inventory; falls back to Inventory
+    Date when blank) minus INVENTORY_LEAD_DAYS.
+    """
+    if not values:
+        return {}
+    headers = values[0]
+    original_col = _find_col(headers, "Original Date")
+    inventory_col = _find_col(headers, "Inventory Date", "Arrival Date")
+    out: dict[int, date | None] = {}
+    for row_idx, row in enumerate(values[1:], start=2):
+        raw = ""
+        if original_col is not None and len(row) > original_col:
+            raw = row[original_col].strip()
+        if not raw and inventory_col is not None and len(row) > inventory_col:
+            raw = row[inventory_col].strip()
+        parsed = _parse_sheet_date(raw)
+        out[row_idx] = parsed - timedelta(days=INVENTORY_LEAD_DAYS) if parsed else None
+    return out
+
+
+def _row_vins(values: list[list[str]]) -> dict[int, str]:
+    """Map 1-based sheet row index -> VIN cell value."""
+    if not values:
+        return {}
+    vin_col = _find_col(values[0], "VIN")
+    if vin_col is None:
+        raise RuntimeError("Required column missing: VIN")
+    return {
+        row_idx: (row[vin_col].strip() if len(row) > vin_col else "")
+        for row_idx, row in enumerate(values[1:], start=2)
+    }
 
 
 def _write_backup(
@@ -670,25 +822,31 @@ def run(target_inventory_date: date | None = None) -> None:
         log.info("No eligible rows to update or verify. Exiting.")
         return
 
-    if candidates:
-        backup_path = _write_backup(values, candidates, next_action_col, spreadsheet_id, sheet_name)
-        log.info("Backup written: %s", backup_path)
+    # Verification can overwrite a contradicted PO with "review", so back up
+    # those rows as well as the lookup candidates.
+    backup_rows = candidates + [(row_idx, mva) for row_idx, mva, _ in verify_rows]
+    backup_path = _write_backup(values, backup_rows, next_action_col, spreadsheet_id, sheet_name)
+    log.info("Backup written: %s", backup_path)
 
     FIELDPO_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
 
-    cache: dict[str, str] = {}
+    row_vins = _row_vins(values)
+    row_earliest = _row_earliest_po_dates(values)
+    fallback_earliest = target_inventory_date - timedelta(days=INVENTORY_LEAD_DAYS)
+    cache: dict[tuple[str, str, date], str] = {}
     updated = 0
-    multi = 0
+    flagged_review = 0
+    review_count = 0
     missing = 0
     processed_rows: list[int] = [row_idx for row_idx, _ in candidates]
     verify_match = 0
     verify_mismatch = 0
 
     def _record_value(value: str) -> None:
-        nonlocal updated, multi, missing
+        nonlocal updated, review_count, missing
         updated += 1
-        if value == "multi":
-            multi += 1
+        if value == REVIEW_VALUE:
+            review_count += 1
         elif value == "missing":
             missing += 1
 
@@ -700,12 +858,17 @@ def run(target_inventory_date: date | None = None) -> None:
 
             # Single pass: process all candidate rows from the initial snapshot.
             for row_idx, mva in candidates:
-                if mva in cache:
-                    result = cache[mva]
+                key = (
+                    mva,
+                    row_vins.get(row_idx, ""),
+                    row_earliest.get(row_idx) or fallback_earliest,
+                )
+                if key in cache:
+                    result = cache[key]
                 else:
                     log.info("Lookup MVA %s", mva)
-                    result = _resolve_next_action(page, mva)
-                    cache[mva] = result
+                    result = _resolve_next_action(page, mva, key[1], key[2])
+                    cache[key] = result
 
                 result = str(result).strip() or "missing"
 
@@ -722,17 +885,33 @@ def run(target_inventory_date: date | None = None) -> None:
                     )
 
             for row_idx, mva, existing_value in verify_rows:
-                if mva in cache:
-                    resolved = cache[mva]
+                key = (
+                    mva,
+                    row_vins.get(row_idx, ""),
+                    row_earliest.get(row_idx) or fallback_earliest,
+                )
+                if key in cache:
+                    resolved = cache[key]
                 else:
                     log.info("Verify lookup MVA %s", mva)
-                    resolved = _resolve_next_action(page, mva)
-                    cache[mva] = resolved
+                    resolved = _resolve_next_action(page, mva, key[1], key[2])
+                    cache[key] = resolved
 
                 expected = _normalize_next_action_for_compare(existing_value)
                 actual = _normalize_next_action_for_compare(resolved)
 
-                if expected == actual:
+                if _verification_needs_review(existing_value, resolved):
+                    verify_mismatch += 1
+                    flagged_review += 1
+                    ws.update_cell(row_idx, next_action_col, REVIEW_VALUE)
+                    log.warning(
+                        "Verify row %d MVA %s mismatch: sheet=%s fieldpo=%s. Wrote review.",
+                        row_idx,
+                        mva,
+                        existing_value,
+                        resolved,
+                    )
+                elif expected == actual or _po_set(existing_value) is not None:
                     verify_match += 1
                     log.info(
                         "Verify row %d MVA %s matched existing NextAction=%s",
@@ -769,15 +948,16 @@ def run(target_inventory_date: date | None = None) -> None:
         log.warning("Final guard patched row %d MVA %s to missing.", row_idx, mva)
 
     log.info(
-        "Complete. Updated=%d, multi=%d, missing=%d, single=%d, patched_blanks=%d, forced_scope_fills=%d, verify_match=%d, verify_mismatch=%d",
+        "Complete. Updated=%d, review=%d, missing=%d, po=%d, patched_blanks=%d, forced_scope_fills=%d, verify_match=%d, verify_mismatch=%d, verify_flagged_review=%d",
         updated,
-        multi,
+        review_count,
         missing,
-        updated - multi - missing,
+        updated - review_count - missing,
         patched_blanks,
         forced_scope_fills,
         verify_match,
         verify_mismatch,
+        flagged_review,
     )
 
 

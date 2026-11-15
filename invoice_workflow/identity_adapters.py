@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
@@ -44,6 +45,25 @@ class GoogleSheetIdentityReader:
             value.zfill(9) if re.fullmatch(r"\d{8,9}", value) else value
             for value in values
         )
+
+    def find_original_dates_by_vin(self, vin: str) -> tuple[date | None, ...]:
+        """Return each row's Original Date (first inventory) for one VIN.
+
+        Legacy rows with a blank Original Date fall back to Inventory Date.
+        """
+        dates: list[date | None] = []
+        for row in self._updater.find_rows_by_vin(vin):
+            fields = self._updater.get_row_fields(
+                row, ["Original Date", "Inventory Date", "Arrival Date"]
+            )
+            raw = (
+                fields.get("Original Date")
+                or fields.get("Inventory Date")
+                or fields.get("Arrival Date")
+                or ""
+            )
+            dates.append(_parse_sheet_date(raw))
+        return tuple(dates)
 
     def find_vins_by_mva(self, mva: str) -> tuple[str, ...]:
         values = (
@@ -160,12 +180,15 @@ class FieldPOBrowserIdentityReader:
             raise ValueError(
                 f"FieldPO authorized amount is invalid: {amount_value}"
             ) from exc
+        created_by, created_on = _extract_po_creator(po_card_text)
 
         return FieldPOIdentitySnapshot(
             po_number=po_number,
             vin=vin,
             mva=mva,
             authorized_amount=authorized_amount,
+            created_by=created_by,
+            created_on=created_on,
         )
 
 
@@ -250,10 +273,12 @@ class FieldPOBrowserApprover:
             raise ValueError(
                 f"Validated VIN {identity.vin} does not match invoice VIN {invoice.vin}"
             )
-        if identity.invoice_amount != invoice.invoice_amount:
+        if invoice.invoice_total is None:
+            raise ValueError("Invoice PDF does not contain one exact Total")
+        if identity.invoice_amount != invoice.invoice_total:
             raise ValueError(
                 f"Validated amount {identity.invoice_amount} does not match "
-                f"invoice amount {invoice.invoice_amount}"
+                f"invoice total {invoice.invoice_total}"
             )
 
         page = self._page
@@ -273,10 +298,15 @@ class FieldPOBrowserApprover:
                 f"Live FieldPO MVA {live_identity.mva or '<missing>'} does not match "
                 f"Sheet MVA {identity.mva}"
             )
-        if live_identity.authorized_amount != invoice.invoice_amount:
+        if live_identity.authorized_amount != invoice.invoice_total:
             raise ValueError(
                 f"Live FieldPO authorized amount {live_identity.authorized_amount} "
-                f"does not match invoice amount {invoice.invoice_amount}"
+                f"does not match invoice amount {invoice.invoice_total}"
+            )
+        if _normalize_person(live_identity.created_by) != _normalize_person("Steele, Dirk"):
+            raise ValueError(
+                f"PO creator mismatch: {po_number} created by "
+                f"{live_identity.created_by or '<missing>'}, expected Steele, Dirk"
             )
         if live_identity.authorized_amount != identity.authorized_amount:
             raise ValueError(
@@ -299,10 +329,10 @@ class FieldPOBrowserApprover:
                 f"FieldPO PO {po_number} status is {status}; expected IN PROGRESS"
             )
         amount = _parse_authorized_amount(authorized_amount)
-        if amount != invoice.invoice_amount:
+        if amount != invoice.invoice_total:
             raise ValueError(
                 f"FieldPO authorized amount {amount} does not match invoice amount "
-                f"{invoice.invoice_amount}"
+                f"{invoice.invoice_total}"
             )
         if amount != live_identity.authorized_amount:
             raise ValueError(f"FieldPO authorized amount changed during approval check")
@@ -357,6 +387,36 @@ def _dismiss_attention_popup(page: Any) -> None:
         )
     resume_button.click()
     popup.wait_for(state="hidden", timeout=30_000)
+
+
+def _extract_po_creator(po_card_text: str) -> tuple[str, date]:
+    """Read the one "Created by <name> on YYYY-MM-DD" line on a PO card."""
+    matches = re.findall(
+        r"Created\s+by\s+(.+?)\s+on\s+(\d{4}-\d{2}-\d{2})",
+        po_card_text,
+        re.IGNORECASE,
+    )
+    unique = tuple(dict.fromkeys((name.strip(), day) for name, day in matches))
+    if len(unique) != 1:
+        raise ValueError(
+            f"Expected exactly one FieldPO PO creator line, found {len(unique)}"
+        )
+    name, day = unique[0]
+    return name, datetime.strptime(day, "%Y-%m-%d").date()
+
+
+def _normalize_person(value: str) -> str:
+    return re.sub(r"\s+", "", str(value or "")).casefold()
+
+
+def _parse_sheet_date(value: str) -> date | None:
+    raw = str(value or "").strip()
+    for fmt in ("%m/%d/%Y", "%m-%d-%Y", "%Y-%m-%d", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(raw, fmt).date()
+        except ValueError:
+            continue
+    return None
 
 
 def _extract_exact(text: str, pattern: str, label: str) -> str:

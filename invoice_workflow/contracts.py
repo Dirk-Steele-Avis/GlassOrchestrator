@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Protocol, Sequence
@@ -89,6 +89,8 @@ class FieldPOIdentitySnapshot:
     vin: str
     mva: str
     authorized_amount: Decimal
+    created_by: str = ""
+    created_on: date | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,6 +172,8 @@ class FieldPOApprover(Protocol):
 
 class SheetIdentityReader(Protocol):
     def find_mvas_by_vin(self, vin: str) -> Sequence[str]: ...
+
+    def find_original_dates_by_vin(self, vin: str) -> Sequence[date | None]: ...
 
 
 class FieldPOIdentityReader(Protocol):

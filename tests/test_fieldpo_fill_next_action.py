@@ -114,7 +114,7 @@ def test_extract_fpo_excludes_po_without_creator_line():
     assert fieldpo._extract_fpo_values_from_text(text) == []
 
 
-def test_extract_fpo_skips_other_creator_and_selects_topmost_steele_po():
+def test_extract_fpo_skips_other_creator_po():
     text = _po_section(
         _po_card("FPO1178731", "Glass Calibration", "Created by Other, User on 2026-10-19"),
         _po_card("FPO1178730", "Glass Parts and Install", "Created by Steele, Dirk on 2026-10-19"),
@@ -123,13 +123,13 @@ def test_extract_fpo_skips_other_creator_and_selects_topmost_steele_po():
     assert fieldpo._extract_fpo_values_from_text(text) == ["FPO1178730"]
 
 
-def test_extract_fpo_selects_topmost_when_multiple_steele_pos():
+def test_extract_fpo_returns_every_steele_po_for_the_repair():
     text = _po_section(
         _po_card("FPO1178731", "Glass Calibration", "Created by Steele, Dirk on 2026-10-19"),
         _po_card("FPO1178730", "Glass Parts and Install", "Created by Steele, Dirk on 2026-10-19"),
     )
 
-    assert fieldpo._extract_fpo_values_from_text(text) == ["FPO1178731"]
+    assert fieldpo._extract_fpo_values_from_text(text) == ["FPO1178731", "FPO1178730"]
 
 
 def test_extract_fpo_creator_match_is_case_insensitive():
@@ -138,3 +138,145 @@ def test_extract_fpo_creator_match_is_case_insensitive():
     )
 
     assert fieldpo._extract_fpo_values_from_text(text) == ["FPO1178733"]
+
+def test_extract_fpo_creator_match_ignores_spacing():
+    text = _po_section(
+        _po_card("FPO1178734", "Parts/Labor", "Created by Steele,Dirk on 2026-10-19"),
+    )
+
+    assert fieldpo._extract_fpo_values_from_text(text) == ["FPO1178734"]
+
+
+def test_extract_fpo_excludes_po_created_before_inventory_date():
+    text = _po_section(
+        _po_card("FPO1000001", "Parts/Labor", "Created by Steele, Dirk on 2026-03-02"),
+        _po_card("FPO1178730", "Parts/Labor", "Created by Steele, Dirk on 2026-10-19"),
+        _po_card("FPO1178731", "Camera Calibration", "Created by Steele, Dirk on 2026-10-20"),
+    )
+
+    assert fieldpo._extract_fpo_values_from_text(text, date(2026, 10, 19)) == [
+        "FPO1178730",
+        "FPO1178731",
+    ]
+
+
+def test_extract_fpo_all_old_pos_yield_nothing():
+    text = _po_section(
+        _po_card("FPO1000001", "Parts/Labor", "Created by Steele, Dirk on 2026-03-02"),
+    )
+
+    assert fieldpo._extract_fpo_values_from_text(text, date(2026, 10, 19)) == []
+
+
+@pytest.mark.parametrize(
+    ("result_texts", "expected"),
+    [
+        (["MVA# 061093642\nWO# 1"], 0),
+        (["MVA# 61093642\nWO# 1"], 0),
+        (["MVA# 106109364\nWO# 1", "MVA# 061093642\nWO# 2"], 1),
+        (["MVA# 106109364\nWO# 1"], None),
+        ([], None),
+    ],
+)
+def test_select_exact_mva_result_ignores_other_vehicles(result_texts, expected):
+    assert fieldpo._select_exact_mva_result(result_texts, "61093642") == expected
+
+
+def test_extract_vin_requires_exactly_one_vin():
+    assert fieldpo._extract_vin_from_text("VIN: 1C4SJSBP6SS537975") == "1C4SJSBP6SS537975"
+    assert fieldpo._extract_vin_from_text("no vin here") == ""
+    assert (
+        fieldpo._extract_vin_from_text("VIN 1C4SJSBP6SS537975\nVIN 1FMDE7BH9TLA47847") == ""
+    )
+
+
+def _resolve_with(monkeypatch, *, fieldpo_vin, pos):
+    monkeypatch.setattr(fieldpo, "_open_vehicle", MagicMock(return_value=fieldpo_vin))
+    monkeypatch.setattr(fieldpo, "_go_to_active_work_order_tab", MagicMock())
+    extract = MagicMock(return_value=pos)
+    monkeypatch.setattr(fieldpo, "_extract_fpo_values", extract)
+    return extract
+
+
+def test_resolve_writes_review_when_fieldpo_vin_differs(monkeypatch):
+    extract = _resolve_with(monkeypatch, fieldpo_vin="1FMDE7BH9TLA47847", pos=["FPO1178730"])
+
+    result = fieldpo._resolve_next_action(
+        MagicMock(), "061093642", "1C4SJSBP6SS537975", date(2026, 10, 19)
+    )
+
+    assert result == "review"
+    extract.assert_not_called()
+
+
+def test_resolve_writes_review_when_sheet_vin_invalid(monkeypatch):
+    _resolve_with(monkeypatch, fieldpo_vin="1C4SJSBP6SS537975", pos=["FPO1178730"])
+
+    result = fieldpo._resolve_next_action(MagicMock(), "061093642", "N/A", date(2026, 10, 19))
+
+    assert result == "review"
+    fieldpo._open_vehicle.assert_not_called()
+
+
+def test_resolve_writes_missing_when_no_exact_mva(monkeypatch):
+    _resolve_with(monkeypatch, fieldpo_vin="", pos=["FPO1178730"])
+
+    result = fieldpo._resolve_next_action(
+        MagicMock(), "061093642", "1C4SJSBP6SS537975", date(2026, 10, 19)
+    )
+
+    assert result == "missing"
+
+
+def test_earliest_po_date_is_original_date_minus_one_day():
+    values = [
+        ["Inventory Date", "Original Date", "MVA", "VIN", "Action", "NextAction"],
+        ["10/16/2026", "10/16/2026", "58943474", "2C4RC1BG1TR168397", "Replace(AGN)", ""],
+        ["10/30/2026", "10/29/2026", "59622695", "5YFB4MDE7TP393273", "Replace(AGN)", ""],
+        ["10/31/2026", "", "11111111", "1C4SJSBP6SS537975", "Replace(AGN)", ""],
+    ]
+
+    assert fieldpo._row_earliest_po_dates(values) == {
+        2: date(2026, 10, 15),
+        3: date(2026, 10, 28),
+        4: date(2026, 10, 30),
+    }
+
+
+def test_po_created_on_inventory_day_before_original_date_is_eligible():
+    text = _po_section(
+        _po_card("FPO1175510", "Glass Parts and Install", "Created by Steele, Dirk on 2026-10-15"),
+    )
+
+    # Original Date 10/16 -> inventory day (earliest allowed) 10/15
+    assert fieldpo._extract_fpo_values_from_text(text, date(2026, 10, 15)) == ["FPO1175510"]
+
+
+def test_resolve_lists_all_eligible_pos_using_inventory_date(monkeypatch):
+    extract = _resolve_with(
+        monkeypatch, fieldpo_vin="1C4SJSBP6SS537975", pos=["FPO1178730", "FPO1178731"]
+    )
+
+    result = fieldpo._resolve_next_action(
+        MagicMock(), "061093642", "1c4sjsbp6ss537975", date(2026, 10, 19)
+    )
+
+    assert result == "FPO1178730, FPO1178731"
+    assert extract.call_args.args[1] == date(2026, 10, 19)
+
+
+@pytest.mark.parametrize(
+    ("existing", "resolved", "needs_review"),
+    [
+        ("FPO1178730", "FPO1178730", False),
+        ("FPO1178730", "FPO1178730, FPO1178731", False),
+        ("fpo1178730", "FPO1178730", False),
+        ("FPO1178730", "FPO1178799", True),
+        ("FPO1178730", "missing", True),
+        ("FPO1178730", "review", True),
+        ("need pic", "FPO1178730", False),
+        ("need pic", "review", False),
+    ],
+)
+def test_verification_flags_only_contradicted_po_values(existing, resolved, needs_review):
+    assert fieldpo._verification_needs_review(existing, resolved) is needs_review
