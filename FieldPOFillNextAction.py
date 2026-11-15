@@ -9,8 +9,9 @@ Scope rules (per operator workflow):
 Write behavior (never guess):
 - Only a FieldPO search result whose MVA exactly equals the row MVA is opened.
 - The vehicle's FieldPO VIN must equal the row VIN, otherwise write "review".
-- A PO counts only when its card shows "Created by Steele, Dirk" and its
-  created date is on or after the row's Inventory Date.
+- A PO counts only when its card shows "Created by Steele, Dirk" and it was
+  created no earlier than the inventory day (the row's Original Date minus
+  one day; the inventory is done the day before the official date).
 - One or more eligible POs: write them, comma-separated (one repair can have
   e.g. a parts/labor PO and a calibration PO; closeout matches each invoice to
   its PO by price).
@@ -29,7 +30,7 @@ import json
 import logging
 import re
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -53,6 +54,9 @@ SHARED_LOCAL_CONFIG_PATH = BASE_DIR / "config" / "config.local.json"
 FIELDPO_URL = "https://supply-chain.east.prod.sdp.abg.cloud/fieldpo/dashboard"
 REQUIRED_PO_CREATOR = "Steele, Dirk"
 REVIEW_VALUE = "review"
+# The physical inventory (and PO creation) happens the day before the
+# official Original Date recorded in the sheet.
+INVENTORY_LEAD_DAYS = 1
 _VIN_PATTERN = re.compile(r"\bVIN\s*#?\s*:?\s*([A-HJ-NPR-Z0-9]{17})\b", re.IGNORECASE)
 _MVA_RESULT_PATTERN = re.compile(r"\bMVA\s*#?\s*:?\s*(\d{8,9})\b", re.IGNORECASE)
 _PO_LIST_PATTERN = re.compile(r"^\s*FPO\d+(\s*,\s*FPO\d+)*\s*$", re.IGNORECASE)
@@ -331,7 +335,7 @@ def _page_looks_like_no_fpo(page) -> bool:
     return False
 
 
-def _resolve_next_action(page, mva: str, expected_vin: str, inventory_date: date) -> str:
+def _resolve_next_action(page, mva: str, expected_vin: str, earliest_po_date: date) -> str:
     """Return the NextAction value for one sheet row; never guess.
 
     "missing" = FieldPO has no eligible PO for exactly this vehicle.
@@ -356,7 +360,7 @@ def _resolve_next_action(page, mva: str, expected_vin: str, inventory_date: date
             )
             return REVIEW_VALUE
         _go_to_active_work_order_tab(page)
-        fpos = _extract_fpo_values(page, inventory_date)
+        fpos = _extract_fpo_values(page, earliest_po_date)
     except Exception as exc:
         if _page_looks_like_no_fpo(page):
             log.info("%s - No FPO found in FieldPO. Writing missing.", mva)
@@ -562,6 +566,29 @@ def _verification_needs_review(existing_value: str, resolved: str) -> bool:
     if resolved_pos is None:
         return True
     return not existing_pos <= resolved_pos
+
+
+def _row_earliest_po_dates(values: list[list[str]]) -> dict[int, date | None]:
+    """Map 1-based row index -> earliest allowed PO created date.
+
+    That is the row's Original Date (first inventory; falls back to Inventory
+    Date when blank) minus INVENTORY_LEAD_DAYS.
+    """
+    if not values:
+        return {}
+    headers = values[0]
+    original_col = _find_col(headers, "Original Date")
+    inventory_col = _find_col(headers, "Inventory Date", "Arrival Date")
+    out: dict[int, date | None] = {}
+    for row_idx, row in enumerate(values[1:], start=2):
+        raw = ""
+        if original_col is not None and len(row) > original_col:
+            raw = row[original_col].strip()
+        if not raw and inventory_col is not None and len(row) > inventory_col:
+            raw = row[inventory_col].strip()
+        parsed = _parse_sheet_date(raw)
+        out[row_idx] = parsed - timedelta(days=INVENTORY_LEAD_DAYS) if parsed else None
+    return out
 
 
 def _row_vins(values: list[list[str]]) -> dict[int, str]:
@@ -804,7 +831,9 @@ def run(target_inventory_date: date | None = None) -> None:
     FIELDPO_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
 
     row_vins = _row_vins(values)
-    cache: dict[tuple[str, str], str] = {}
+    row_earliest = _row_earliest_po_dates(values)
+    fallback_earliest = target_inventory_date - timedelta(days=INVENTORY_LEAD_DAYS)
+    cache: dict[tuple[str, str, date], str] = {}
     updated = 0
     flagged_review = 0
     review_count = 0
@@ -829,12 +858,16 @@ def run(target_inventory_date: date | None = None) -> None:
 
             # Single pass: process all candidate rows from the initial snapshot.
             for row_idx, mva in candidates:
-                key = (mva, row_vins.get(row_idx, ""))
+                key = (
+                    mva,
+                    row_vins.get(row_idx, ""),
+                    row_earliest.get(row_idx) or fallback_earliest,
+                )
                 if key in cache:
                     result = cache[key]
                 else:
                     log.info("Lookup MVA %s", mva)
-                    result = _resolve_next_action(page, mva, key[1], target_inventory_date)
+                    result = _resolve_next_action(page, mva, key[1], key[2])
                     cache[key] = result
 
                 result = str(result).strip() or "missing"
@@ -852,12 +885,16 @@ def run(target_inventory_date: date | None = None) -> None:
                     )
 
             for row_idx, mva, existing_value in verify_rows:
-                key = (mva, row_vins.get(row_idx, ""))
+                key = (
+                    mva,
+                    row_vins.get(row_idx, ""),
+                    row_earliest.get(row_idx) or fallback_earliest,
+                )
                 if key in cache:
                     resolved = cache[key]
                 else:
                     log.info("Verify lookup MVA %s", mva)
-                    resolved = _resolve_next_action(page, mva, key[1], target_inventory_date)
+                    resolved = _resolve_next_action(page, mva, key[1], key[2])
                     cache[key] = resolved
 
                 expected = _normalize_next_action_for_compare(existing_value)

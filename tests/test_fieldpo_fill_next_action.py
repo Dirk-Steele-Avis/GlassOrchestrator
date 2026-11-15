@@ -228,6 +228,30 @@ def test_resolve_writes_missing_when_no_exact_mva(monkeypatch):
     assert result == "missing"
 
 
+def test_earliest_po_date_is_original_date_minus_one_day():
+    values = [
+        ["Inventory Date", "Original Date", "MVA", "VIN", "Action", "NextAction"],
+        ["10/16/2026", "10/16/2026", "58943474", "2C4RC1BG1TR168397", "Replace(AGN)", ""],
+        ["10/30/2026", "10/29/2026", "59622695", "5YFB4MDE7TP393273", "Replace(AGN)", ""],
+        ["10/31/2026", "", "11111111", "1C4SJSBP6SS537975", "Replace(AGN)", ""],
+    ]
+
+    assert fieldpo._row_earliest_po_dates(values) == {
+        2: date(2026, 10, 15),
+        3: date(2026, 10, 28),
+        4: date(2026, 10, 30),
+    }
+
+
+def test_po_created_on_inventory_day_before_original_date_is_eligible():
+    text = _po_section(
+        _po_card("FPO1175510", "Glass Parts and Install", "Created by Steele, Dirk on 2026-10-15"),
+    )
+
+    # Original Date 10/16 -> inventory day (earliest allowed) 10/15
+    assert fieldpo._extract_fpo_values_from_text(text, date(2026, 10, 15)) == ["FPO1175510"]
+
+
 def test_resolve_lists_all_eligible_pos_using_inventory_date(monkeypatch):
     extract = _resolve_with(
         monkeypatch, fieldpo_vin="1C4SJSBP6SS537975", pos=["FPO1178730", "FPO1178731"]

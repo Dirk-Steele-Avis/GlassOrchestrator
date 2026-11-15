@@ -46,12 +46,22 @@ class GoogleSheetIdentityReader:
             for value in values
         )
 
-    def find_inventory_dates_by_vin(self, vin: str) -> tuple[date | None, ...]:
-        """Return the parsed Inventory Date of every row for one VIN."""
+    def find_original_dates_by_vin(self, vin: str) -> tuple[date | None, ...]:
+        """Return each row's Original Date (first inventory) for one VIN.
+
+        Legacy rows with a blank Original Date fall back to Inventory Date.
+        """
         dates: list[date | None] = []
         for row in self._updater.find_rows_by_vin(vin):
-            fields = self._updater.get_row_fields(row, ["Inventory Date", "Arrival Date"])
-            raw = fields.get("Inventory Date") or fields.get("Arrival Date") or ""
+            fields = self._updater.get_row_fields(
+                row, ["Original Date", "Inventory Date", "Arrival Date"]
+            )
+            raw = (
+                fields.get("Original Date")
+                or fields.get("Inventory Date")
+                or fields.get("Arrival Date")
+                or ""
+            )
             dates.append(_parse_sheet_date(raw))
         return tuple(dates)
 

@@ -31,7 +31,7 @@ def _invoice() -> ParsedInvoice:
 
 def _resolver(
     sheet_mvas=("061093642",),
-    inventory_dates=(date(2026, 9, 1),),
+    original_dates=(date(2026, 9, 1),),
     **fieldpo_overrides,
 ):
     invoice = _invoice()
@@ -45,7 +45,7 @@ def _resolver(
     )
     sheet = MagicMock()
     sheet.find_mvas_by_vin.return_value = sheet_mvas
-    sheet.find_inventory_dates_by_vin.return_value = inventory_dates
+    sheet.find_original_dates_by_vin.return_value = original_dates
     fieldpo = MagicMock()
     fieldpo.read_identity.return_value = snapshot
     return StrictIdentityResolver(sheet, fieldpo), sheet, fieldpo
@@ -214,28 +214,44 @@ def test_po_creator_match_ignores_case_and_spacing(creator):
 
 def test_old_po_from_earlier_repair_blocks():
     resolver, _, _ = _resolver(
-        inventory_dates=(date(2026, 3, 2), date(2026, 9, 1)),
+        original_dates=(date(2026, 3, 2), date(2026, 9, 1)),
         created_on=date(2026, 3, 5),
     )
 
     result = resolver.resolve(_invoice())
 
     assert result.status is StageStatus.BLOCKED
-    assert "PO created before Inventory Date" in result.detail
+    assert "PO created before inventory day" in result.detail
 
 
-def test_po_created_on_inventory_date_is_allowed():
+@pytest.mark.parametrize(
+    "created_on",
+    [date(2026, 10, 15), date(2026, 10, 16), date(2026, 10, 20)],
+)
+def test_po_created_on_inventory_day_or_later_is_allowed(created_on):
+    # Inventory (and PO creation) happens the day before the Original Date.
     resolver, _, _ = _resolver(
-        inventory_dates=(date(2026, 9, 1),), created_on=date(2026, 9, 1)
+        original_dates=(date(2026, 10, 16),), created_on=created_on
     )
 
     assert resolver.resolve(_invoice()).status is StageStatus.COMPLETE
 
 
-def test_missing_sheet_inventory_date_blocks():
-    resolver, _, _ = _resolver(inventory_dates=(None,))
+def test_po_created_two_days_before_original_date_blocks():
+    resolver, _, _ = _resolver(
+        original_dates=(date(2026, 10, 16),), created_on=date(2026, 10, 14)
+    )
 
     result = resolver.resolve(_invoice())
 
     assert result.status is StageStatus.BLOCKED
-    assert "no Inventory Date" in result.detail
+    assert "earliest allowed 2026-10-15" in result.detail
+
+
+def test_missing_sheet_original_date_blocks():
+    resolver, _, _ = _resolver(original_dates=(None,))
+
+    result = resolver.resolve(_invoice())
+
+    assert result.status is StageStatus.BLOCKED
+    assert "no Original Date" in result.detail

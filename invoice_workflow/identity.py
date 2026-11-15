@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import timedelta
 
 from invoice_workflow.contracts import (
     FieldPOIdentityReader,
@@ -14,6 +15,9 @@ from invoice_workflow.contracts import (
 )
 
 REQUIRED_PO_CREATOR = "Steele, Dirk"
+# The physical inventory (and PO creation) happens the day before the
+# official Original Date recorded in the sheet.
+INVENTORY_LEAD_DAYS = 1
 
 _PO_PATTERN = re.compile(r"FPO\d{7,}")
 _VIN_PATTERN = re.compile(r"[A-HJ-NPR-Z0-9]{17}")
@@ -100,28 +104,30 @@ class StrictIdentityResolver:
                 fieldpo_snapshot=fieldpo,
                 sheet_mvas=sheet_mvas,
             )
-        inventory_dates = [
+        original_dates = [
             value
-            for value in self._sheet_reader.find_inventory_dates_by_vin(invoice.vin)
+            for value in self._sheet_reader.find_original_dates_by_vin(invoice.vin)
             if value is not None
         ]
-        if not inventory_dates:
+        if not original_dates:
             return IdentityResult(
                 StageStatus.BLOCKED,
-                detail=f"Sheet has no Inventory Date for VIN {invoice.vin}",
+                detail=f"Sheet has no Original Date for VIN {invoice.vin}",
                 fieldpo_snapshot=fieldpo,
                 sheet_mvas=sheet_mvas,
             )
-        # The latest Inventory Date is the current repair; a PO created before
-        # it belongs to an earlier repair of the same vehicle.
-        inventory_date = max(inventory_dates)
-        if fieldpo.created_on is None or fieldpo.created_on < inventory_date:
+        # The latest Original Date is the current repair; a PO created before
+        # its inventory day belongs to an earlier repair of the same vehicle.
+        original_date = max(original_dates)
+        earliest_allowed = original_date - timedelta(days=INVENTORY_LEAD_DAYS)
+        if fieldpo.created_on is None or fieldpo.created_on < earliest_allowed:
             created = fieldpo.created_on.isoformat() if fieldpo.created_on else "<missing>"
             return IdentityResult(
                 StageStatus.BLOCKED,
                 detail=(
-                    f"PO created before Inventory Date: {invoice.pdf_po_number} "
-                    f"created {created}, Inventory Date {inventory_date.isoformat()}"
+                    f"PO created before inventory day: {invoice.pdf_po_number} "
+                    f"created {created}, Original Date {original_date.isoformat()} "
+                    f"(earliest allowed {earliest_allowed.isoformat()})"
                 ),
                 fieldpo_snapshot=fieldpo,
                 sheet_mvas=sheet_mvas,

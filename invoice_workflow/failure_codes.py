@@ -27,10 +27,10 @@ def classify_failure(stage: str, detail: str) -> str:
         return "INVOICE_TOTAL_MISSING"
     if "po creator mismatch" in normalized:
         return "PO_CREATOR_MISMATCH"
-    if "po created before inventory date" in normalized:
+    if "po created before inventory day" in normalized:
         return "PO_DATE_BEFORE_INVENTORY"
-    if "no inventory date" in normalized:
-        return "INVENTORY_DATE_MISSING"
+    if "no original date" in normalized:
+        return "ORIGINAL_DATE_MISSING"
     if "vin mismatch" in normalized:
         return "VIN_MISMATCH"
     if "authorized amount mismatch" in normalized:
