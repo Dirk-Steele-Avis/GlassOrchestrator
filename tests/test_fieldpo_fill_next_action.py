@@ -18,6 +18,10 @@ def test_fieldpo_login_reaches_dashboard(monkeypatch):
     fieldpo._ensure_fieldpo_login(page)
 
     page.goto.assert_called_once_with(fieldpo.FIELDPO_URL)
+    page.wait_for_url.assert_called_once_with(
+        "**/fieldpo/dashboard**", timeout=fieldpo.FIELDPO_LOGIN_TIMEOUT_MS
+    )
+    assert fieldpo.FIELDPO_LOGIN_TIMEOUT_MS >= 120_000
     popup.assert_called_once_with(page)
 
 

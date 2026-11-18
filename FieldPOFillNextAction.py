@@ -52,6 +52,8 @@ ORCHESTRATOR_LOCAL_CONFIG_PATH = BASE_DIR / "orchestrator_config.local.json"
 SHARED_LOCAL_CONFIG_PATH = BASE_DIR / "config" / "config.local.json"
 
 FIELDPO_URL = "https://supply-chain.east.prod.sdp.abg.cloud/fieldpo/dashboard"
+# Matches the other FieldPO scripts; long enough to finish Microsoft sign-in + MFA.
+FIELDPO_LOGIN_TIMEOUT_MS = 120_000
 REQUIRED_PO_CREATOR = "Steele, Dirk"
 REVIEW_VALUE = "review"
 # The physical inventory (and PO creation) happens the day before the
@@ -153,8 +155,18 @@ def _dismiss_attention_popup(page) -> None:
 
 
 def _ensure_fieldpo_login(page) -> None:
+    """Open FieldPO and wait for the dashboard, allowing time for Microsoft sign-in.
+
+    An expired session redirects to Microsoft auth, where the user must approve
+    an Authenticator prompt; 30s was not enough to finish that.
+    """
     page.goto(FIELDPO_URL)
-    page.wait_for_url("**/fieldpo/dashboard**", timeout=30000)
+    log.info(
+        "Waiting up to %ds for the FieldPO dashboard — if a Microsoft sign-in "
+        "appears, complete it (approve any Authenticator prompt) in the browser.",
+        FIELDPO_LOGIN_TIMEOUT_MS // 1000,
+    )
+    page.wait_for_url("**/fieldpo/dashboard**", timeout=FIELDPO_LOGIN_TIMEOUT_MS)
     _dismiss_attention_popup(page)
 
 
