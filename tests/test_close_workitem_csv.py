@@ -7,7 +7,7 @@ import json
 import logging
 import subprocess
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 
@@ -183,7 +183,7 @@ class TestCloseMissingComplaint:
 
 class TestActiveCloseRunnerDisconnect:
 
-    def test_successful_close_reuses_exact_vehicle_keyword_search(self, monkeypatch):
+    def test_successful_close_opens_fresh_homepage_search_for_next_mva(self, monkeypatch):
         from WorkItems import close_workitem
 
         process_command = MagicMock(
@@ -240,7 +240,11 @@ class TestActiveCloseRunnerDisconnect:
             close_workitem.RESULT_CLOSED,
             close_workitem.RESULT_CLOSED,
         ]
-        page.goto.assert_awaited_once_with(close_workitem.LOGIN_URL, wait_until="domcontentloaded")
+        # A closed MVA must not leave the next search on the old vehicle page.
+        assert page.goto.await_args_list == [
+            call(close_workitem.LOGIN_URL, wait_until="domcontentloaded"),
+            call(close_workitem.LOGIN_URL, wait_until="domcontentloaded"),
+        ]
         assert navigate.await_count == 2
         process_command.assert_not_called()
         playwright.chromium.launch_persistent_context.assert_awaited_once_with(

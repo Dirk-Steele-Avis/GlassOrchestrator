@@ -7,6 +7,8 @@ import re
 import time
 from typing import TYPE_CHECKING
 
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
 from config.config_loader import get_config
 
 _GLASS_PATTERN = re.compile(r"glass|windshield|crack|chip|window", re.I)
@@ -49,6 +51,7 @@ COMPASS_WORKSHOP_OBJECT_TABLE_SELECTOR = "[data-test-id='workshop-object-table']
 COMPASS_WORKSHOP_OBJECT_TITLE_SELECTOR = "[data-test-id='workshop-object-title']"
 COMPASS_ACTIVE_FILTER_SELECTOR = "span.bp6-tag[role='button']:has(b)"
 COMPASS_FILTER_CLEAR_SELECTOR = "svg[data-icon='cross']"
+COMPASS_FILTER_CLEAR_TIMEOUT_MS = 3_000
 COMPASS_MVA_FILTER_INPUT_SELECTOR = (
     "div.bp6-popover-content:visible "
     "input.bp6-multi-select-tag-input-input:visible"
@@ -294,6 +297,13 @@ async def _clear_vehicle_search_filters(page: Page) -> None:
         filter_text = " ".join((await active_filter.inner_text()).split())
         await active_filter.hover()
         clear = active_filter.locator(COMPASS_FILTER_CLEAR_SELECTOR)
+        # The X renders on hover; when Compass is busy it can lag, so wait for it.
+        try:
+            await clear.first.wait_for(
+                state="visible", timeout=COMPASS_FILTER_CLEAR_TIMEOUT_MS
+            )
+        except PlaywrightTimeoutError:
+            pass
         if await clear.count() != 1 or not await clear.first.is_visible():
             raise RuntimeError(
                 f"Active Compass filter {filter_text!r} must expose exactly one clear control"
