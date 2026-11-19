@@ -583,7 +583,6 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
             _, page = await ensure_profile_context(context)
             log.info("[PERF] Compass session ready in %.2fs", time.monotonic() - phase_started)
 
-            reuse_vehicle_search = False
             for target_index, target in enumerate(targets):
                 mva = target["mva"]
                 complaint_type = target["complaint_type"]
@@ -648,13 +647,13 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
                 started = time.monotonic()
 
                 try:
-                    if reuse_vehicle_search:
-                        log.info("[CLOSE] %s - reusing current vehicle-page MVA search", mva)
-                    else:
-                        log.info("[CLOSE] %s - opening Compass homepage Vehicle Search", mva)
-                        await page.goto(LOGIN_URL, wait_until="domcontentloaded")
-                        await page.wait_for_timeout(step_delay_ms or 1000)
-                    reuse_vehicle_search = False
+                    # Always start each MVA from a fresh Compass homepage search. Reusing the
+                    # vehicle page after a close depended on clicking the previous
+                    # "Search by MVA" chip's clear control, which Compass stopped exposing
+                    # reliably (Nov 2026) and stopped every batch after a closed MVA.
+                    log.info("[CLOSE] %s - opening Compass homepage Vehicle Search", mva)
+                    await page.goto(LOGIN_URL, wait_until="domcontentloaded")
+                    await page.wait_for_timeout(step_delay_ms or 1000)
 
                     log.info("[CLOSE] %s - navigating to MVA", mva)
                     navigation_started = time.monotonic()
@@ -706,7 +705,6 @@ async def _run_playwright_close_async(args: argparse.Namespace, targets: list[di
                         if detail:
                             log.info("[CLOSE] %s -   detail: %s", mva, detail)
                         await _capture_playwright_screenshot(page, "closed", mva)
-                        reuse_vehicle_search = True
                     elif result == RESULT_NOT_FOUND:
                         log.warning("[CLOSE] %s - WORK ITEM COUNT: 0 (%s)", mva, complaint_type)
                         await _capture_playwright_screenshot(page, "not_found", mva)

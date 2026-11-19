@@ -674,6 +674,51 @@ def test_clear_vehicle_search_filters_requires_one_clear_control(monkeypatch):
         complaints._clear_vehicle_search_filters(page)
 
 
+def test_clear_vehicle_search_filters_waits_for_late_clear_control(monkeypatch):
+    page = MagicMock()
+    active_filters = MagicMock()
+    active_filter = MagicMock()
+    clear = MagicMock()
+    keyword = MagicMock()
+    visible = {"value": False}
+    page.locator.return_value = active_filters
+    active_filters.count.side_effect = [1, 0]
+    active_filters.first = active_filter
+    active_filter.inner_text.return_value = "Search by MVA\n062437336"
+    active_filter.locator.return_value = clear
+    clear.count.return_value = 1
+    clear.first.wait_for.side_effect = lambda **_: visible.update(value=True)
+    clear.first.is_visible.side_effect = lambda: visible["value"]
+    monkeypatch.setattr(complaints, "_wait_for_keyword_search_input", lambda _page: keyword)
+
+    complaints._clear_vehicle_search_filters(page)
+
+    clear.first.wait_for.assert_called_once_with(
+        state="visible", timeout=complaints.COMPASS_FILTER_CLEAR_TIMEOUT_MS
+    )
+    clear.first.click.assert_called_once_with(timeout=5000)
+
+
+def test_clear_vehicle_search_filters_fails_when_clear_control_never_appears(monkeypatch):
+    page = MagicMock()
+    active_filters = MagicMock()
+    active_filter = MagicMock()
+    clear = MagicMock()
+    page.locator.return_value = active_filters
+    active_filters.count.return_value = 1
+    active_filters.first = active_filter
+    active_filter.inner_text.return_value = "Search by MVA\n062437336"
+    active_filter.locator.return_value = clear
+    clear.count.return_value = 1
+    clear.first.wait_for.side_effect = complaints.PlaywrightTimeoutError("timed out")
+    clear.first.is_visible.return_value = False
+    monkeypatch.setattr(complaints, "_wait_for_keyword_search_input", MagicMock())
+
+    with pytest.raises(RuntimeError, match="must expose exactly one clear control"):
+        complaints._clear_vehicle_search_filters(page)
+    clear.first.click.assert_not_called()
+
+
 def test_search_mva_requires_confirmed_vehicle_details(monkeypatch):
     page = MagicMock()
     by_mva = MagicMock()

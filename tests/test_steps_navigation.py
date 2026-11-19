@@ -195,6 +195,7 @@ def test_clear_vehicle_search_filters_removes_every_filter_and_keyword():
     active_filter.locator.return_value = clear
     clear.count = AsyncMock(return_value=1)
     clear.first = clear
+    clear.wait_for = AsyncMock()
     clear.is_visible = AsyncMock(return_value=True)
     clear.click = AsyncMock()
     keyword.count = AsyncMock(return_value=1)
@@ -217,6 +218,77 @@ def test_clear_vehicle_search_filters_removes_every_filter_and_keyword():
     assert clear.click.await_count == 2
     keyword.wait_for.assert_awaited_once_with(state="visible", timeout=8_000)
     keyword.fill.assert_awaited_once_with("")
+
+
+def _late_clear_control_page(clear_wait_for):
+    from playwright_prototype.steps import (
+        COMPASS_ACTIVE_FILTER_SELECTOR,
+        COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR,
+    )
+
+    page = MagicMock()
+    active_filters = MagicMock()
+    active_filter = MagicMock()
+    clear = MagicMock()
+    keyword = MagicMock()
+    visible = {"value": False}
+
+    async def wait_for(*, state, timeout):
+        await clear_wait_for(visible, state=state, timeout=timeout)
+
+    active_filters.count = AsyncMock(side_effect=[1, 0])
+    active_filters.first = active_filter
+    active_filter.inner_text = AsyncMock(return_value="Search by MVA 062437336")
+    active_filter.hover = AsyncMock()
+    active_filter.locator.return_value = clear
+    clear.first = clear
+    clear.wait_for = AsyncMock(side_effect=wait_for)
+    clear.count = AsyncMock(return_value=1)
+    clear.is_visible = AsyncMock(side_effect=lambda: visible["value"])
+    clear.click = AsyncMock()
+    keyword.count = AsyncMock(return_value=1)
+    keyword.first = keyword
+    keyword.wait_for = AsyncMock()
+    keyword.fill = AsyncMock()
+    page.locator.side_effect = lambda selector: {
+        COMPASS_ACTIVE_FILTER_SELECTOR: active_filters,
+        COMPASS_KEYWORD_SEARCH_INPUT_SELECTOR: keyword,
+    }[selector]
+    page.wait_for_timeout = AsyncMock()
+    return page, clear
+
+
+def test_clear_vehicle_search_filters_waits_for_late_clear_control():
+    from playwright_prototype.steps import (
+        COMPASS_FILTER_CLEAR_TIMEOUT_MS,
+        _clear_vehicle_search_filters,
+    )
+
+    async def appears_after_wait(visible, *, state, timeout):
+        visible["value"] = True
+
+    page, clear = _late_clear_control_page(appears_after_wait)
+
+    asyncio.run(_clear_vehicle_search_filters(page))
+
+    clear.wait_for.assert_awaited_once_with(
+        state="visible", timeout=COMPASS_FILTER_CLEAR_TIMEOUT_MS
+    )
+    clear.click.assert_awaited_once_with(timeout=5_000)
+
+
+def test_clear_vehicle_search_filters_fails_when_clear_control_never_appears():
+    from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+    from playwright_prototype.steps import _clear_vehicle_search_filters
+
+    async def never_appears(visible, *, state, timeout):
+        raise PlaywrightTimeoutError("timed out")
+
+    page, clear = _late_clear_control_page(never_appears)
+
+    with pytest.raises(RuntimeError, match="must expose exactly one clear control"):
+        asyncio.run(_clear_vehicle_search_filters(page))
+    clear.click.assert_not_awaited()
 
 
 def test_reused_vehicle_search_selects_exact_mva_filter_option():
