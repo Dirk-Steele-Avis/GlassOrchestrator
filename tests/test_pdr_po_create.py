@@ -200,3 +200,36 @@ def test_existing_wo_conflicts_stop(text, logged, message):
 def test_logged_draft_without_active_wo_stops():
     with pytest.raises(m.EstimateError, match="no active work order"):
         m.decide_existing_wo(None, logged_wo="WO844586")
+
+
+WO_WITH_PO = """Active Work Order
+Vehicle Details
+WO844645
+IN PROGRESS
+Odometer:
+24025
+Date Created:
+2026-11-20
+Created By:
+Steele, Dirk
+Days Open:
+0
+Images(01)
+Void WO
+Close WO
+Purchase Orders [1]
+PO# FPO1208854
+IN PROGRESS
+Paint Repairs, Bumper
+$220.00
+MAACO FOREST PARK
+Created by Steele, Dirk on 2026-11-20
+Create Purchase Order"""
+
+
+def test_wo_that_already_has_a_po_is_never_reused():
+    """Real screen after 13248-5 was finished (2026-11-20)."""
+    active = m.parse_active_work_order(WO_WITH_PO)
+    assert active.has_po and not active.draft
+    with pytest.raises(m.EstimateError, match="already has a purchase order"):
+        m.decide_existing_wo(active, logged_wo="WO844645")
