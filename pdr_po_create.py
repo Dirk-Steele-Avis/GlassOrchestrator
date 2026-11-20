@@ -14,10 +14,12 @@ For each estimate PDF in the input folder:
 
 Safety (never guess):
   - Any mismatch skips that estimate; the others continue.
-  - A claim already in the log is skipped. A claim whose WO was created but
-    whose PO was not is reported for manual completion, never redone.
-  - Default is a DRY RUN: it fills the work-order page and stops before
-    NEXT, so nothing is created. ``--live`` asks for confirmation before the
+  - A claim already in the log with a PO is skipped. Before creating a WO the
+    vehicle's Active Work Order tab is read: a DRAFT WO by WO_CREATOR with
+    no PO is reused (also how a logged wo_created claim resumes); anything
+    else there (a PO, another creator, several WOs) stops that estimate.
+  - Default is a DRY RUN: a new WO stops before NEXT; on an existing draft
+    WO it walks the PO steps and stops at the review page. Nothing is created. ``--live`` asks for confirmation before the
     WO is created and again before the PO is submitted.
 
 Site-specific values (supplier code + email, Compass page URL) live in
@@ -60,6 +62,7 @@ PO_PRODUCT = "Paint Repairs, Bumper"
 SUPPLIER_SEARCH = "MAACO FOREST PARK"
 SHIP_TO_PREFIX = "3333 BOBBY BROWN PARKWAY"
 VENDOR_HEADER = "MAACO FOREST PARK"
+WO_CREATOR = "Steele, Dirk"  # only this user's draft WOs are reused
 
 # Kept out of the (public) repo: config/pdr_po.local.json
 LOCAL_CONFIG_PATH = BASE_DIR / "config" / "pdr_po.local.json"
@@ -198,6 +201,52 @@ def verify_vehicle_details(text: str, estimate: PdrEstimate) -> list[str]:
     return problems
 
 
+@dataclass(frozen=True, slots=True)
+class ActiveWorkOrder:
+    wos: tuple[str, ...]
+    draft: bool
+    created_by: str
+    has_po: bool
+
+
+def parse_active_work_order(text: str) -> ActiveWorkOrder | None:
+    """Read the vehicle's 'Active Work Order' tab. None when no WO is shown."""
+    wos = tuple(sorted(set(re.findall(r"\bWO\d{5,}\b", text))))
+    if not wos:
+        return None
+    return ActiveWorkOrder(
+        wos=wos,
+        draft=bool(re.search(r"\bDRAFT\b", text, re.IGNORECASE)),
+        created_by=_review_value(text, "Created By") or "",
+        # Anything but an explicit "No Purchase Orders" counts as having a PO.
+        has_po=bool(re.search(r"\bFPO\d+", text)) or "No Purchase Orders" not in text,
+    )
+
+
+def _same_person(a: str, b: str) -> bool:
+    return re.sub(r"\s+", "", a).casefold() == re.sub(r"\s+", "", b).casefold()
+
+
+def decide_existing_wo(active: ActiveWorkOrder | None, logged_wo: str = "") -> str | None:
+    """Return the draft WO# to reuse, None to create a new WO, or raise."""
+    if active is None:
+        if logged_wo:
+            raise EstimateError(f"Log says {logged_wo}, but FieldPO shows no active work order for this vehicle")
+        return None
+    if len(active.wos) != 1:
+        raise EstimateError(f"Vehicle shows several work orders {list(active.wos)} - check by hand")
+    wo = active.wos[0]
+    if logged_wo and wo != logged_wo:
+        raise EstimateError(f"Log says {logged_wo}, but the vehicle's active work order is {wo}")
+    if active.has_po:
+        raise EstimateError(f"{wo} already has a purchase order - check by hand")
+    if not active.draft:
+        raise EstimateError(f"{wo} is not a DRAFT - check by hand")
+    if not _same_person(active.created_by, WO_CREATOR):
+        raise EstimateError(f"{wo} was created by {active.created_by or 'unknown'}, not {WO_CREATOR}")
+    return wo
+
+
 def _review_value(text: str, label: str) -> str | None:
     match = re.search(rf"(?m)^\s*{re.escape(label)}:[ \t]*\n?[ \t]*(.+?)\s*$", text)
     return match.group(1).strip() if match else None
@@ -263,7 +312,12 @@ def skip_reason(claim: str, logged: dict[str, dict[str, str]]) -> str | None:
         return None
     if row.get("status") == STATUS_PO_CREATED:
         return f"already done: {row.get('wo')} / {row.get('po')}"
-    return f"WO {row.get('wo')} created but no PO - finish it by hand in FieldPO, then mark it po_created in the log"
+    return None  # wo_created: resumed on its existing draft WO
+
+
+def logged_draft_wo(claim: str, logged: dict[str, dict[str, str]]) -> str:
+    row = logged.get(claim) or {}
+    return row.get("wo", "") if row.get("status") == STATUS_WO_CREATED else ""
 
 
 # ----------------------------------------------------------------- browser
@@ -289,7 +343,7 @@ def _body(page) -> str:
 
 def _field_after(page, label: str):
     """The first input/textarea that follows the visible label text."""
-    return page.get_by_text(label, exact=True).first.locator(
+    return page.get_by_text(label).first.locator(
         "xpath=(following::input[not(@type='hidden')] | following::textarea | following::select)[1]"
     )
 
@@ -351,7 +405,7 @@ def _choose_option(page, label: str, value: str) -> None:
     page.wait_for_timeout(500)
 
 
-def open_work_order_form(page, estimate: PdrEstimate) -> None:
+def open_vehicle_page(page, estimate: PdrEstimate) -> None:
     page.goto(FIELDPO_URL)
     page.wait_for_url("**/fieldpo/dashboard**", timeout=LOGIN_TIMEOUT_MS)
     _dismiss_attention_popup(page)
@@ -388,22 +442,64 @@ def open_work_order_form(page, estimate: PdrEstimate) -> None:
     # Observed order (13248-3, 2026-11-20): VIN result -> "Select Vehicle
     # Expense Type" popup -> Vehicle Repair -> vehicle page (MVA#/VIN#/Odometer)
     # -> "Create Work Order" button -> createWO form.
-    page.get_by_text("Select Vehicle Expense Type").first.wait_for(timeout=20_000)
-    log.info("%s - choosing %s", estimate.claim, EXPENSE_TYPE)
-    page.get_by_text(EXPENSE_TYPE, exact=True).last.click()
-    _wait_for_spinner(page)
+    # A vehicle that already has a WO may skip the popup: accept either.
+    popup = page.get_by_text("Select Vehicle Expense Type")
+    details_tab = page.get_by_text("Vehicle Details", exact=True)
+    try:
+        popup.or_(details_tab).first.wait_for(state="visible", timeout=20_000)
+    except Exception:
+        _screenshot(page, f"{estimate.claim}_after_vin_click")
+        raise EstimateError("Neither the expense-type popup nor the vehicle page appeared") from None
+    if popup.count() and popup.first.is_visible():
+        log.info("%s - choosing %s", estimate.claim, EXPENSE_TYPE)
+        page.get_by_text(EXPENSE_TYPE, exact=True).last.click()
+        _wait_for_spinner(page)
+    else:
+        log.info("%s - no expense-type popup; vehicle page opened directly", estimate.claim)
 
+    try:
+        details_tab.first.wait_for(state="visible", timeout=20_000)
+    except Exception:
+        _screenshot(page, f"{estimate.claim}_vehicle_page")
+        raise EstimateError("Vehicle page did not appear") from None
+    details_tab.first.click()
+    _wait_for_spinner(page)
+    page.wait_for_timeout(1000)
+    problems = verify_vehicle_details(_body(page), estimate)
+    if problems:
+        _screenshot(page, f"{estimate.claim}_vehicle_details")
+        raise EstimateError("Vehicle page mismatch: " + "; ".join(problems))
+    log.info("%s - vehicle page MVA/VIN match", estimate.claim)
+
+
+def read_active_work_order(page, estimate: PdrEstimate) -> ActiveWorkOrder | None:
+    """Open the vehicle's Active Work Order tab and read it."""
+    page.get_by_text("Active Work Order", exact=True).first.click()
+    _wait_for_spinner(page)
+    deadline = datetime.now().timestamp() + 8
+    text = ""
+    while datetime.now().timestamp() < deadline:  # give the tab time to load
+        page.wait_for_timeout(1000)
+        text = _body(page)
+        if re.search(r"\bWO\d{5,}\b", text):
+            break
+    active = parse_active_work_order(text)
+    _screenshot(page, f"{estimate.claim}_active_work_order")
+    log.info("%s - active work order: %s", estimate.claim, active)
+    return active
+
+
+def open_work_order_form(page, estimate: PdrEstimate) -> None:
+    """From the vehicle page: Vehicle Details -> Create Work Order -> form."""
+    page.get_by_text("Vehicle Details", exact=True).first.click()
+    _wait_for_spinner(page)
     create_wo = page.get_by_role("button", name="Create Work Order", exact=True)
     try:
         create_wo.wait_for(state="visible", timeout=20_000)
     except Exception:
         _screenshot(page, f"{estimate.claim}_vehicle_page")
-        raise EstimateError("Vehicle page with 'Create Work Order' did not appear") from None
-    problems = verify_vehicle_details(_body(page), estimate)
-    if problems:
-        _screenshot(page, f"{estimate.claim}_vehicle_details")
-        raise EstimateError("Vehicle page mismatch: " + "; ".join(problems))
-    log.info("%s - vehicle page MVA/VIN match; clicking Create Work Order", estimate.claim)
+        raise EstimateError("'Create Work Order' button did not appear") from None
+    log.info("%s - clicking Create Work Order", estimate.claim)
     create_wo.click()
     try:
         page.wait_for_url("**/fieldpo/createWO**", timeout=20_000)
@@ -459,9 +555,21 @@ def create_work_order(page) -> str:
     return extract_number(_body(page), "WO")
 
 
-def create_purchase_order(page, estimate: PdrEstimate, wo: str, remark: str) -> str:
+def start_po_from_created_popup(page) -> None:
     page.get_by_text("Add Purchase Order", exact=True).click()
-    page.wait_for_url("**/fieldpo/createPO**")
+    page.wait_for_url("**/fieldpo/createPO**", timeout=20_000)
+
+
+def start_po_on_existing_wo(page) -> None:
+    """On the vehicle's Active Work Order tab: Create Purchase Order."""
+    page.get_by_role("button", name="Create Purchase Order", exact=True).click()
+    page.wait_for_url("**/fieldpo/createPO**", timeout=20_000)
+    _wait_for_spinner(page)
+
+
+def create_purchase_order(page, estimate: PdrEstimate, wo: str, remark: str, live: bool = True) -> str | None:
+    """Fill PO steps 1-4 (already on createPO). Dry run stops at the review page."""
+    log.info("%s - PO step 1: %s / %s", estimate.claim, PO_TYPE, PO_PRODUCT)
 
     # Step 1 - product
     _choose_option(page, "Select Type", PO_TYPE)
@@ -469,6 +577,7 @@ def create_purchase_order(page, estimate: PdrEstimate, wo: str, remark: str) -> 
     page.get_by_role("button", name="Next", exact=True).click()
 
     # Step 2 - supplier: exactly one option carrying the Forest Park code
+    log.info("%s - PO step 2: supplier", estimate.claim)
     _field_after(page, "Choose Supplier").fill(SUPPLIER_SEARCH)
     page.wait_for_timeout(2000)
     code = page.get_by_text(SUPPLIER_CODE, exact=False)
@@ -483,6 +592,7 @@ def create_purchase_order(page, estimate: PdrEstimate, wo: str, remark: str) -> 
     page.get_by_role("button", name="Next", exact=True).click()
 
     # Step 3 - amount, read back
+    log.info("%s - PO step 3: amount %s", estimate.claim, estimate.total)
     amount_box = _field_after(page, "Enter amount")
     amount_box.fill(f"{estimate.total:.2f}")
     page.wait_for_timeout(500)
@@ -507,6 +617,9 @@ def create_purchase_order(page, estimate: PdrEstimate, wo: str, remark: str) -> 
     _screenshot(page, f"{estimate.claim}_review")
     if problems:
         raise EstimateError("Review page mismatch: " + "; ".join(problems))
+    log.info("%s - PO step 4: review page verified, Send PO unchecked", estimate.claim)
+    if not live:
+        return None
 
     if not _confirm(
         f"Review page verified for claim {estimate.claim}: {wo}, MVA {estimate.mva}, "
@@ -599,7 +712,9 @@ def main(argv: list[str] | None = None) -> int:
             continue
         seen_claims[est.claim] = pdf
         reason = skip_reason(est.claim, logged)
-        summary.append((pdf.name, est.claim, est.mva, est.vin, f"{est.total}", f"SKIP: {reason}" if reason else "to do"))
+        draft = logged_draft_wo(est.claim, logged)
+        status = f"SKIP: {reason}" if reason else (f"resume draft {draft}" if draft else "to do")
+        summary.append((pdf.name, est.claim, est.mva, est.vin, f"{est.total}", status))
         if not reason:
             estimates.append(est)
 
@@ -610,7 +725,9 @@ def main(argv: list[str] | None = None) -> int:
 
     from playwright.sync_api import sync_playwright
 
-    mode = "LIVE" if args.live else "DRY RUN (stops before NEXT; nothing is created)"
+    mode = "LIVE" if args.live else (
+        "DRY RUN (new WO: stops before NEXT; existing draft WO: stops at the PO review page)"
+    )
     print(f"\nMode: {mode}")
     results: list[tuple[str, ...]] = [("CLAIM", "MILEAGE", "WO", "PO", "RESULT")]
     with sync_playwright() as p:
@@ -649,36 +766,58 @@ def main(argv: list[str] | None = None) -> int:
             for est in todo:
                 miles = mileage[est.claim]
                 wo = ""
+                remark = f"Maaco estimate {est.claim}"
+
+                def log_row(est=est, miles=miles, **extra: str) -> None:
+                    write_log_row({"claim": est.claim, "mva": est.mva, "vin": est.vin, "total": f"{est.total}",
+                                   "mileage": str(miles), **extra})
+
                 try:
-                    photo = args.photo or render_photo(est)
-                    open_work_order_form(page, est)
-                    fill_work_order_form(page, est, miles, photo)
-                    _screenshot(page, f"{est.claim}_work_order_form")
-                    if not args.live:
-                        input(f"\nDRY RUN {est.claim}: form filled, NOT submitted. Check the browser, then press Enter...")
-                        results.append((est.claim, str(miles), "-", "-", "dry run OK"))
+                    open_vehicle_page(page, est)
+                    existing = decide_existing_wo(
+                        read_active_work_order(page, est), logged_draft_wo(est.claim, load_log())
+                    )
+                    if existing:
+                        # Reuse the draft WO (made earlier by hand or by a run that stopped).
+                        wo = existing
+                        log.info("%s - reusing draft %s", est.claim, wo)
+                        if args.live:
+                            log_row(wo=wo, status=STATUS_WO_CREATED, note="reusing existing draft WO")
+                        start_po_on_existing_wo(page)
+                    else:
+                        photo = args.photo or render_photo(est)
+                        open_work_order_form(page, est)
+                        fill_work_order_form(page, est, miles, photo)
+                        _screenshot(page, f"{est.claim}_work_order_form")
+                        if not args.live:
+                            input(f"\nDRY RUN {est.claim}: form filled, NOT submitted. Check the browser, then press Enter...")
+                            results.append((est.claim, str(miles), "-", "-", "dry run OK (WO form)"))
+                            continue
+                        if not _confirm(
+                            f"No active WO on this vehicle. Create WORK ORDER for claim {est.claim}: MVA {est.mva}, "
+                            f"VIN {est.vin}, mileage {miles}, total ${est.total}? (Do not click NEXT yourself.)"
+                        ):
+                            results.append((est.claim, str(miles), "-", "-", "declined"))
+                            continue
+                        wo = create_work_order(page)
+                        log_row(wo=wo, status=STATUS_WO_CREATED)
+                        log.info("%s - created %s", est.claim, wo)
+                        start_po_from_created_popup(page)
+
+                    po = create_purchase_order(page, est, wo, remark, live=args.live)
+                    if po is None:
+                        input(f"\nDRY RUN {est.claim}: PO review page for {wo} verified, NOT submitted. "
+                              "Check the browser, then press Enter...")
+                        results.append((est.claim, str(miles), wo, "-", "dry run OK (PO review)"))
                         continue
-                    if not _confirm(
-                        f"Create WORK ORDER for claim {est.claim}: MVA {est.mva}, VIN {est.vin}, "
-                        f"mileage {miles}, total ${est.total}?"
-                    ):
-                        results.append((est.claim, str(miles), "-", "-", "declined"))
-                        continue
-                    wo = create_work_order(page)
-                    write_log_row({"claim": est.claim, "mva": est.mva, "vin": est.vin, "total": f"{est.total}",
-                                   "mileage": str(miles), "wo": wo, "status": STATUS_WO_CREATED})
-                    log.info("%s - created %s", est.claim, wo)
-                    po = create_purchase_order(page, est, wo, remark=f"Maaco estimate {est.claim}")
-                    write_log_row({"claim": est.claim, "mva": est.mva, "vin": est.vin, "total": f"{est.total}",
-                                   "mileage": str(miles), "wo": wo, "po": po, "status": STATUS_PO_CREATED})
+                    log_row(wo=wo, po=po, status=STATUS_PO_CREATED)
                     log.info("%s - created %s for $%s", est.claim, po, est.total)
                     results.append((est.claim, str(miles), wo, po, "CREATED"))
                 except Exception as exc:  # noqa: BLE001 - one bad estimate must not stop the rest
                     _screenshot(page, f"{est.claim}_error")
                     log.exception("%s - failed", est.claim)
-                    if wo:
-                        write_log_row({"claim": est.claim, "mva": est.mva, "vin": est.vin, "total": f"{est.total}",
-                                       "mileage": str(miles), "wo": wo, "status": STATUS_WO_CREATED, "note": str(exc)[:200]})
+                    if wo and args.live:
+                        log_row(wo=wo, status=STATUS_WO_CREATED, note=str(exc)[:200])
                     results.append((est.claim, str(miles), wo or "-", "-", f"FAILED: {exc}"))
             input("\nDone. Press Enter to close the browser...")
         context.close()

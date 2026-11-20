@@ -126,7 +126,9 @@ def test_log_skips_done_and_half_done_claims(tmp_path: Path):
     m.write_log_row({"claim": "B", "wo": "WO2", "status": m.STATUS_WO_CREATED}, path)
     logged = m.load_log(path)
     assert "already done" in m.skip_reason("A", logged)
-    assert "finish it by hand" in m.skip_reason("B", logged)
+    assert m.skip_reason("B", logged) is None  # resumed, not skipped
+    assert m.logged_draft_wo("B", logged) == "WO2"
+    assert m.logged_draft_wo("A", logged) == ""
     assert m.skip_reason("C", logged) is None
     m.write_log_row({"claim": "B", "wo": "WO2", "po": "FPO2", "status": m.STATUS_PO_CREATED}, path)
     assert len(m.load_log(path)) == 2
@@ -143,3 +145,58 @@ def test_local_config_required_and_loaded(tmp_path: Path):
     good.write_text('{"supplier_code": "[X]", "supplier_email": "a@b.c", "compass_vehicle_url": "https://x/?m={mva}"}')
     m.load_local_config(good)
     assert (m.SUPPLIER_CODE, m.SUPPLIER_EMAIL) == ("[X]", "A@B.C")
+
+
+ACTIVE_TAB = """GMC TERRAIN FWD
+60767383 | XAR751 | Silver
+Active Work Order
+Vehicle Details
+WO844586
+DRAFT
+Odometer:
+13544
+Date Created:
+2026-11-20
+Created By:
+Steele, Dirk
+Days Open:
+0
+Images(01)
+Void WO
+Close WO
+Purchase Orders
+No Purchase Orders
+Create Purchase Order"""
+
+
+def test_parse_active_work_order_draft_without_po():
+    active = m.parse_active_work_order(ACTIVE_TAB)
+    assert active == m.ActiveWorkOrder(wos=("WO844586",), draft=True, created_by="Steele, Dirk", has_po=False)
+    assert m.parse_active_work_order("Active Work Order\nVehicle Details\nnothing here") is None
+
+
+def test_reuses_own_draft_wo_without_po():
+    active = m.parse_active_work_order(ACTIVE_TAB)
+    assert m.decide_existing_wo(active) == "WO844586"
+    assert m.decide_existing_wo(active, logged_wo="WO844586") == "WO844586"
+    assert m.decide_existing_wo(None) is None  # nothing there: create a new WO
+
+
+@pytest.mark.parametrize(
+    "text,logged,message",
+    [
+        (ACTIVE_TAB.replace("No Purchase Orders", "FPO1208450\n$120.00"), "", "already has a purchase order"),
+        (ACTIVE_TAB.replace("Steele, Dirk", "Doe, Jane"), "", "created by Doe, Jane"),
+        (ACTIVE_TAB.replace("DRAFT", "IN PROGRESS"), "", "not a DRAFT"),
+        (ACTIVE_TAB + "\nWO844999", "", "several work orders"),
+        (ACTIVE_TAB, "WO111111", "Log says WO111111"),
+    ],
+)
+def test_existing_wo_conflicts_stop(text, logged, message):
+    with pytest.raises(m.EstimateError, match=message):
+        m.decide_existing_wo(m.parse_active_work_order(text), logged_wo=logged)
+
+
+def test_logged_draft_without_active_wo_stops():
+    with pytest.raises(m.EstimateError, match="no active work order"):
+        m.decide_existing_wo(None, logged_wo="WO844586")
