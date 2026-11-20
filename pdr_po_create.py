@@ -371,12 +371,29 @@ def _dismiss_attention_popup(page, wait_ms: int = 8_000) -> None:
     _wait_for_spinner(page)
 
 
+SIGN_IN_HOST = "login.microsoftonline.com"
+
+
+def _announce_sign_in(page, site: str, already: bool) -> bool:
+    """Log once when a Microsoft sign-in / Authenticator prompt is showing."""
+    if not already and SIGN_IN_HOST in page.url:
+        log.warning(
+            "%s is asking you to sign in - complete it in Edge (approve the Authenticator "
+            "prompt). Waiting up to %ds...", site, LOGIN_TIMEOUT_MS // 1000,
+        )
+        print(f"\n>>> {site} sign-in needed: approve the Microsoft Authenticator prompt in Edge.\n")
+        return True
+    return already
+
+
 def read_compass_mileage(page, estimate: PdrEstimate) -> int:
     page.goto(COMPASS_VEHICLE_URL.format(mva=estimate.mva))
     deadline = datetime.now().timestamp() + LOGIN_TIMEOUT_MS / 1000
     last_error = "page did not load"
+    announced = False
     while datetime.now().timestamp() < deadline:
         page.wait_for_timeout(2000)
+        announced = _announce_sign_in(page, "Compass", announced)
         text = _body(page)
         if estimate.mva not in text:
             last_error = f"Compass page does not show MVA {estimate.mva}"
@@ -416,7 +433,11 @@ def _choose_mat_select(page, index: int, value: str) -> None:
 
 def open_vehicle_page(page, estimate: PdrEstimate) -> None:
     page.goto(FIELDPO_URL)
-    page.wait_for_url("**/fieldpo/dashboard**", timeout=LOGIN_TIMEOUT_MS)
+    try:
+        page.wait_for_url("**/fieldpo/dashboard**", timeout=5_000)
+    except Exception:
+        _announce_sign_in(page, "FieldPO", False)
+        page.wait_for_url("**/fieldpo/dashboard**", timeout=LOGIN_TIMEOUT_MS)
     _dismiss_attention_popup(page)
     page.get_by_text("Create", exact=True).click()
     _wait_for_spinner(page)
