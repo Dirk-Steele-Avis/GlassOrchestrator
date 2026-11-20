@@ -1,7 +1,9 @@
 r"""Create FieldPO work orders + purchase orders from Maaco PDR estimate PDFs.
 
 For each estimate PDF in the input folder:
-  1. Read claim #, MVA (Stock/RO#), VIN and total from the PDF.
+  1. Read claim #, VIN, total and (if the shop filled it in) the MVA from
+     Stock/RO#. Without it the car is identified by VIN alone and its MVA
+     and mileage come from FieldPO's vehicle page instead of Compass.
      Grand Total, Net Total and Customer Total must all agree.
   2. Compass: open the vehicle by MVA and read the Wizard Odometer.
   3. FieldPO: Create -> Single Work Order -> search VIN (exactly one
@@ -38,7 +40,7 @@ import json
 import logging
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -141,7 +143,12 @@ def parse_estimate_text(text: str, path: Path = Path("?")) -> PdrEstimate:
         raise EstimateError(f"Claim {claim} and Job # {job} disagree")
 
     vin = _one(r"VIN:\s*([A-HJ-NPR-Z0-9]{17})\b", text, "VIN")
-    mva = _one(r"Stock/RO#:\s*(\d{8,9})\b", text, "Stock/RO# (MVA)").zfill(9)
+    # Stock/RO# is the MVA, but shops sometimes leave it blank: then the VIN
+    # alone identifies the car (MVA "" -> looked up in FieldPO).
+    stock = {m for m in re.findall(r"Stock/RO#:[ \t]*(\d{8,9})\b", text)}
+    if len(stock) > 1:
+        raise EstimateError(f"Expected at most one Stock/RO# (MVA), found {sorted(stock)}")
+    mva = stock.pop().zfill(9) if stock else ""
 
     totals = {
         "Grand Total": _money(_one(r"^\s*Grand Total\s+\$?([\d,]+\.\d{2})\s*$", text, "Grand Total"), "Grand Total"),
@@ -191,11 +198,16 @@ def extract_number(text: str, prefix: str) -> str:
 
 
 def verify_vehicle_details(text: str, estimate: PdrEstimate) -> list[str]:
-    """FieldPO vehicle page ('MVA#  060767383', 'VIN#  3GK...') must match the PDF."""
+    """FieldPO vehicle page ('MVA#  060767383', 'VIN#  3GK...') must match the PDF.
+
+    With no MVA on the estimate, the VIN must match and an MVA must be shown.
+    """
     problems: list[str] = []
     mva = re.search(r"MVA#\s*(\d{8,9})\b", text)
-    if not mva or normalize_mva(mva.group(1)) != normalize_mva(estimate.mva):
-        problems.append(f"MVA# is {mva.group(1) if mva else None}, expected {estimate.mva}")
+    if not mva:
+        problems.append("vehicle page shows no MVA#")
+    elif estimate.mva and normalize_mva(mva.group(1)) != normalize_mva(estimate.mva):
+        problems.append(f"MVA# is {mva.group(1)}, expected {estimate.mva}")
     vin = re.search(r"VIN#\s*([A-HJ-NPR-Z0-9]{17})\b", text)
     if not vin or vin.group(1) != estimate.vin:
         problems.append(f"VIN# is {vin.group(1) if vin else None}, expected {estimate.vin}")
@@ -246,6 +258,17 @@ def decide_existing_wo(active: ActiveWorkOrder | None, logged_wo: str = "") -> s
     if not _same_person(active.created_by, WO_CREATOR):
         raise EstimateError(f"{wo} was created by {active.created_by or 'unknown'}, not {WO_CREATOR}")
     return wo
+
+
+def read_vehicle_page(text: str) -> tuple[str, int]:
+    """Return (9-digit MVA, Odometer Reading) from FieldPO's Vehicle Details tab."""
+    mva = re.search(r"MVA#\s*(\d{8,9})\b", text)
+    odo = re.search(r"Odometer Reading\s*([\d,]+)\b", text)
+    if not mva:
+        raise EstimateError("FieldPO vehicle page shows no MVA#")
+    if not odo or int(odo.group(1).replace(",", "")) <= 0:
+        raise EstimateError("FieldPO vehicle page shows no Odometer Reading")
+    return mva.group(1).zfill(9), int(odo.group(1).replace(",", ""))
 
 
 def _review_value(text: str, label: str) -> str | None:
@@ -432,7 +455,8 @@ def _choose_mat_select(page, index: int, value: str) -> None:
         raise EstimateError(f"Dropdown shows {shown!r} after choosing {value!r}")
 
 
-def open_vehicle_page(page, estimate: PdrEstimate) -> None:
+def open_vehicle_page(page, estimate: PdrEstimate) -> tuple[str, int]:
+    """Search by VIN, open the vehicle, check it; return FieldPO's (MVA, odometer)."""
     page.goto(FIELDPO_URL)
     try:
         page.wait_for_url("**/fieldpo/dashboard**", timeout=5_000)
@@ -496,11 +520,18 @@ def open_vehicle_page(page, estimate: PdrEstimate) -> None:
     details_tab.first.click()
     _wait_for_spinner(page)
     page.wait_for_timeout(1000)
-    problems = verify_vehicle_details(_body(page), estimate)
+    text = _body(page)
+    problems = verify_vehicle_details(text, estimate)
     if problems:
         _screenshot(page, f"{estimate.claim}_vehicle_details")
         raise EstimateError("Vehicle page mismatch: " + "; ".join(problems))
     log.info("%s - vehicle page MVA/VIN match", estimate.claim)
+    try:
+        return read_vehicle_page(text)
+    except EstimateError:
+        if estimate.mva:  # MVA + mileage already known from the PDF / Compass
+            return estimate.mva, 0
+        raise
 
 
 def read_active_work_order(page, estimate: PdrEstimate) -> ActiveWorkOrder | None:
@@ -763,7 +794,9 @@ def main(argv: list[str] | None = None) -> int:
         reason = skip_reason(est.claim, logged)
         draft = logged_draft_wo(est.claim, logged)
         status = f"SKIP: {reason}" if reason else (f"resume draft {draft}" if draft else "to do")
-        summary.append((pdf.name, est.claim, est.mva, est.vin, f"{est.total}", status))
+        if not reason and not est.mva:
+            status += " (no MVA on estimate: VIN only; MVA + mileage from FieldPO)"
+        summary.append((pdf.name, est.claim, est.mva or "-", est.vin, f"{est.total}", status))
         if not reason:
             estimates.append(est)
 
@@ -798,6 +831,8 @@ def main(argv: list[str] | None = None) -> int:
         compass = context.new_page()
         mileage: dict[str, int] = {}
         for est in estimates:
+            if not est.mva:
+                continue  # no MVA: mileage comes from FieldPO's vehicle page
             try:
                 mileage[est.claim] = read_compass_mileage(compass, est)
                 log.info("%s - MVA %s Wizard Odometer %s", est.claim, est.mva, mileage[est.claim])
@@ -811,12 +846,13 @@ def main(argv: list[str] | None = None) -> int:
                     results.append((est.claim, str(mileage[est.claim]), "-", "-", "mileage read"))
         else:
             page = context.pages[0] if context.pages else context.new_page()
-            todo = [e for e in estimates if e.claim in mileage][: args.limit]
+            todo = [e for e in estimates if e.claim in mileage or not e.mva][: args.limit]
             ask_each = True
             if args.live and args.approve_batch and todo:
                 print("\nThese work orders / POs will be created (supplier MAACO FOREST PARK, Send PO unchecked):")
                 _print_table([("CLAIM", "MVA", "VIN", "MILEAGE", "AMOUNT")] + [
-                    (e.claim, e.mva, e.vin, str(mileage[e.claim]), f"${e.total}") for e in todo
+                    (e.claim, e.mva or "(FieldPO)", e.vin, str(mileage.get(e.claim, "(FieldPO)")), f"${e.total}")
+                    for e in todo
                 ])
                 total = sum((e.total for e in todo), Decimal("0"))
                 answer = input(f"\nApprove these {len(todo)} POs totalling ${total}? Type YES to run without "
@@ -828,16 +864,21 @@ def main(argv: list[str] | None = None) -> int:
                     ask_each = False
                     log.info("Batch approved by operator: %s ($%s)", [e.claim for e in todo], total)
             for est in todo:
-                miles = mileage[est.claim]
+                miles = mileage.get(est.claim, 0)
                 wo = ""
                 remark = f"Maaco estimate {est.claim}"
 
-                def log_row(est=est, miles=miles, **extra: str) -> None:
+                def log_row(**extra: str) -> None:  # uses this iteration's est/miles
                     write_log_row({"claim": est.claim, "mva": est.mva, "vin": est.vin, "total": f"{est.total}",
                                    "mileage": str(miles), **extra})
 
                 try:
-                    open_vehicle_page(page, est)
+                    page_mva, page_odometer = open_vehicle_page(page, est)
+                    if not est.mva:
+                        # VIN-only estimate: take MVA and mileage from FieldPO.
+                        est = replace(est, mva=page_mva)
+                        miles = page_odometer
+                        log.info("%s - VIN-only: FieldPO MVA %s, odometer %s", est.claim, est.mva, miles)
                     existing = decide_existing_wo(
                         read_active_work_order(page, est), logged_draft_wo(est.claim, load_log())
                     )

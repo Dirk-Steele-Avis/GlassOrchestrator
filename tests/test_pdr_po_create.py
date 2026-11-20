@@ -49,7 +49,7 @@ def test_parses_estimate_and_restores_leading_zero():
         ("Grand Total 165.00\n", "", "Grand Total"),
         ("MAACO FOREST PARK", "MAACO DALLAS", "Not a MAACO FOREST PARK"),
         ("Job #: 99999-1", "Job #: 88888-1", "disagree"),
-        ("Stock/RO#: 12345678", "Stock/RO#:", "Stock/RO#"),
+        ("Stock/RO#: 12345678", "Stock/RO#: 12345678\nStock/RO#: 87654321", "at most one Stock/RO#"),
         ("VIN: 1HGCM82633A004352", "VIN:", "VIN"),
     ],
 )
@@ -233,3 +233,22 @@ def test_wo_that_already_has_a_po_is_never_reused():
     assert active.has_po and not active.draft
     with pytest.raises(m.EstimateError, match="already has a purchase order"):
         m.decide_existing_wo(active, logged_wo="WO844645")
+
+
+def test_blank_stock_ro_means_vin_only():
+    """Shops sometimes leave Stock/RO# blank (13248-2): the VIN identifies the car."""
+    est = m.parse_estimate_text(ESTIMATE.replace("Stock/RO#: 12345678", "Stock/RO#:\n11 E01 11/5/2026"))
+    assert est.mva == "" and est.vin == "1HGCM82633A004352"
+
+
+VEHICLE_PAGE = "MVA#\t060081033\nVIN#\t1HGCM82633A004352\nProgram Code:\tRisk (ABG Vehicle)\nOdometer Reading\t24025"
+
+
+def test_vin_only_estimate_takes_mva_and_mileage_from_fieldpo():
+    est = m.parse_estimate_text(ESTIMATE.replace("Stock/RO#: 12345678", "Stock/RO#:"))
+    assert m.verify_vehicle_details(VEHICLE_PAGE, est) == []  # VIN matches, any MVA accepted
+    assert m.read_vehicle_page(VEHICLE_PAGE) == ("060081033", 24025)
+    assert m.verify_vehicle_details(VEHICLE_PAGE.replace("A004352", "A004353"), est)  # VIN still enforced
+    assert m.verify_vehicle_details(VEHICLE_PAGE.replace("MVA#\t060081033\n", ""), est)  # MVA must be shown
+    with pytest.raises(m.EstimateError, match="Odometer"):
+        m.read_vehicle_page(VEHICLE_PAGE.replace("Odometer Reading\t24025", ""))
