@@ -607,7 +607,9 @@ def start_po_on_existing_wo(page) -> None:
     _wait_for_spinner(page)
 
 
-def create_purchase_order(page, estimate: PdrEstimate, wo: str, remark: str, live: bool = True) -> str | None:
+def create_purchase_order(
+    page, estimate: PdrEstimate, wo: str, remark: str, live: bool = True, ask: bool = True
+) -> str | None:
     """Fill PO steps 1-4 (already on createPO). Dry run stops at the review page."""
     log.info("%s - PO step 1: %s / %s", estimate.claim, PO_TYPE, PO_PRODUCT)
 
@@ -661,7 +663,7 @@ def create_purchase_order(page, estimate: PdrEstimate, wo: str, remark: str, liv
     if not live:
         return None
 
-    if not _confirm(
+    if ask and not _confirm(
         f"Review page verified for claim {estimate.claim}: {wo}, MVA {estimate.mva}, "
         f"VIN {estimate.vin}, {SUPPLIER_SEARCH}, ${estimate.total}, Send PO unchecked. SUBMIT the PO?"
     ):
@@ -713,6 +715,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--limit", type=int, help="process at most N estimates in FieldPO")
     parser.add_argument("--photo", type=Path, help="damage photo to attach (default: page 1 of the estimate)")
     parser.add_argument("--live", action="store_true", help="really create WOs/POs (asks before each)")
+    parser.add_argument(
+        "--approve-batch", action="store_true",
+        help="with --live: approve the listed estimates once up front instead of two prompts per estimate "
+             "(all checks still run; any mismatch stops that estimate)",
+    )
     return parser.parse_args(argv)
 
 
@@ -724,6 +731,8 @@ def _print_table(rows: list[tuple[str, ...]]) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
+    if args.approve_batch and not args.live:
+        raise SystemExit("--approve-batch only applies with --live")
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
@@ -803,6 +812,21 @@ def main(argv: list[str] | None = None) -> int:
         else:
             page = context.pages[0] if context.pages else context.new_page()
             todo = [e for e in estimates if e.claim in mileage][: args.limit]
+            ask_each = True
+            if args.live and args.approve_batch and todo:
+                print("\nThese work orders / POs will be created (supplier MAACO FOREST PARK, Send PO unchecked):")
+                _print_table([("CLAIM", "MVA", "VIN", "MILEAGE", "AMOUNT")] + [
+                    (e.claim, e.mva, e.vin, str(mileage[e.claim]), f"${e.total}") for e in todo
+                ])
+                total = sum((e.total for e in todo), Decimal("0"))
+                answer = input(f"\nApprove these {len(todo)} POs totalling ${total}? Type YES to run without "
+                               "further prompts (anything else cancels): ").strip()
+                if answer != "YES":
+                    print("Cancelled - nothing was created.")
+                    todo = []
+                else:
+                    ask_each = False
+                    log.info("Batch approved by operator: %s ($%s)", [e.claim for e in todo], total)
             for est in todo:
                 miles = mileage[est.claim]
                 wo = ""
@@ -833,7 +857,7 @@ def main(argv: list[str] | None = None) -> int:
                             input(f"\nDRY RUN {est.claim}: form filled, NOT submitted. Check the browser, then press Enter...")
                             results.append((est.claim, str(miles), "-", "-", "dry run OK (WO form)"))
                             continue
-                        if not _confirm(
+                        if ask_each and not _confirm(
                             f"No active WO on this vehicle. Create WORK ORDER for claim {est.claim}: MVA {est.mva}, "
                             f"VIN {est.vin}, mileage {miles}, total ${est.total}? (Do not click NEXT yourself.)"
                         ):
@@ -844,7 +868,7 @@ def main(argv: list[str] | None = None) -> int:
                         log.info("%s - created %s", est.claim, wo)
                         start_po_from_created_popup(page)
 
-                    po = create_purchase_order(page, est, wo, remark, live=args.live)
+                    po = create_purchase_order(page, est, wo, remark, live=args.live, ask=ask_each)
                     if po is None:
                         input(f"\nDRY RUN {est.claim}: PO review page for {wo} verified, NOT submitted. "
                               "Check the browser, then press Enter...")
