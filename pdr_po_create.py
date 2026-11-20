@@ -881,7 +881,7 @@ def main(argv: list[str] | None = None) -> int:
                     _screenshot(page, f"{est.claim}_error")
                     log.exception("%s - failed", est.claim)
                     if wo and args.live:
-                        log_row(wo=wo, status=STATUS_WO_CREATED, note=str(exc)[:200])
+                        log_row(wo=wo, status=STATUS_WO_CREATED, note=" ".join(str(exc).split())[:200])
                     results.append((est.claim, str(miles), wo or "-", "-", f"FAILED: {exc}"))
             input("\nDone. Press Enter to close the browser...")
         context.close()
