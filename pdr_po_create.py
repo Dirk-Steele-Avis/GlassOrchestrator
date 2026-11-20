@@ -389,20 +389,29 @@ def read_compass_mileage(page, estimate: PdrEstimate) -> int:
     raise EstimateError(last_error)
 
 
-def _choose_option(page, label: str, value: str) -> None:
-    field = _field_after(page, label)
-    if field.evaluate("el => el.tagName") == "SELECT":
-        field.select_option(label=value)
-    else:
-        field.click()
-        if field.is_editable():
-            field.fill(value)
-        page.wait_for_timeout(800)
-        option = page.get_by_role("option", name=value, exact=True)
-        if not option.count():
-            option = page.get_by_text(value, exact=True)
-        option.last.click()
-    page.wait_for_timeout(500)
+def _choose_mat_select(page, index: int, value: str) -> None:
+    """Pick ``value`` in the index-th Angular Material <mat-select> of PO step 1
+    (0 = Select Type, 1 = Choose Product) and confirm it shows as selected.
+    Choose Product stays disabled until a Type is picked."""
+    select = page.locator("app-product-details mat-select").nth(index)
+    deadline = datetime.now().timestamp() + 15
+    while select.get_attribute("aria-disabled") == "true":
+        if datetime.now().timestamp() > deadline:
+            raise EstimateError(f"Dropdown {index + 1} on PO step 1 stayed disabled")
+        page.wait_for_timeout(500)
+    select.click()
+    option = page.get_by_role("option", name=value, exact=True)
+    try:
+        option.first.wait_for(state="visible", timeout=10_000)
+    except Exception:
+        listed = page.get_by_role("option").all_inner_texts()
+        page.keyboard.press("Escape")
+        raise EstimateError(f"'{value}' is not in the list; options: {listed}") from None
+    option.first.click()
+    _wait_for_spinner(page)
+    shown = select.locator(".mat-select-value").inner_text().strip()
+    if shown != value:
+        raise EstimateError(f"Dropdown shows {shown!r} after choosing {value!r}")
 
 
 def open_vehicle_page(page, estimate: PdrEstimate) -> None:
@@ -572,8 +581,8 @@ def create_purchase_order(page, estimate: PdrEstimate, wo: str, remark: str, liv
     log.info("%s - PO step 1: %s / %s", estimate.claim, PO_TYPE, PO_PRODUCT)
 
     # Step 1 - product
-    _choose_option(page, "Select Type", PO_TYPE)
-    _choose_option(page, "Choose Product", PO_PRODUCT)
+    _choose_mat_select(page, 0, PO_TYPE)
+    _choose_mat_select(page, 1, PO_PRODUCT)
     page.get_by_role("button", name="Next", exact=True).click()
 
     # Step 2 - supplier: exactly one option carrying the Forest Park code
