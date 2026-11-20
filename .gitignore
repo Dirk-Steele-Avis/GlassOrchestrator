@@ -113,3 +113,10 @@ WorkItems/close_workitem.csv
 outlook/browser_profile/
 outlook/browser_profile/GrShaderCache/
 outlook/browser_profile/Snapshots/
+
+# PDR PO creation (ABG data - never commit)
+data/pdr_estimates/
+data/pdr_po_log.csv
+data/pdr_po_log.tmp
+log/pdr_po/
+config/pdr_po.local.json
