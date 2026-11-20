@@ -63,6 +63,7 @@ SUPPLIER_SEARCH = "MAACO FOREST PARK"
 SHIP_TO_PREFIX = "3333 BOBBY BROWN PARKWAY"
 VENDOR_HEADER = "MAACO FOREST PARK"
 WO_CREATOR = "Steele, Dirk"  # only this user's draft WOs are reused
+NO_ACTIVE_WO = "No Active Work Order"  # FieldPO text when a vehicle has no WO
 
 # Kept out of the (public) repo: config/pdr_po.local.json
 LOCAL_CONFIG_PATH = BASE_DIR / "config" / "pdr_po.local.json"
@@ -506,29 +507,38 @@ def read_active_work_order(page, estimate: PdrEstimate) -> ActiveWorkOrder | Non
     """Open the vehicle's Active Work Order tab and read it."""
     page.get_by_text("Active Work Order", exact=True).first.click()
     _wait_for_spinner(page)
-    deadline = datetime.now().timestamp() + 8
+    # Wait until the tab shows either a WO number or FieldPO's explicit
+    # "No Active Work Order" - never treat a not-yet-loaded tab as "none".
+    deadline = datetime.now().timestamp() + 15
     text = ""
-    while datetime.now().timestamp() < deadline:  # give the tab time to load
+    while datetime.now().timestamp() < deadline:
         page.wait_for_timeout(1000)
         text = _body(page)
-        if re.search(r"\bWO\d{5,}\b", text):
+        if re.search(r"\bWO\d{5,}\b", text) or NO_ACTIVE_WO in text:
             break
-    active = parse_active_work_order(text)
     _screenshot(page, f"{estimate.claim}_active_work_order")
+    if not re.search(r"\bWO\d{5,}\b", text) and NO_ACTIVE_WO not in text:
+        raise EstimateError("Active Work Order tab showed neither a WO nor 'No Active Work Order'")
+    active = parse_active_work_order(text)
     log.info("%s - active work order: %s", estimate.claim, active)
     return active
 
 
 def open_work_order_form(page, estimate: PdrEstimate) -> None:
-    """From the vehicle page: Vehicle Details -> Create Work Order -> form."""
-    page.get_by_text("Vehicle Details", exact=True).first.click()
-    _wait_for_spinner(page)
-    create_wo = page.get_by_role("button", name="Create Work Order", exact=True)
+    """From the vehicle page: the visible Create Work Order button -> form.
+
+    Both tabs carry a Create Work Order button (the Active Work Order tab's
+    "No Active Work Order" state has one too), so use the single visible one.
+    """
+    create_wo = page.get_by_role("button", name="Create Work Order", exact=True).filter(visible=True)
     try:
-        create_wo.wait_for(state="visible", timeout=20_000)
+        create_wo.first.wait_for(state="visible", timeout=20_000)
     except Exception:
         _screenshot(page, f"{estimate.claim}_vehicle_page")
         raise EstimateError("'Create Work Order' button did not appear") from None
+    if create_wo.count() != 1:
+        _screenshot(page, f"{estimate.claim}_vehicle_page")
+        raise EstimateError(f"Found {create_wo.count()} visible 'Create Work Order' buttons, expected 1")
     log.info("%s - clicking Create Work Order", estimate.claim)
     create_wo.click()
     try:
